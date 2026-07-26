@@ -22,7 +22,7 @@ export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
   instant: "gemini-flash-lite-latest",
-  expert: "gemini-3.1-pro-preview",
+  expert: "gemini-3.1-flash-lite",
 };
 
 function readSystemPrompt(): string {
