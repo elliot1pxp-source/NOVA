@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Image from "next/image";
 import {
   Plus,
@@ -16,10 +16,16 @@ import {
   MessageSquare,
   X,
   Sparkles,
+  Upload,
+  FileText,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { ModelSettings } from "@/lib/storage";
+import { ModelSettings, ChatFile, loadChatFiles, saveChatFiles, deleteChatFile, clearAllChatFiles } from "@/lib/storage";
+import { getSupportedAttachmentMimeType, validateFileSize } from "@/lib/attachments";
+import { SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
+
 
 export type Chat = {
   id: string;
@@ -192,6 +198,282 @@ function SectionLabel({ label }: { label: string }) {
   );
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Upload Files Modal                                                */
+/* ------------------------------------------------------------------ */
+
+function UploadFilesModal({
+  chats,
+  isOpen,
+  onClose,
+}: {
+  chats: Chat[];
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const [selectedChatId, setSelectedChatId] = useState<string>("");
+  const [files, setFiles] = useState<ChatFile[]>([]);
+  const [uploadError, setUploadError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && selectedChatId) {
+      setFiles(loadChatFiles(selectedChatId));
+      setUploadError("");
+    }
+  }, [isOpen, selectedChatId]);
+
+  // Click-outside listener for custom chat selector dropdown
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    window.addEventListener("click", handleClick);
+    return () => window.removeEventListener("click", handleClick);
+  }, [dropdownOpen]);
+
+  const handleFileChange = useCallback(
+    async (fileList: FileList | null) => {
+      if (!fileList || !selectedChatId) return;
+      setUploadError("");
+      setUploading(true);
+
+      const newFiles: ChatFile[] = [];
+      for (const file of Array.from(fileList)) {
+        const validation = validateFileSize(file);
+        if (!validation.valid) {
+          setUploadError(validation.error || "Invalid file");
+          setUploading(false);
+          return;
+        }
+
+        const mimeType =
+          getSupportedAttachmentMimeType({ mimeType: file.type, filename: file.name }) ||
+          "application/octet-stream";
+
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+
+        newFiles.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: file.name,
+          mimeType,
+          size: file.size,
+          dataUrl,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      const existing = loadChatFiles(selectedChatId);
+      const combined = [...existing, ...newFiles];
+      saveChatFiles(selectedChatId, combined);
+      setFiles(combined);
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    },
+    [selectedChatId]
+  );
+
+  const handleDeleteFile = useCallback(
+    (fileId: string) => {
+      if (!selectedChatId) return;
+      deleteChatFile(selectedChatId, fileId);
+      setFiles(loadChatFiles(selectedChatId));
+    },
+    [selectedChatId]
+  );
+
+  if (!isOpen) return null;
+
+  const selectedChat = chats.find((c) => c.id === selectedChatId);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-3xl bg-[#14151b]/95 p-6 shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[#4a6cf7]">
+          Upload Files
+        </div>
+        <div className="mb-4 text-lg font-semibold text-white">Manage Chat Files</div>
+
+        {/* Custom Glassmorphic Chat Dropdown */}
+        <div className="mb-4">
+          <label className="block text-[11px] font-medium text-[#888c99] mb-1.5">
+            Select a chat
+          </label>
+          <div className="relative" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setDropdownOpen((v) => !v)}
+              className="w-full flex items-center justify-between bg-white/[0.04] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white hover:bg-white/[0.07] focus:outline-none focus:border-[#4a6cf7]/60 transition-all text-left"
+            >
+              <span className={cn("truncate", !selectedChat && "text-[#555a6d]")}>
+                {selectedChat ? selectedChat.title : "Choose a conversation…"}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4 text-[#888c99] transition-transform duration-200 flex-shrink-0 ml-2",
+                  dropdownOpen && "rotate-180"
+                )}
+              />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-52 overflow-y-auto rounded-2xl bg-[#1a1b23]/95 border border-white/10 shadow-2xl backdrop-blur-2xl p-1.5 space-y-0.5 animate-in fade-in slide-in-from-top-1 duration-150 scrollbar-thin scrollbar-thumb-white/10">
+                {chats.length === 0 ? (
+                  <div className="px-3 py-2.5 text-xs text-[#555a6d] text-center">
+                    No conversations available
+                  </div>
+                ) : (
+                  chats.map((chat) => (
+                    <button
+                      key={chat.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedChatId(chat.id);
+                        setDropdownOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-left transition-colors",
+                        selectedChatId === chat.id
+                          ? "bg-[#4a6cf7]/20 text-[#7d99ff] font-medium"
+                          : "text-[#ccc] hover:bg-white/10 hover:text-white"
+                      )}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-[#888c99]" />
+                      <span className="truncate flex-1">{chat.title}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Upload area */}
+        {selectedChatId && (
+          <>
+            <input
+  ref={fileInputRef}
+  type="file"
+  multiple
+  accept={SUPPORTED_ATTACHMENT_ACCEPT}
+  className="hidden"
+  onChange={(e) => handleFileChange(e.target.files)}
+/>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02] hover:bg-white/[0.05] hover:border-[#4a6cf7]/40 text-xs text-[#888c99] hover:text-white transition-all disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {uploading ? "Uploading…" : "Click to upload files to this chat"}
+            </button>
+
+            {uploadError && (
+              <p className="mt-2 text-xs text-[#e87070]">{uploadError}</p>
+            )}
+
+            {/* File list */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#505462]">
+                  Files in this chat
+                </span>
+                <span className="text-[10px] text-[#555a6d]">{files.length} file(s)</span>
+              </div>
+
+              {files.length === 0 ? (
+                <div className="text-center py-6 text-xs text-[#555a6d] bg-white/[0.02] rounded-xl border border-white/5">
+                  No files uploaded yet for this chat
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
+                  {files.map((file) => (
+                    <div
+                      key={file.id}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/5 hover:border-white/10 transition-colors group"
+                    >
+                      {file.mimeType.startsWith("image/") ? (
+                        <img
+                          src={file.dataUrl}
+                          alt={file.name}
+                          className="w-7 h-7 rounded object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <FileText className="w-4 h-4 text-[#888] flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-white truncate">{file.name}</div>
+                        <div className="text-[10px] text-[#555a6d]">
+                          {formatBytes(file.size)} · {file.mimeType}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFile(file.id)}
+                        className="p-1.5 rounded-lg text-[#555a6d] hover:text-[#f87171] hover:bg-[#2a1416] transition-colors opacity-0 group-hover:opacity-100"
+                        aria-label="Delete file"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {!selectedChatId && (
+          <div className="text-center py-8 text-xs text-[#555a6d]">
+            Select a chat above to manage its files
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2.5 mt-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-white/5 px-4 py-2 text-xs font-medium text-[#ccc] hover:bg-white/10 hover:text-white transition-all active:scale-95"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sidebar                                                           */
+/* ------------------------------------------------------------------ */
+
 export function NovaSidebar({
   chats,
   activeChatId,
@@ -210,6 +492,7 @@ export function NovaSidebar({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [deletePendingChatId, setDeletePendingChatId] = useState<string | null>(null);
+  const [uploadFilesOpen, setUploadFilesOpen] = useState(false);
 
   const groups = groupChats(chats);
 
@@ -383,6 +666,23 @@ export function NovaSidebar({
             </div>
           </div>
 
+          {/* Upload Files Button */}
+          <div className="px-3 pt-1 pb-1 flex-shrink-0">
+            <button
+              onClick={() => setUploadFilesOpen(true)}
+              className="group relative w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10 text-white text-xs font-medium transition-all duration-200 active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-center w-5 h-5 rounded-lg bg-[#2a2d3a] text-[#888c99] group-hover:text-white group-hover:bg-[#33374a] transition-all">
+                  <Upload className="w-3 h-3" />
+                </div>
+                <span className="font-medium text-[#888c99] group-hover:text-white/90 transition-colors">
+                  Upload files
+                </span>
+              </div>
+            </button>
+          </div>
+
           {/* New Chat Button */}
           <div className="px-3 py-2 flex-shrink-0">
             <button
@@ -492,13 +792,21 @@ export function NovaSidebar({
         </div>
       </aside>
 
-      {/* Liquid Glass Settings Dialog Modal */}
+      {/* Upload Files Modal */}
+      <UploadFilesModal
+        chats={chats}
+        isOpen={uploadFilesOpen}
+        onClose={() => setUploadFilesOpen(false)}
+      />
+
+      {/* Settings Dialog Modal */}
       <SettingsDialog
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         settings={modelSettings}
         onUpdateSettings={onUpdateModelSettings}
         onDeleteAllChats={onDeleteAllChats}
+        onDeleteAllFiles={() => clearAllChatFiles()}
       />
 
       {/* Delete Chat Modal */}
@@ -518,7 +826,7 @@ export function NovaSidebar({
             </div>
             <div className="mb-3 text-lg font-semibold text-white">Delete this chat?</div>
             <p className="mb-6 text-xs leading-relaxed text-[#888c99]">
-              This will permanently remove this conversation history.
+              This will permanently remove this conversation history and all its uploaded files.
             </p>
             <div className="flex items-center justify-end gap-2.5">
               <button

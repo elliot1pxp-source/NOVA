@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, X, Zap, Shield, AlertTriangle, RotateCcw, Trash2, Check } from "lucide-react";
+import { Settings, X, Zap, Shield, AlertTriangle, RotateCcw, Trash2, Check, FolderX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ModelSettings, ModelParams, DEFAULT_MODEL_SETTINGS } from "@/lib/storage";
 
@@ -11,6 +11,7 @@ type Props = {
   settings: ModelSettings;
   onUpdateSettings: (newSettings: ModelSettings) => void;
   onDeleteAllChats: () => void;
+  onDeleteAllFiles?: () => void;
 };
 
 type ActiveModelTab = "instant" | "expert";
@@ -21,9 +22,11 @@ export function SettingsDialog({
   settings,
   onUpdateSettings,
   onDeleteAllChats,
+  onDeleteAllFiles,
 }: Props) {
   const [activeTab, setActiveTab] = useState<ActiveModelTab>("instant");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteFilesConfirm, setShowDeleteFilesConfirm] = useState(false);
   const [showResetNotice, setShowResetNotice] = useState(false);
 
   if (!isOpen) return null;
@@ -50,6 +53,11 @@ export function SettingsDialog({
     onDeleteAllChats();
     setShowDeleteConfirm(false);
     onClose();
+  };
+
+  const handleConfirmDeleteAllFiles = () => {
+    onDeleteAllFiles?.();
+    setShowDeleteFilesConfirm(false);
   };
 
   return (
@@ -221,6 +229,43 @@ export function SettingsDialog({
                 )}
               </button>
 
+              {/* Delete all files button */}
+              {!showDeleteFilesConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteFilesConfirm(true)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 hover:text-red-200 text-xs font-medium transition-all group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FolderX className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
+                    <span>Delete all uploaded files</span>
+                  </div>
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400/60 group-hover:text-red-400" />
+                </button>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/40 text-xs space-y-2.5 animate-in fade-in duration-150">
+                  <p className="text-red-200 font-medium">
+                    Are you sure? This will permanently delete all uploaded files across every chat.
+                  </p>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteFilesConfirm(false)}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmDeleteAllFiles}
+                      className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold shadow-lg shadow-red-900/50 transition-all"
+                    >
+                      Confirm Delete All Files
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Delete all chat history button */}
               {!showDeleteConfirm ? (
                 <button
@@ -237,7 +282,7 @@ export function SettingsDialog({
               ) : (
                 <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/40 text-xs space-y-2.5 animate-in fade-in duration-150">
                   <p className="text-red-200 font-medium">
-                    Are you sure? This will permanently delete all saved conversations.
+                    Are you sure? This will permanently delete all saved conversations and their files.
                   </p>
                   <div className="flex items-center justify-end gap-2">
                     <button
