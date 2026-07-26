@@ -53,7 +53,8 @@ async function generateSearchQuery(
   systemPrompt: string
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
-  const searchQueryPrompt = `YOUR ROLE:
+  const searchQueryPrompt = `${systemPrompt}
+YOUR ROLE:
 You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
 
 MANDATORY EXTRACTION RULES (Apply in this exact order):
