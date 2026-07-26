@@ -2,7 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Plus, Search, MoreHorizontal, Pin, PinOff, Settings, Trash2, Pencil, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  Plus,
+  Search,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Settings,
+  Trash2,
+  Pencil,
+  PanelLeftClose,
+  PanelLeftOpen,
+  MessageSquare,
+  X,
+  Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type Chat = {
@@ -64,18 +78,34 @@ function ChatItem({
   onDelete: () => void;
 }) {
   return (
-    <div className="relative">
+    <div className="relative group px-1">
       <button
         onClick={onClick}
         className={cn(
-          "group w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate flex items-center gap-2",
+          "relative w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 flex items-center gap-2.5 select-none",
           isActive
-            ? "bg-[#2a2a2a] text-white"
-            : "text-[#8a8a8a] hover:bg-[#1e1e1e] hover:text-white"
+            ? "bg-[#1d243a] text-white border border-[#4a6cf7]/30 shadow-[0_0_15px_rgba(74,108,247,0.12)]"
+            : "text-[#888c99] hover:bg-[#16171d] hover:text-[#e1e4ed]"
         )}
       >
-        {chat.pinned && <Pin className="w-3 h-3 text-[#4a6cf7] flex-shrink-0" />}
-        <span className="truncate flex-1">{chat.title}</span>
+        {/* Active Indicator Bar */}
+        {isActive && (
+          <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#4a6cf7] shadow-[0_0_8px_#4a6cf7]" />
+        )}
+
+        {chat.pinned ? (
+          <Pin className="w-3.5 h-3.5 text-[#4a6cf7] flex-shrink-0" />
+        ) : (
+          <MessageSquare
+            className={cn(
+              "w-3.5 h-3.5 flex-shrink-0 transition-colors",
+              isActive ? "text-[#7d99ff]" : "text-[#555a68] group-hover:text-[#888c99]"
+            )}
+          />
+        )}
+
+        <span className="truncate flex-1 leading-snug">{chat.title}</span>
+
         <span
           role="button"
           tabIndex={0}
@@ -90,25 +120,27 @@ function ChatItem({
             }
           }}
           className={cn(
-            "p-0.5 rounded flex-shrink-0 transition-opacity hover:bg-[#333]",
-            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-60"
+            "p-1 rounded-lg flex-shrink-0 transition-all duration-150 hover:bg-white/10 hover:text-white",
+            menuOpen ? "opacity-100 bg-white/10 text-white" : "opacity-0 group-hover:opacity-70"
           )}
+          aria-label="Chat options"
         >
-          <MoreHorizontal className="w-4 h-4" />
+          <MoreHorizontal className="w-3.5 h-3.5" />
         </span>
       </button>
 
+      {/* Context Menu Dropdown */}
       {menuOpen && (
-        <div className="absolute right-1 top-9 z-20 w-36 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1">
+        <div className="absolute right-2 top-9 z-30 w-40 rounded-xl border border-white/10 bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1 animate-in fade-in slide-in-from-top-1 duration-150">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onRename();
             }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-lg transition-colors"
           >
-            <Pencil className="w-3.5 h-3.5" />
+            <Pencil className="w-3.5 h-3.5 text-[#888]" />
             Rename
           </button>
           <button
@@ -117,39 +149,46 @@ function ChatItem({
               e.stopPropagation();
               onTogglePin();
             }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-lg transition-colors"
           >
-        {chat.pinned ? (
+            {chat.pinned ? (
               <>
-              <PinOff className="w-3.5 h-3.5" />
-              Unpin
+                <PinOff className="w-3.5 h-3.5 text-[#888]" />
+                Unpin
               </>
-        ) : (
+            ) : (
               <>
-              <Pin className="w-3.5 h-3.5" />
-              Pin
+                <Pin className="w-3.5 h-3.5 text-[#888]" />
+                Pin
               </>
-        )}
-        </button>
-        <button
+            )}
+          </button>
+          <div className="my-1 border-t border-white/5" />
+          <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
             }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#f87171] hover:bg-[#2a1416] rounded-lg transition-colors"
           >
-        <Trash2 className="w-3.5 h-3.5" />
-        Delete
-        </button>
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
         </div>
-      )}    </div>
+      )}
+    </div>
   );
 }
 
 function SectionLabel({ label }: { label: string }) {
   return (
-    <p className="px-3 pt-3 pb-1 text-xs font-medium text-[#555]">{label}</p>
+    <div className="px-3 pt-4 pb-1.5 flex items-center gap-2">
+      <span className="text-[10px] font-bold tracking-wider text-[#555a6d] uppercase">
+        {label}
+      </span>
+      <div className="flex-1 h-[1px] bg-white/[0.04]" />
+    </div>
   );
 }
 
@@ -207,7 +246,20 @@ export function NovaSidebar({
     onDeleteAllChats();
   };
 
-  // Close the pin menu / settings menu when clicking anywhere else
+  // Global search shortcut (Cmd+K / Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        onNewChat();
+        openHistoryAndReset();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onNewChat]);
+
+  // Close menus on outside click
   useEffect(() => {
     if (!menuOpenId && !settingsOpen) return;
     const close = () => {
@@ -222,141 +274,192 @@ export function NovaSidebar({
     ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
     : null;
 
-    const renderList = (list: Chat[]) =>
+  const renderList = (list: Chat[]) =>
     list.map((chat) => (
       <ChatItem
-      key={chat.id}
-      chat={chat}
-      isActive={chat.id === activeChatId}
-      onClick={() => onSelectChat(chat.id)}
-      menuOpen={menuOpenId === chat.id}
-      onToggleMenu={() => setMenuOpenId((id) => (id === chat.id ? null : chat.id))}
-      onTogglePin={() => {
+        key={chat.id}
+        chat={chat}
+        isActive={chat.id === activeChatId}
+        onClick={() => onSelectChat(chat.id)}
+        menuOpen={menuOpenId === chat.id}
+        onToggleMenu={() => setMenuOpenId((id) => (id === chat.id ? null : chat.id))}
+        onTogglePin={() => {
           onTogglePin(chat.id);
           setMenuOpenId(null);
-      }}
-      onRename={() => {
+        }}
+        onRename={() => {
           const title = window.prompt("Rename chat", chat.title)?.trim();
           if (title) onRenameChat(chat.id, title);
           setMenuOpenId(null);
-      }}
-      onDelete={() => {
+        }}
+        onDelete={() => {
           confirmDeleteChat(chat.id);
-      }}
+        }}
       />
     ));
 
   return (
     <>
-    <aside
-      className={cn(
-        "relative flex flex-col h-full bg-[#111] transition-[width] duration-200 ease-out",
-        historyOpen
-          ? "overflow-hidden w-[220px] min-w-[220px] border-r border-[#1e1e1e]"
-          : "overflow-visible w-0 min-w-0 border-r-0"
-      )}
-    >
-      {/* Logo / Closed Floating Controls */}
-      {historyOpen ? (
-        <div className="flex items-center gap-2 px-4 py-4">
-          <Image src="/nova-logo.png" alt="NOVA" width={28} height={28} className="rounded-md" />
-          <span className="text-white font-semibold text-base tracking-wide">NOVA</span>
-          <div className="ml-auto flex items-center gap-1">
-            <button
-              onClick={() => setSearchOpen((v) => !v)}
-              className="p-1.5 rounded-md text-[#555] hover:text-white hover:bg-[#1e1e1e] transition-colors"
-              aria-label="Search chats"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => {
-                setHistoryOpen((open) => !open);
-                setSearchOpen(false);
-                setMenuOpenId(null);
-                setSettingsOpen(false);
-              }}
-              className="p-1.5 rounded-md text-[#555] hover:text-white hover:bg-[#1e1e1e] transition-colors"
-              aria-label="Close chat history"
-              title="Close chat history"
-            >
-              <PanelLeftClose className="w-4 h-4" />
-            </button>
-          </div>
+      <aside
+        className={cn(
+          "relative flex flex-col h-full bg-[#0e0f12] transition-all duration-300 ease-in-out select-none",
+          historyOpen
+            ? "w-[250px] min-w-[250px] border-r border-white/[0.06]"
+            : "w-0 min-w-0 border-r-0"
+        )}
+      >
+        {/* Compact Floating Controls (When Sidebar Collapsed) */}
+        <div
+          className={cn(
+            "absolute left-3 top-3 z-30 flex items-center gap-1 rounded-full border border-white/10 bg-[#121318]/90 p-1 shadow-2xl shadow-black/60 backdrop-blur-2xl transition-all duration-300 ease-in-out",
+            historyOpen
+              ? "opacity-0 scale-90 pointer-events-none -translate-x-2"
+              : "opacity-100 scale-100 pointer-events-auto translate-x-0"
+          )}
+        >
+          <button
+            onClick={() => {
+              setHistoryOpen(true);
+              setSearchOpen(false);
+              setMenuOpenId(null);
+              setSettingsOpen(false);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#aaa] transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="Open chat history"
+            title="Open chat history"
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+          </button>
+          <button
+            onClick={openHistoryWithSearch}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#aaa] transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="Search chats"
+            title="Search chats"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => {
+              onNewChat();
+              openHistoryAndReset();
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#aaa] transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="New chat"
+            title="New chat"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
         </div>
-      ) : (
-        <div className="relative h-full">
-          <div className="absolute left-0 top-4 z-30 flex items-center gap-1 rounded-full border border-white/10 bg-[#111]/90 p-1.5 shadow-lg shadow-black/30 backdrop-blur-xl">
-            <button
-              onClick={() => {
-                setHistoryOpen(true);
-                setSearchOpen(false);
-                setMenuOpenId(null);
-                setSettingsOpen(false);
-              }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#ccc] transition-colors hover:bg-[#1e1e1e] hover:text-white"
-              aria-label="Open chat history"
-              title="Open chat history"
-            >
-              <PanelLeftOpen className="w-4 h-4" />
-            </button>
-            <button
-              onClick={openHistoryWithSearch}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#ccc] transition-colors hover:bg-[#1e1e1e] hover:text-white"
-              aria-label="Search chats"
-              title="Search chats"
-            >
-              <Search className="w-4 h-4" />
-            </button>
+
+        {/* Sidebar Container */}
+        <div
+          className={cn(
+            "flex flex-col h-full w-[250px] transition-opacity duration-200 ease-in-out overflow-hidden",
+            historyOpen ? "opacity-100 delay-100" : "opacity-0 pointer-events-none"
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="relative p-0.5 rounded-lg border border-white/10 bg-[#181920] shadow-sm">
+                <Image src="/nova-logo.png" alt="NOVA" width={22} height={22} className="rounded-md" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-white font-semibold text-sm tracking-wide">NOVA</span>
+                <span className="text-[10px] font-bold text-[#4a6cf7] bg-[#4a6cf7]/10 px-1.5 py-0.5 rounded-md border border-[#4a6cf7]/20">
+                  UNCENSORED
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => setSearchOpen((v) => !v)}
+                className={cn(
+                  "p-1.5 rounded-lg text-[#777b8e] hover:text-white hover:bg-white/10 transition-colors",
+                  searchOpen && "bg-white/10 text-white"
+                )}
+                aria-label="Search chats"
+                title="Search chats"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  setHistoryOpen(false);
+                  setSearchOpen(false);
+                  setMenuOpenId(null);
+                  setSettingsOpen(false);
+                }}
+                className="p-1.5 rounded-lg text-[#777b8e] hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Close chat history"
+                title="Close sidebar"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* New Chat Button */}
+          <div className="px-3 py-2 flex-shrink-0">
             <button
               onClick={() => {
                 onNewChat();
                 openHistoryAndReset();
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#ccc] transition-colors hover:bg-[#1e1e1e] hover:text-white"
-              aria-label="New chat"
-              title="New chat"
+              className="group relative w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gradient-to-r from-[#1b2238] to-[#121624] border border-[#2e3b60]/50 hover:border-[#4a6cf7]/60 text-white text-xs font-medium shadow-md shadow-black/30 hover:shadow-[0_0_18px_rgba(74,108,247,0.2)] transition-all duration-200 active:scale-[0.98]"
             >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {historyOpen && (
-        <>
-          {/* New Chat Button */}
-          <div className="px-3 pb-3">
-            <button
-              onClick={onNewChat}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-[#2a2a2a] text-[#aaa] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New chat</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-5 h-5 rounded-md bg-[#4a6cf7] text-white shadow-sm group-hover:scale-105 transition-transform">
+                  <Plus className="w-3.5 h-3.5" />
+                </div>
+                <span>New chat</span>
+              </div>
+              <span className="text-[10px] text-[#6b7280] font-mono bg-[#0c0e14] border border-white/5 px-1.5 py-0.5 rounded">
+                ⌘K
+              </span>
             </button>
           </div>
 
-          {/* Search Input */}
+          {/* Search Input Bar */}
           {searchOpen && (
-            <div className="px-3 pb-2">
-              <input
-                autoFocus
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search chats..."
-                className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-1.5 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#3a3a3a]"
-              />
+            <div className="px-3 pb-2 pt-1 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="relative flex items-center">
+                <Search className="w-3.5 h-3.5 text-[#555a6d] absolute left-3 pointer-events-none" />
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search history..."
+                  className="w-full bg-[#14151b] border border-white/10 rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-[#555a6d] focus:outline-none focus:border-[#4a6cf7]/50 transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2 text-[#666] hover:text-white p-0.5 rounded-md"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Chat List */}
-          <nav className="flex-1 overflow-y-auto px-1 pb-4 scrollbar-thin">
+          {/* Scrollable Chat List */}
+          <nav className="flex-1 overflow-y-auto px-1 py-1 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
             {filtered ? (
               filtered.length > 0 ? (
                 renderList(filtered)
               ) : (
-                <p className="text-xs text-[#555] px-3 py-4">No results found.</p>
+                <div className="px-4 py-8 text-center text-xs text-[#555a6d]">
+                  No matching chats found
+                </div>
               )
+            ) : chats.length === 0 ? (
+              <div className="px-4 py-12 text-center text-xs text-[#555a6d] flex flex-col items-center gap-2">
+                <Sparkles className="w-5 h-5 text-[#333742]" />
+                <span>No conversation history yet</span>
+              </div>
             ) : (
               <>
                 {groups.pinned.length > 0 && (
@@ -393,24 +496,24 @@ export function NovaSidebar({
             )}
           </nav>
 
-          {/* Settings Footer */}
-          <div className="relative px-3 py-3 border-t border-[#1e1e1e]">
+          {/* Footer / Settings Menu */}
+          <div className="relative px-3 py-3 border-t border-white/[0.06] flex-shrink-0">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setSettingsOpen((v) => !v);
               }}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-[#1a1a1a] text-[#aaa] hover:text-white transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/5 text-[#888c99] hover:text-white transition-all text-xs font-medium"
               aria-label="Settings"
             >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm flex-1 text-left">Settings</span>
+              <Settings className="w-4 h-4 text-[#666a7a]" />
+              <span className="flex-1 text-left">Settings</span>
             </button>
 
             {settingsOpen && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute bottom-14 left-3 right-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1 z-20"
+                className="absolute bottom-14 left-3 right-3 rounded-2xl border border-white/10 bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1.5 z-30 animate-in fade-in slide-in-from-bottom-2 duration-150"
               >
                 <button
                   type="button"
@@ -418,61 +521,59 @@ export function NovaSidebar({
                     setSettingsOpen(false);
                     setDeleteAllPending(true);
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#f87171] hover:bg-[#2a1416] rounded-xl transition-colors font-medium"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete all chat history
+                  <Trash2 className="w-4 h-4" />
+                  Delete all history
                 </button>
               </div>
             )}
           </div>
-        </>
-      )}
-    </aside>
+        </div>
+      </aside>
 
-    {(deletePendingChatId || deleteAllPending) && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="deleteChatDialogTitle"
-        onClick={cancelDelete}
-      >
+      {/* Glassmorphic Delete Confirmation Modal */}
+      {(deletePendingChatId || deleteAllPending) && (
         <div
-          className="relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-white/10 p-6 shadow-2xl shadow-black/35 backdrop-blur-3xl"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          onClick={cancelDelete}
         >
-          <div className="pointer-events-none absolute -top-4 right-4 h-14 w-14 rounded-full bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.18)] backdrop-blur-xl" />
-          <div className="mb-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#bfc9d8]">
-            {deleteAllPending ? "Delete all history" : "Delete chat"}
-          </div>
-          <div id="deleteChatDialogTitle" className="mb-4 text-xl font-semibold text-white">
-            {deleteAllPending ? "Delete all chat history?" : "Delete this chat?"}
-          </div>
-          <p className="mb-6 text-sm leading-6 text-[#d2dce8]">
-            {deleteAllPending
-              ? "This will permanently remove every chat and its message history. This action cannot be undone."
-              : "This will permanently remove the selected chat and its message history. This action cannot be undone."}
-          </p>
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={cancelDelete}
-              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-[#c7d0e0] transition hover:border-white/20 hover:bg-white/15"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={deleteAllPending ? submitDeleteAllChats : submitDeleteChat}
-              className="rounded-2xl bg-[#df4d66] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#ff5a76]"
-            >
-              {deleteAllPending ? "Delete all chats" : "Delete chat"}
-            </button>
+          <div
+            className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#14151b]/90 p-6 shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[#4a6cf7]">
+              {deleteAllPending ? "Clear Workspace" : "Delete Chat"}
+            </div>
+            <div className="mb-3 text-lg font-semibold text-white">
+              {deleteAllPending ? "Delete all chat history?" : "Delete this chat?"}
+            </div>
+            <p className="mb-6 text-xs leading-relaxed text-[#888c99]">
+              {deleteAllPending
+                ? "This will permanently delete every conversation and message stored in your browser. This action cannot be undone."
+                : "This will permanently remove this conversation history. This action cannot be undone."}
+            </p>
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={cancelDelete}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-[#ccc] hover:bg-white/10 hover:text-white transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={deleteAllPending ? submitDeleteAllChats : submitDeleteChat}
+                className="rounded-xl bg-[#e11d48] hover:bg-[#f43f5e] px-4 py-2 text-xs font-semibold text-white transition-all active:scale-95 shadow-lg shadow-rose-950/40"
+              >
+                {deleteAllPending ? "Delete all" : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
     </>
   );
 }
