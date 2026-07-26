@@ -84,13 +84,13 @@ function ChatItem({
         className={cn(
           "relative w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 flex items-center gap-2.5 select-none",
           isActive
-            ? "bg-gradient-to-r from-[#4a6cf7]/20 via-[#4a6cf7]/10 to-transparent text-white shadow-[0_0_20px_rgba(74,108,247,0.15)]"
+            ? "bg-[#4a6cf7]/15 text-white"
             : "text-[#888c99] hover:bg-white/[0.04] hover:text-[#e1e4ed]"
         )}
       >
-        {/* Soft Glowing Edge Marker for Active Chat */}
+        {/* Left Indicator (Glow Removed) */}
         {isActive && (
-          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-[#4a6cf7] shadow-[0_0_12px_#4a6cf7]" />
+          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-[#4a6cf7]" />
         )}
 
         {chat.pinned ? (
