@@ -11,13 +11,18 @@ import {
 } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { searchWithPageContent } from "@/app/api/search/route";
-import { isSupportedAttachment, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
+import {
+  getSupportedAttachmentMimeType,
+  isSupportedAttachment,
+  normalizeAttachmentForModel,
+  SUPPORTED_ATTACHMENT_DESCRIPTION,
+} from "@/lib/attachments";
 
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
   instant: "gemini-flash-lite-latest",
-  expert: "gemini-3.5-flash-lite",
+  expert: "gemini-flash-latest",
 };
 
 function readSystemPrompt(): string {
@@ -97,7 +102,10 @@ export async function POST(req: Request) {
       (part) =>
         part.type === "file" &&
         !isSupportedAttachment({
-          mimeType: (part as { mediaType?: string }).mediaType,
+          mimeType: getSupportedAttachmentMimeType({
+            mimeType: (part as { mediaType?: string; mimeType?: string }).mediaType ?? (part as { mediaType?: string; mimeType?: string }).mimeType,
+            filename: (part as { filename?: string }).filename,
+          }),
           filename: (part as { filename?: string }).filename,
         })
     )
@@ -123,8 +131,24 @@ export async function POST(req: Request) {
     apiKey: process.env.DEEPTHINK_TOKEN || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
   });
 
+  // Normalize any file attachment MIME types before sending them to Gemini so
+  // browser-reported variants like text/x-go are converted to a supported type.
+  const normalizedMessages = messages.map((message) => ({
+    ...message,
+    parts: message.parts.map((part) => {
+      if (part.type !== "file") {
+        return part;
+      }
+
+      // Cast to any to work around type narrowing issues with FileUIPart.
+      // normalizeAttachmentForModel preserves all original properties (type,
+      // url, filename) and only overwrites mediaType / mimeType.
+      return normalizeAttachmentForModel(part as any) as any;
+    }),
+  }));
+
   // Convert messages once so they can be reused for search query generation and deepThink
-  const modelMessages = await convertToModelMessages(messages);
+  const modelMessages = await convertToModelMessages(normalizedMessages);
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
