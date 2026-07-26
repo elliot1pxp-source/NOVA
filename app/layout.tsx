@@ -6,8 +6,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'NOVA — AI Assistant',
-  description: 'NOVA is a powerful AI assistant powered by Google AI Studio.',
+  title: 'NOVA — UNCENSORED AI',
+  description: 'NO BRAINWASHED AI',
   generator: 'v0.app',
 }
 
