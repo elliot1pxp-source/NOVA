@@ -17,13 +17,12 @@ const DEFAULT_FETCH_HEADERS = {
   "User-Agent": USER_AGENT,
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
-  Referer: "https://searxng.site/",
 };
 
 const MAX_RESULTS = 5;
 const MAX_PAGE_TEXT_LENGTH = 100_000;
 
-// --- HTML stripping (same as before) ---
+// --- HTML stripping (unchanged) ---
 function stripHtml(input: string): string {
   return input
     .replace(/<[^>]*>/g, "")
@@ -77,44 +76,52 @@ async function fetchPageContent(url: string): Promise<string | undefined> {
   }
 }
 
-// --- New SearXNG search function ---
-async function searchSearXNG(query: string): Promise<SearchResult[]> {
-  // Use environment variable or fallback to a public instance
-  const baseUrl = process.env.SEARXNG_URL || "https://searx.be";
-  const url = `${baseUrl}/search?q=${encodeURIComponent(query)}&format=json`;
+// --- NEW: Serper.dev search function ---
+async function searchSerper(query: string): Promise<SearchResult[]> {
+  const apiKey = process.env.SERPER_API_KEY;
+  
+  if (!apiKey) {
+    console.error("SERPER_API_KEY is not set in environment variables");
+    return [];
+  }
 
   try {
-    const res = await fetch(url, {
+    const response = await fetch("https://google.serper.dev/search", {
+      method: "POST",
       headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "application/json",
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        q: query,
+        num: MAX_RESULTS,
+      }),
     });
 
-    if (!res.ok) {
-      console.error(`SearXNG returned ${res.status}: ${await res.text()}`);
+    if (!response.ok) {
+      console.error(`Serper API returned ${response.status}: ${await response.text()}`);
       return [];
     }
 
-    const data = await res.json();
-
-    // SearXNG returns { results: [ { title, url, content, ... } ] }
-    const results = data.results || [];
-    return results.slice(0, MAX_RESULTS).map((r: any) => ({
-      title: r.title || "Untitled",
-      snippet: r.content || r.snippet || "",
-      url: r.url || undefined,
+    const data = await response.json();
+    
+    // Map Serper's response to our SearchResult format
+    const organicResults = data.organic || [];
+    return organicResults.slice(0, MAX_RESULTS).map((result: any) => ({
+      title: result.title || "Untitled",
+      snippet: result.snippet || "",
+      url: result.link || undefined,
     }));
   } catch (error) {
-    console.error("SearXNG fetch failed:", error);
+    console.error("Serper API fetch failed:", error);
     return [];
   }
 }
 
-// --- Replace searchDuckDuckGo with searchSearXNG ---
+// --- Replace search function ---
 export async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
-  // This function name is kept for backward compatibility; it now uses SearXNG.
-  return searchSearXNG(query);
+  // This function name is kept for backward compatibility; it now uses Serper.
+  return searchSerper(query);
 }
 
 /**
