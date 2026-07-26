@@ -31,16 +31,16 @@ function groupChats(chats: Chat[]) {
   const older: Chat[] = [];
 
   chats
-  .filter((c) => !c.pinned)
-  .forEach((c) => {
-    const diff = (now.getTime() - c.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (diff < 1) today.push(c);
-    else if (diff < 2) yesterday.push(c);
-    else if (diff <= 7) sevenDays.push(c);
-    else older.push(c);
-  });
+    .filter((c) => !c.pinned)
+    .forEach((c) => {
+      const diff = (now.getTime() - c.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff < 1) today.push(c);
+      else if (diff < 2) yesterday.push(c);
+      else if (diff <= 7) sevenDays.push(c);
+      else older.push(c);
+    });
 
-    return { pinned, today, yesterday, sevenDays, older };
+  return { pinned, today, yesterday, sevenDays, older };
 }
 
 function ChatItem({
@@ -62,72 +62,72 @@ function ChatItem({
 }) {
   return (
     <div className="relative">
-    <button
-    onClick={onClick}
-    className={cn(
-      "group w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate flex items-center gap-2",
-      isActive
-      ? "bg-[#2a2a2a] text-white"
-      : "text-[#8a8a8a] hover:bg-[#1e1e1e] hover:text-white"
-    )}
-    >
-    {chat.pinned && <Pin className="w-3 h-3 text-[#4a6cf7] flex-shrink-0" />}
-    <span className="truncate flex-1">{chat.title}</span>
-    <span
-    role="button"
-    tabIndex={0}
-    onClick={(e) => {
-      e.stopPropagation();
-      onToggleMenu();
-    }}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.stopPropagation();
-        onToggleMenu();
-      }
-    }}
-    className={cn(
-      "p-0.5 rounded flex-shrink-0 transition-opacity hover:bg-[#333]",
-      menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-60"
-    )}
-    >
-    <MoreHorizontal className="w-4 h-4" />
-    </span>
-    </button>
+      <button
+        onClick={onClick}
+        className={cn(
+          "group w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate flex items-center gap-2",
+          isActive
+            ? "bg-[#2a2a2a] text-white"
+            : "text-[#8a8a8a] hover:bg-[#1e1e1e] hover:text-white"
+        )}
+      >
+        {chat.pinned && <Pin className="w-3 h-3 text-[#4a6cf7] flex-shrink-0" />}
+        <span className="truncate flex-1">{chat.title}</span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMenu();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              onToggleMenu();
+            }
+          }}
+          className={cn(
+            "p-0.5 rounded flex-shrink-0 transition-opacity hover:bg-[#333]",
+            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-60"
+          )}
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </span>
+      </button>
 
-    {menuOpen && (
-      <div className="absolute right-1 top-9 z-20 w-36 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1">
-      <button
-      onClick={(e) => {
-        e.stopPropagation();
-        onRename();
-      }}
-      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
-      >
-      <Pencil className="w-3.5 h-3.5" />
-      Rename
-      </button>
-      <button
-      onClick={(e) => {
-        e.stopPropagation();
-        onTogglePin();
-      }}
-      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
-      >
-      {chat.pinned ? (
-        <>
-        <PinOff className="w-3.5 h-3.5" />
-        Unpin
-        </>
-      ) : (
-        <>
-        <Pin className="w-3.5 h-3.5" />
-        Pin
-        </>
+      {menuOpen && (
+        <div className="absolute right-1 top-9 z-20 w-36 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRename();
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Rename
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin();
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
+          >
+            {chat.pinned ? (
+              <>
+                <PinOff className="w-3.5 h-3.5" />
+                Unpin
+              </>
+            ) : (
+              <>
+                <Pin className="w-3.5 h-3.5" />
+                Pin
+              </>
+            )}
+          </button>
+        </div>
       )}
-      </button>
-      </div>
-    )}
     </div>
   );
 }
@@ -154,6 +154,20 @@ export function NovaSidebar({
   const [historyOpen, setHistoryOpen] = useState(true);
   const groups = groupChats(chats);
 
+  const openHistoryWithSearch = () => {
+    setHistoryOpen(true);
+    setSearchOpen(true);
+    setMenuOpenId(null);
+    setSettingsOpen(false);
+  };
+
+  const openHistoryAndReset = () => {
+    setHistoryOpen(true);
+    setSearchOpen(false);
+    setMenuOpenId(null);
+    setSettingsOpen(false);
+  };
+
   // Close the pin menu / settings menu when clicking anywhere else
   useEffect(() => {
     if (!menuOpenId && !settingsOpen) return;
@@ -166,169 +180,210 @@ export function NovaSidebar({
   }, [menuOpenId, settingsOpen]);
 
   const filtered = searchQuery.trim()
-  ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
-  : null;
+    ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : null;
 
   const renderList = (list: Chat[]) =>
-  list.map((chat) => (
-    <ChatItem
-    key={chat.id}
-    chat={chat}
-    isActive={chat.id === activeChatId}
-    onClick={() => onSelectChat(chat.id)}
-    menuOpen={menuOpenId === chat.id}
-    onToggleMenu={() => setMenuOpenId((id) => (id === chat.id ? null : chat.id))}
-    onTogglePin={() => {
-      onTogglePin(chat.id);
-      setMenuOpenId(null);
-    }}
-    onRename={() => {
-      const title = window.prompt("Rename chat", chat.title)?.trim();
-      if (title) onRenameChat(chat.id, title);
-      setMenuOpenId(null);
-    }}
-    />
-  ));
+    list.map((chat) => (
+      <ChatItem
+        key={chat.id}
+        chat={chat}
+        isActive={chat.id === activeChatId}
+        onClick={() => onSelectChat(chat.id)}
+        menuOpen={menuOpenId === chat.id}
+        onToggleMenu={() => setMenuOpenId((id) => (id === chat.id ? null : chat.id))}
+        onTogglePin={() => {
+          onTogglePin(chat.id);
+          setMenuOpenId(null);
+        }}
+        onRename={() => {
+          const title = window.prompt("Rename chat", chat.title)?.trim();
+          if (title) onRenameChat(chat.id, title);
+          setMenuOpenId(null);
+        }}
+      />
+    ));
 
   return (
     <aside
-    className={cn(
-      "flex flex-col h-full bg-[#111] border-r border-[#1e1e1e] transition-[width] duration-200 ease-out overflow-hidden",
-      historyOpen ? "w-[220px] min-w-[220px]" : "w-[60px] min-w-[60px]"
-    )}
+      className={cn(
+        "relative flex flex-col h-full bg-[#111] transition-[width] duration-200 ease-out",
+        historyOpen
+          ? "overflow-hidden w-[220px] min-w-[220px] border-r border-[#1e1e1e]"
+          : "overflow-visible w-0 min-w-0 border-r-0"
+      )}
     >
-    {/* Logo */}
-    <div className={cn("flex items-center py-4", historyOpen ? "gap-2 px-4" : "justify-center px-2")}>
-    <Image src="/nova-logo.png" alt="NOVA" width={28} height={28} className="rounded-md" />
-    {historyOpen && <span className="text-white font-semibold text-base tracking-wide">NOVA</span>}
-    <div className={cn("flex items-center gap-1", historyOpen && "ml-auto")}>
-    {historyOpen && (
-    <button
-    onClick={() => setSearchOpen((v) => !v)}
-    className="p-1.5 rounded-md text-[#555] hover:text-white hover:bg-[#1e1e1e] transition-colors"
-    aria-label="Search chats"
-    >
-    <Search className="w-4 h-4" />
-    </button>
-    )}
-    <button
-    onClick={() => {
-      setHistoryOpen((open) => !open);
-      setSearchOpen(false);
-      setMenuOpenId(null);
-      setSettingsOpen(false);
-    }}
-    className="p-1.5 rounded-md text-[#555] hover:text-white hover:bg-[#1e1e1e] transition-colors"
-    aria-label={historyOpen ? "Close chat history" : "Open chat history"}
-    title={historyOpen ? "Close chat history" : "Open chat history"}
-    >
-    {historyOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-    </button>
-    </div>
-    </div>
-
-    {historyOpen && <>
-    {/* New Chat Button */}
-    <div className="px-3 pb-3">
-    <button
-    onClick={onNewChat}
-    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-[#2a2a2a] text-[#aaa] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all text-sm"
-    >
-    <Plus className="w-4 h-4" />
-    <span>New chat</span>
-    </button>
-    </div>
-
-    {/* Search Input */}
-    {searchOpen && (
-      <div className="px-3 pb-2">
-      <input
-      autoFocus
-      value={searchQuery}
-      onChange={(e) => setSearchQuery(e.target.value)}
-      placeholder="Search chats..."
-      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-1.5 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#3a3a3a]"
-      />
-      </div>
-    )}
-
-    {/* Chat List */}
-    <nav className="flex-1 overflow-y-auto px-1 pb-4 scrollbar-thin">
-    {filtered ? (
-      filtered.length > 0 ? (
-        renderList(filtered)
+      {/* Logo / Closed Floating Controls */}
+      {historyOpen ? (
+        <div className="flex items-center gap-2 px-4 py-4">
+          <Image src="/nova-logo.png" alt="NOVA" width={28} height={28} className="rounded-md" />
+          <span className="text-white font-semibold text-base tracking-wide">NOVA</span>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => setSearchOpen((v) => !v)}
+              className="p-1.5 rounded-md text-[#555] hover:text-white hover:bg-[#1e1e1e] transition-colors"
+              aria-label="Search chats"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                setHistoryOpen((open) => !open);
+                setSearchOpen(false);
+                setMenuOpenId(null);
+                setSettingsOpen(false);
+              }}
+              className="p-1.5 rounded-md text-[#555] hover:text-white hover:bg-[#1e1e1e] transition-colors"
+              aria-label="Close chat history"
+              title="Close chat history"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       ) : (
-        <p className="text-xs text-[#555] px-3 py-4">No results found.</p>
-      )
-    ) : (
-      <>
-      {groups.pinned.length > 0 && (
-        <>
-        <SectionLabel label="Pinned" />
-        {renderList(groups.pinned)}
-        </>
+        <div className="relative">
+          <div className="absolute left-3 top-3 z-30 flex items-center gap-0.5 rounded-full border border-[#2a2a2a] bg-[#111] p-1 shadow-md">
+            <button
+              onClick={() => {
+                setHistoryOpen(true);
+                setSearchOpen(false);
+                setMenuOpenId(null);
+                setSettingsOpen(false);
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[#999] transition-colors hover:bg-[#1e1e1e] hover:text-white"
+              aria-label="Open chat history"
+              title="Open chat history"
+            >
+              <PanelLeftOpen className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={openHistoryWithSearch}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[#999] transition-colors hover:bg-[#1e1e1e] hover:text-white"
+              aria-label="Search chats"
+              title="Search chats"
+            >
+              <Search className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                onNewChat();
+                openHistoryAndReset();
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[#999] transition-colors hover:bg-[#1e1e1e] hover:text-white"
+              aria-label="New chat"
+              title="New chat"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       )}
-      {groups.today.length > 0 && (
-        <>
-        <SectionLabel label="Today" />
-        {renderList(groups.today)}
-        </>
-      )}
-      {groups.yesterday.length > 0 && (
-        <>
-        <SectionLabel label="Yesterday" />
-        {renderList(groups.yesterday)}
-        </>
-      )}
-      {groups.sevenDays.length > 0 && (
-        <>
-        <SectionLabel label="7 Days" />
-        {renderList(groups.sevenDays)}
-        </>
-      )}
-      {groups.older.length > 0 && (
-        <>
-        <SectionLabel label="Older" />
-        {renderList(groups.older)}
-        </>
-      )}
-      </>
-    )}
-    </nav>
 
-    {/* Settings Footer (replaces the old "NOVA User" avatar row) */}
-    <div className="relative px-3 py-3 border-t border-[#1e1e1e]">
-    <button
-    onClick={(e) => {
-      e.stopPropagation();
-      setSettingsOpen((v) => !v);
-    }}
-    className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-[#1a1a1a] text-[#aaa] hover:text-white transition-colors"
-    aria-label="Settings"
-    >
-    <Settings className="w-4 h-4" />
-    <span className="text-sm flex-1 text-left">Settings</span>
-    </button>
+      {historyOpen && (
+        <>
+          {/* New Chat Button */}
+          <div className="px-3 pb-3">
+            <button
+              onClick={onNewChat}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-[#2a2a2a] text-[#aaa] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New chat</span>
+            </button>
+          </div>
 
-    {settingsOpen && (
-      <div
-      onClick={(e) => e.stopPropagation()}
-      className="absolute bottom-14 left-3 right-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1 z-20"
-      >
-      <button
-      onClick={() => {
-        setSettingsOpen(false);
-        onDeleteAllChats();
-      }}
-      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
-      >
-      <Trash2 className="w-3.5 h-3.5" />
-      Delete all chat history
-      </button>
-      </div>
-    )}
-    </div>
-    </>}
+          {/* Search Input */}
+          {searchOpen && (
+            <div className="px-3 pb-2">
+              <input
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search chats..."
+                className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-1.5 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#3a3a3a]"
+              />
+            </div>
+          )}
+
+          {/* Chat List */}
+          <nav className="flex-1 overflow-y-auto px-1 pb-4 scrollbar-thin">
+            {filtered ? (
+              filtered.length > 0 ? (
+                renderList(filtered)
+              ) : (
+                <p className="text-xs text-[#555] px-3 py-4">No results found.</p>
+              )
+            ) : (
+              <>
+                {groups.pinned.length > 0 && (
+                  <>
+                    <SectionLabel label="Pinned" />
+                    {renderList(groups.pinned)}
+                  </>
+                )}
+                {groups.today.length > 0 && (
+                  <>
+                    <SectionLabel label="Today" />
+                    {renderList(groups.today)}
+                  </>
+                )}
+                {groups.yesterday.length > 0 && (
+                  <>
+                    <SectionLabel label="Yesterday" />
+                    {renderList(groups.yesterday)}
+                  </>
+                )}
+                {groups.sevenDays.length > 0 && (
+                  <>
+                    <SectionLabel label="7 Days" />
+                    {renderList(groups.sevenDays)}
+                  </>
+                )}
+                {groups.older.length > 0 && (
+                  <>
+                    <SectionLabel label="Older" />
+                    {renderList(groups.older)}
+                  </>
+                )}
+              </>
+            )}
+          </nav>
+
+          {/* Settings Footer */}
+          <div className="relative px-3 py-3 border-t border-[#1e1e1e]">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSettingsOpen((v) => !v);
+              }}
+              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-[#1a1a1a] text-[#aaa] hover:text-white transition-colors"
+              aria-label="Settings"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-sm flex-1 text-left">Settings</span>
+            </button>
+
+            {settingsOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute bottom-14 left-3 right-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1 z-20"
+              >
+                <button
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    onDeleteAllChats();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete all chat history
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </aside>
   );
 }
