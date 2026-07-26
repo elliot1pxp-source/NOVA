@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Zap, Shield } from "lucide-react";
 import { ChatInput, PendingAttachment } from "./chat-input";
 import { ChatMessage, TypingIndicator } from "./chat-message";
+import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, normalizeDataUrl, validateFileSize, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
@@ -71,8 +72,10 @@ ${text}`,
 
 export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const notifiedRef = useRef(false);
   const summarizingHistoryRef = useRef(false);
+  const [activeNavId, setActiveNavId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
   const [webSearch, setWebSearch] = useState(false);
@@ -111,6 +114,70 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     );
   });
   const showTypingIndicator = isLoading && !waitingForDeepThink;
+
+  // Build nav items from user messages only
+  const userMessages = useMemo(() => {
+    return visibleMessages.filter((m) => m.role === "user");
+  }, [visibleMessages]);
+
+  const navItems: NavItem[] = useMemo(() => {
+    return userMessages.map((message, i) => {
+      const text = message.parts
+        .filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join("")
+        .slice(0, 60);
+      return {
+        id: message.id,
+        text: text || `Message ${i + 1}`,
+        badge: `${i + 1}/${userMessages.length}`,
+      };
+    });
+  }, [userMessages]);
+
+  // Track which user message is in view based on scroll position
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || userMessages.length === 0) return;
+
+    const handleScroll = () => {
+      const messageElements = container.querySelectorAll("[data-message-id]");
+      // Only consider user messages for active tracking
+      const userIds = new Set(userMessages.map((m) => m.id));
+      let closestId: string | undefined;
+      let closestDistance = Infinity;
+
+      messageElements.forEach((el) => {
+        const id = el.getAttribute("data-message-id");
+        if (!id || !userIds.has(id)) return;
+
+        const rect = el.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const distance = Math.abs(rect.top - containerRect.top - 100);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestId = id ?? undefined;
+        }
+      });
+
+      setActiveNavId(closestId);
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    // Run once on mount to set initial active
+    setTimeout(handleScroll, 100);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [userMessages]);
+
+  // Scroll to a specific message when navigator item is clicked
+  const handleNavSelect = useCallback((id: string) => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const el = container.querySelector(`[data-message-id="${id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -396,19 +463,20 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4">
             <div className="max-w-3xl mx-auto">
               {visibleMessages.map((message, i) => {
                 const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
                 return (
-                  <ChatMessage
-                    key={message.id}
-                    message={message}
-                    onRegenerate={isLastAssistant ? () => regenerate() : undefined}
-                    onEdit={message.role === "user" ? handleEditMessage : undefined}
-                    isStreaming={isLastAssistant && isLoading}
-                    disableActions={isLoading}
-                  />
+                  <div key={message.id} data-message-id={message.id}>
+                    <ChatMessage
+                      message={message}
+                      onRegenerate={isLastAssistant ? () => regenerate() : undefined}
+                      onEdit={message.role === "user" ? handleEditMessage : undefined}
+                      isStreaming={isLastAssistant && isLoading}
+                      disableActions={isLoading}
+                    />
+                  </div>
                 );
               })}
               {showTypingIndicator && <TypingIndicator />}
@@ -425,6 +493,15 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               <div ref={bottomRef} />
             </div>
           </div>
+
+          {/* Message Navigator */}
+          {navItems.length > 0 && (
+            <MessageNavigator
+              items={navItems}
+              activeId={activeNavId}
+              onSelect={handleNavSelect}
+            />
+          )}
 
           {/* Input */}
           <div className="px-4 pb-6 pt-3">
