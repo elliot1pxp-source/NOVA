@@ -53,13 +53,12 @@ async function generateSearchQuery(
   systemPrompt: string
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
-  const searchQueryPrompt = `${systemPrompt}
-YOUR ROLE:
+  const searchQueryPrompt = ` YOUR ROLE:
 You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
 - The query should be between 5 and 10 words or 20.
 - Use keywords likely to appear in authoritative sources.
-- Output ONLY the query, with no extra commentary, punctuation, or formatting.`;
-
+- Output ONLY the query, with no extra commentary, punctuation, or formatting. If user input is something like "Who is <name>" and you your search query must only be "<name>"`;
+n
   try {
     const { text } = await generateText({
       model: googleClient(modelId),
