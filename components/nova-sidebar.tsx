@@ -628,13 +628,11 @@ export function NovaSidebar({
           {/* Header */}
           <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="relative p-0.5 rounded-lg bg-[#181920]">
-                <Image src="/nova-logo.png" alt="NOVA" width={22} height={22} className="rounded-md" />
-              </div>
+                <Image src="/nova-logo.png" alt="NOVA" width={30} height={30} className="rounded-md" />
               <div className="flex items-center gap-1.5">
                 <span className="text-white font-semibold text-sm tracking-wide">NOVA</span>
                 <span className="text-[10px] font-bold text-[#4a6cf7] bg-[#4a6cf7]/15 px-1.5 py-0.5 rounded-md">
-                  UNCENSORED
+                  V1
                 </span>
               </div>
             </div>
