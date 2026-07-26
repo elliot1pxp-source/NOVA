@@ -17,7 +17,7 @@ export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
   instant: "gemini-flash-lite-latest",
-  expert: "gemini-flash-lite-latest",
+  expert: "gemini-flash-latest,
 };
 
 function readSystemPrompt(): string {
@@ -222,14 +222,14 @@ STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to
 
       // --- Final streaming response (uses GOOGLE_GENERATIVE_AI_API_KEY) ---
       const result = streamText({
-    model: googleGeneral(modelId),
-    system: systemPrompt,
-    messages: modelMessages,
-    ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
-    ...(modelSettings?.topK !== undefined && { topK: modelSettings.topK }),
-    ...(modelSettings?.maxTokens !== undefined && { maxTokens: modelSettings.maxTokens }),
-  });
-
+  model: googleGeneral(modelId),
+  system: systemPrompt,
+  messages: modelMessages,
+  ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
+  ...(modelSettings?.topK !== undefined && { topK: modelSettings.topK }),
+  ...(modelSettings?.maxTokens !== undefined && { maxOutputTokens: modelSettings.maxTokens }),
+});
+      
       writer.merge(
         toUIMessageStream({
           stream: result.stream,
