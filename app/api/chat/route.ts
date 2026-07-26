@@ -34,9 +34,9 @@ function lastUserText(messages: UIMessage[]): string {
     const m = messages[i];
     if (m.role === "user") {
       return m.parts
-      .filter((p): p is { type: "text"; text: string } => p.type === "text")
-      .map((p) => p.text)
-      .join(" ");
+        .filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join(" ");
     }
   }
   return "";
@@ -76,12 +76,14 @@ export async function POST(req: Request) {
   const modelId = MODELS[modelKey] ?? MODELS.instant;
   const baseSystemPrompt = readSystemPrompt();
 
-  // If you want to place the contents of systemprompt.txt anywhere inside
-  // a larger system prompt string, interpolate it with a template literal:
-  // const systemPrompt = `Prefix text\n${baseSystemPrompt}\nSuffix text`;
-
-  const google = createGoogleGenerativeAI({
+  // Two separate Google clients: one for deepThink, one for the final response
+  const googleGeneral = createGoogleGenerativeAI({
     apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  });
+
+  const googleDeepThink = createGoogleGenerativeAI({
+    // Fallback to the general key if DEEPTHINK_TOKEN is not set
+    apiKey: process.env.DEEPTHINK_TOKEN || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
   });
 
   const modelMessages = await convertToModelMessages(messages);
@@ -90,10 +92,7 @@ export async function POST(req: Request) {
     execute: async ({ writer }) => {
       let systemPrompt = baseSystemPrompt;
 
-      // --- Web search ---------------------------------------------------
-      // Both writes share the same `id` ("search") so the client updates a
-      // single UI part in place ("searching" -> "done") instead of
-      // appending a second, duplicate part to the message.
+      // --- Web search (uses searchWithPageContent from the search route) ---
       if (webSearch) {
         const query = lastUserText(messages);
         writer.write({ type: "data-search", id: "search", data: { status: "searching", query } });
@@ -102,11 +101,11 @@ export async function POST(req: Request) {
           writer.write({ type: "data-search", id: "search", data: { status: "done", query, results } });
           if (results.length > 0) {
             const context = results
-            .map((r, i) => {
-              const source = r.content || r.snippet;
-              return `[${i + 1}] ${r.title}\nURL: ${r.url ?? "Unavailable"}\nContent:\n${source}`;
-            })
-            .join("\n");
+              .map((r, i) => {
+                const source = r.content || r.snippet;
+                return `[${i + 1}] ${r.title}\nURL: ${r.url ?? "Unavailable"}\nContent:\n${source}`;
+              })
+              .join("\n");
             systemPrompt += `\n\nYou were given the readable content of the top ${results.length} live web search results for the user's latest message. Analyse and synthesize this material into a direct answer; do not merely list the results. Cite sources inline like [1] when you rely on them. If a source could not be retrieved, its search snippet is provided instead.\n\n${context}`;
           }
         } catch {
@@ -114,9 +113,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // --- DeepThink (2-step: plan with the model, then answer) --------
-      // Same idea: a single "thought" id so "Thinking…" is replaced in
-      // place by the finished plan rather than duplicated.
+      // --- DeepThink (uses the separate DEEPTHINK_TOKEN) ---
       if (deepThink) {
         const startedAt = Date.now();
         writer.write({ type: "data-thought", id: "thought", data: { status: "thinking" } });
@@ -126,7 +123,7 @@ export async function POST(req: Request) {
 You are the planning stage of an AI assistant called NOVA. Do not answer the user directly. Instead, think step by step about what the user needs, break the problem down, note any risks or ambiguities, and outline a clear plan for how to answer well. Be brief but thorough. This plan will be handed to another step that writes the final answer.`;
 
           const planResult = await generateText({
-            model: google(modelId),
+            model: googleDeepThink(modelId), // uses DEEPTHINK_TOKEN
             system: planSystemPrompt,
             messages: modelMessages,
           });
@@ -142,16 +139,13 @@ You are the planning stage of an AI assistant called NOVA. Do not answer the use
         }
       }
 
+      // --- Final streaming response (uses GOOGLE_GENERATIVE_AI_API_KEY) ---
       const result = streamText({
-        model: google(modelId),
-                                system: systemPrompt,
-                                messages: modelMessages,
+        model: googleGeneral(modelId),
+        system: systemPrompt,
+        messages: modelMessages,
       });
 
-      // Progress data is written before the model stream. Do not let the
-      // nested model stream emit another `start` event with a new message ID:
-      // the client would treat it as a second assistant message, leaving the
-      // progress-only message above the actual answer.
       writer.merge(
         toUIMessageStream({
           stream: result.stream,
