@@ -3,6 +3,10 @@
  * Video is deliberately not supported in NOVA (including video/mp4).
  * Extended to support common programming language source files.
  */
+
+export const MAX_NON_IMAGE_SIZE_MB = 5;
+export const MAX_NON_IMAGE_SIZE_BYTES = MAX_NON_IMAGE_SIZE_MB * 1024 * 1024;
+
 export const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
   "application/json",
   "application/pdf",
@@ -188,6 +192,20 @@ function normalizedMimeType(mimeType: string | undefined) {
     "application/rtf": "text/rtf",
     "application/x-rtf": "text/rtf",
     "image/jpg": "image/jpeg",
+    "text/x-go": "text/plain",
+    "text/x-python": "text/plain",
+    "text/x-java": "text/plain",
+    "text/x-c": "text/plain",
+    "text/x-c++": "text/plain",
+    "text/x-ruby": "text/plain",
+    "text/x-perl": "text/plain",
+    "text/x-php": "text/plain",
+    "text/x-typescript": "text/plain",
+    "text/x-rust": "text/plain",
+    "text/x-swift": "text/plain",
+    "text/x-kotlin": "text/plain",
+    "text/x-scala": "text/plain",
+    "text/x-dart": "text/plain",
   };
   return aliases[normalized] ?? normalized;
 }
@@ -214,8 +232,58 @@ export function getSupportedAttachmentMimeType({
   return mimeTypeFromFilename(filename);
 }
 
+function getAttachmentMimeType(part: { mediaType?: string; mimeType?: string }) {
+  return part.mediaType ?? part.mimeType;
+}
+
+export function normalizeAttachmentForModel<
+  T extends { mediaType?: string; mimeType?: string; filename?: string }
+>(part: T): T {
+  const mimeType = getAttachmentMimeType(part);
+  const supportedMimeType = getSupportedAttachmentMimeType({
+    mimeType,
+    filename: part.filename,
+  });
+
+  if (!supportedMimeType || supportedMimeType === mimeType) {
+    return part;
+  }
+
+  return {
+    ...part,
+    mediaType: supportedMimeType,
+    mimeType: supportedMimeType,
+  } as T;
+}
+
 export function isSupportedAttachment(file: { mimeType?: string; filename?: string }) {
   return Boolean(getSupportedAttachmentMimeType(file));
+}
+
+export function isImageMimeType(mimeType?: string): boolean {
+  if (!mimeType) return false;
+  const normalized = normalizedMimeType(mimeType);
+  return normalized.startsWith("image/");
+}
+
+export function validateFileSize(file: { size: number; type?: string; name?: string }): {
+  valid: boolean;
+  error?: string;
+} {
+  const mimeType = getSupportedAttachmentMimeType({
+    mimeType: file.type,
+    filename: file.name,
+  });
+  if (!mimeType) {
+    return { valid: false, error: `Unsupported file type. ${SUPPORTED_ATTACHMENT_DESCRIPTION}` };
+  }
+  if (!isImageMimeType(mimeType) && file.size > MAX_NON_IMAGE_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: `File too large. Non-image files are limited to ${MAX_NON_IMAGE_SIZE_MB}MB.`,
+    };
+  }
+  return { valid: true };
 }
 
 export const SUPPORTED_ATTACHMENT_DESCRIPTION =
@@ -223,3 +291,24 @@ export const SUPPORTED_ATTACHMENT_DESCRIPTION =
   "and source code files (Java, Python, C, C++, Ruby, Go, Rust, Swift, Kotlin, PHP, Perl, Scala, " +
   "TypeScript, Dart, and many others). Video (MP4), audio (MP3), archives (ZIP), executables (EXE, APK), " +
   "and Java bytecode (.class) are not supported.";
+
+/**
+ * Rewrites the MIME type in a data URL header to the given normalized type.
+ * The AI SDK's convertToModelMessages reads the MIME type from the data URL
+ * itself rather than from the explicitly-provided mediaType, so we need to
+ * ensure the URL reflects the normalized type.
+ *
+ * Returns the original data URL unchanged if no rewrite is needed.
+ */
+export function normalizeDataUrl(
+  dataUrl: string,
+  normalizedMimeType: string
+): string {
+  const match = dataUrl.match(/^data:([^;]+);/);
+  if (!match) return dataUrl;
+
+  const originalMime = match[1];
+  if (originalMime === normalizedMimeType) return dataUrl;
+
+  return dataUrl.replace(/^data:[^;]+;/, `data:${normalizedMimeType};`);
+}
