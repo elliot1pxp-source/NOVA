@@ -1,7 +1,7 @@
 "use client";
 
 // Simple localStorage-backed persistence. No login / backend required —
-// everything (chat list, pin state, and message history) lives in the browser.
+// everything (chat list, pin state, model settings, and message history) lives in the browser.
 
 export type StoredChat = {
   id: string;
@@ -10,14 +10,43 @@ export type StoredChat = {
   pinned?: boolean;
 };
 
+// --- MODEL SETTINGS TYPES & DEFAULTS ---
+export type ModelParams = {
+  temperature: number;
+  topK: number;
+  maxTokens: number;
+};
+
+export type ModelSettings = {
+  instant: ModelParams;
+  expert: ModelParams;
+};
+
+export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
+  instant: {
+    temperature: 0.7,
+    topK: 40,
+    maxTokens: 4096,
+  },
+  expert: {
+    temperature: 0.7,
+    topK: 40,
+    maxTokens: 8192,
+  },
+};
+
+// --- STORAGE KEYS ---
 const CHATS_KEY = "nova_chats_v1";
 const MESSAGES_PREFIX = "nova_messages_v1_";
+const SETTINGS_KEY = "nova_model_settings_v1";
+
 const messagesKey = (chatId: string) => `${MESSAGES_PREFIX}${chatId}`;
 
 function isBrowser() {
   return typeof window !== "undefined";
 }
 
+// --- CHATS ---
 export function loadChats(): StoredChat[] {
   if (!isBrowser()) return [];
   try {
@@ -39,6 +68,7 @@ export function saveChats(chats: StoredChat[]) {
   }
 }
 
+// --- MESSAGES ---
 export function loadMessages<T = unknown>(chatId: string): T[] {
   if (!isBrowser()) return [];
   try {
@@ -86,5 +116,26 @@ export function clearAllChats() {
     keysToRemove.forEach((k) => window.localStorage.removeItem(k));
   } catch {
     // storage disabled — fail silently
+  }
+}
+
+// --- MODEL SETTINGS ---
+export function loadModelSettings(): ModelSettings {
+  if (!isBrowser()) return DEFAULT_MODEL_SETTINGS;
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return DEFAULT_MODEL_SETTINGS;
+    return { ...DEFAULT_MODEL_SETTINGS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_MODEL_SETTINGS;
+  }
+}
+
+export function saveModelSettings(settings: ModelSettings) {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // storage full / disabled — fail silently
   }
 }
