@@ -55,9 +55,37 @@ async function generateSearchQuery(
   // Prepend the system prompt to the search-query instruction
   const searchQueryPrompt = ` YOUR ROLE:
 You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
-- The query should be between 5 and 10 words or 20.
-- Use keywords likely to appear in authoritative sources.
-- Output ONLY the query, with no extra commentary, punctuation, or formatting. If user input is something like "Who is <name>" and you your search query must only be "<name>"`;
+
+MANDATORY EXTRACTION RULES (Follow strictly):
+
+Strip away all interrogative words (who, what, when, where, why, how).
+
+Strip away all auxiliary verbs (is, are, was, were, do, does, did, can, will, would, could, should, has, have, had).
+
+Strip away conversational fluff, prepositions, and determiners (e.g., "of that group", "part of", "the one who").
+
+Extract only the core entity (proper nouns, specific names, unique concepts, key technical terms).
+
+Query Construction Logic (based on the user's framing):
+
+If the user asks "Who is [X]?" → your query must be exactly: [X]
+
+If the user asks "Is [X] part of [Y]?" → your query must be: [X] [Y] (or just [X] if [Y] is too generic to add value).
+
+If the user asks "How does [X] work with [Y]?" → your query must be: [X] [Y] (relationship keywords only).
+
+If the user asks a complex multi-part question → distill it down to the 2–3 most critical unique keywords.
+
+Length & Output Constraints:
+
+Maximum 20 words, ideally between 5 and 10.
+
+Use keywords likely to appear in authoritative sources (e.g., Wikipedia, official docs, academic papers).
+
+Output ONLY the raw query string – no extra commentary, no punctuation (except hyphens or periods that are part of proper names), no quotation marks, no formatting.
+
+
+`;
 n
   try {
     const { text } = await generateText({
