@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { NovaSidebar, Chat } from "@/components/nova-sidebar";
 import { ChatView } from "@/components/chat-view";
-import { loadChats, saveChats, clearAllChats, StoredChat } from "@/lib/storage";
+import { loadChats, saveChats, clearAllChats, deleteChat, StoredChat } from "@/lib/storage";
 
 type Model = "instant" | "expert";
 
@@ -77,13 +77,13 @@ export default function Home() {
     );
   }, []);
 
+  const handleDeleteChat = useCallback((chatId: string) => {
+    deleteChat(chatId);
+    setChats((prev) => prev.filter((chat) => chat.id !== chatId));
+    setActiveChatId((current) => (current === chatId ? null : current));
+  }, []);
+
   const handleDeleteAllChats = useCallback(() => {
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm(
-        "Delete all chat history? This cannot be undone."
-      );
-      if (!confirmed) return;
-    }
     clearAllChats();
     setChats([]);
     setActiveChatId(null);
@@ -103,6 +103,7 @@ export default function Home() {
     onSelectChat={setActiveChatId}
     onTogglePin={handleTogglePin}
     onRenameChat={handleRenameChat}
+    onDeleteChat={handleDeleteChat}
     onDeleteAllChats={handleDeleteAllChats}
     />
     <main className="flex flex-1 overflow-hidden">
