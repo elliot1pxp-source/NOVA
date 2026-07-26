@@ -101,6 +101,7 @@ function ChatItem({
       {menuOpen && (
         <div className="absolute right-1 top-9 z-20 w-36 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1">
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               onRename();
@@ -111,12 +112,13 @@ function ChatItem({
             Rename
           </button>
           <button
-        onClick={(e) => {
+            type="button"
+            onClick={(e) => {
               e.stopPropagation();
               onTogglePin();
-        }}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
-        >
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
+          >
         {chat.pinned ? (
               <>
               <PinOff className="w-3.5 h-3.5" />
@@ -130,12 +132,13 @@ function ChatItem({
         )}
         </button>
         <button
-        onClick={(e) => {
+            type="button"
+            onClick={(e) => {
               e.stopPropagation();
               onDelete();
-        }}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
-        >
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
+          >
         <Trash2 className="w-3.5 h-3.5" />
         Delete
         </button>
@@ -282,8 +285,8 @@ export function NovaSidebar({
           </div>
         </div>
       ) : (
-        <div className="relative">
-          <div className="absolute left-3 top-3 z-30 flex items-center gap-0.5 rounded-full border border-[#2a2a2a] bg-[#111] p-1 shadow-md">
+        <div className="relative h-full">
+          <div className="absolute left-0 top-4 z-30 flex items-center gap-1 rounded-full border border-white/10 bg-[#111]/90 p-1.5 shadow-lg shadow-black/30 backdrop-blur-xl">
             <button
               onClick={() => {
                 setHistoryOpen(true);
@@ -291,30 +294,30 @@ export function NovaSidebar({
                 setMenuOpenId(null);
                 setSettingsOpen(false);
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-[#999] transition-colors hover:bg-[#1e1e1e] hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[#ccc] transition-colors hover:bg-[#1e1e1e] hover:text-white"
               aria-label="Open chat history"
               title="Open chat history"
             >
-              <PanelLeftOpen className="w-3.5 h-3.5" />
+              <PanelLeftOpen className="w-4 h-4" />
             </button>
             <button
               onClick={openHistoryWithSearch}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-[#999] transition-colors hover:bg-[#1e1e1e] hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[#ccc] transition-colors hover:bg-[#1e1e1e] hover:text-white"
               aria-label="Search chats"
               title="Search chats"
             >
-              <Search className="w-3.5 h-3.5" />
+              <Search className="w-4 h-4" />
             </button>
             <button
               onClick={() => {
                 onNewChat();
                 openHistoryAndReset();
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-[#999] transition-colors hover:bg-[#1e1e1e] hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[#ccc] transition-colors hover:bg-[#1e1e1e] hover:text-white"
               aria-label="New chat"
               title="New chat"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -410,6 +413,7 @@ export function NovaSidebar({
                 className="absolute bottom-14 left-3 right-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] shadow-xl py-1 z-20"
               >
                 <button
+                  type="button"
                   onClick={() => {
                     setSettingsOpen(false);
                     setDeleteAllPending(true);
@@ -432,8 +436,12 @@ export function NovaSidebar({
         role="dialog"
         aria-modal="true"
         aria-labelledby="deleteChatDialogTitle"
+        onClick={cancelDelete}
       >
-        <div className="relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-white/10 p-6 shadow-2xl shadow-black/35 backdrop-blur-3xl">
+        <div
+          className="relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-white/10 p-6 shadow-2xl shadow-black/35 backdrop-blur-3xl"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="pointer-events-none absolute -top-4 right-4 h-14 w-14 rounded-full bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.18)] backdrop-blur-xl" />
           <div className="mb-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#bfc9d8]">
             {deleteAllPending ? "Delete all history" : "Delete chat"}
