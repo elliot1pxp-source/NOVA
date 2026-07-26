@@ -358,9 +358,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
       {/* Avatar — assistant only */}
       {!isUser && (
         <div className="flex-shrink-0 mt-1">
-          <div className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden shadow-md">
-            <Image src="/nova-logo.png" alt="NOVA" width={20} height={20} />
-          </div>
+            <Image src="/nova-logo.png" alt="NOVA" width={30} height={30} />
         </div>
       )}
 
@@ -481,14 +479,11 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
 export function TypingIndicator() {
   return (
     <div className="flex gap-4 w-full max-w-3xl mx-auto py-4 animate-in fade-in duration-300">
-      <div className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1 shadow-md">
-        <Image src="/nova-logo.png" alt="NOVA" width={20} height={20} className="animate-pulse" />
-      </div>
-      <div className="flex items-center gap-1.5 pt-3">
-        <span className="w-2 h-2 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:0ms]" />
-        <span className="w-2 h-2 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:150ms]" />
-        <span className="w-2 h-2 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:300ms]" />
+      <div className="flex items-center gap-0.5 pt-3">
+        <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:0ms]" />
+        <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:150ms]" />
+        <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:300ms]" />
       </div>
     </div>
-  );
+  )
 }
