@@ -11,7 +11,14 @@ export type SearchResult = {
 };
 
 const USER_AGENT =
-"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+const DEFAULT_FETCH_HEADERS = {
+  "User-Agent": USER_AGENT,
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  Referer: "https://duckduckgo.com/",
+};
 
 const MAX_RESULTS = 5;
 // This is deliberately large enough to give the model the article's actual
@@ -54,11 +61,11 @@ async function fetchPageContent(url: string): Promise<string | undefined> {
 
     const response = await fetch(url, {
       headers: {
-        "User-Agent": USER_AGENT,
+        ...DEFAULT_FETCH_HEADERS,
         Accept: "text/html,application/xhtml+xml",
       },
       redirect: "follow",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) return undefined;
@@ -147,36 +154,80 @@ async function fetchInstantAnswer(query: string): Promise<SearchResult[]> {
  * Note: scraping an HTML page is inherently a bit fragile (DDG can change
  * markup or rate-limit), but it requires no key and works for real queries.
  */
-async function fetchWebResults(query: string): Promise<SearchResult[]> {
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+function parseDuckDuckGoHtmlSearch(html: string): SearchResult[] {
+  const resultRegex = new RegExp(
+    `<h2[^>]*class=["'][^"']*\bresult__title\b[^"']*["'][^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<div[^>]*class=["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/div>|<a[^>]*class=["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/a>)`,
+    "gi"
+  );
 
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": USER_AGENT,
-      Accept: "text/html",
-    },
-  });
-  if (!res.ok) return [];
-
-  const html = await res.text();
   const results: SearchResult[] = [];
-
-  const resultRegex =
-  /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-
   let match: RegExpExecArray | null;
   while ((match = resultRegex.exec(html)) !== null) {
+    const href = match[1];
     const title = stripHtml(match[2]);
-    const snippet = stripHtml(match[3]);
-    const url = resolveDuckDuckGoUrl(match[1]);
+    const snippet = stripHtml(match[3] || match[4] || "");
+    const url = resolveDuckDuckGoUrl(href);
     if (title) {
       results.push({ title, snippet, url });
     }
   }
 
-  return results;
-}
+  if (results.length > 0) {
+    return results;
+  }
 
+  const linkRegex = /<a[^>]*href=["']([^"']+)["'][^>]*class=["'][^"']*\bresult__a\b[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const snippetRegex = /<(?:a|div)[^>]*class=["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|div)>/gi;
+
+  const titles: Array<{ title: string; url: string }> = [];
+  while ((match = linkRegex.exec(html)) !== null) {
+    const href = match[1];
+    const title = stripHtml(match[2]);
+    const url = resolveDuckDuckGoUrl(href);
+    if (title) {
+      titles.push({ title, url });
+    }
+  }
+
+  const snippets: string[] = [];
+  while ((match = snippetRegex.exec(html)) !== null) {
+    snippets.push(stripHtml(match[1]));
+  }
+
+  return titles.map((titleItem, index) => ({
+    ...titleItem,
+    snippet: snippets[index] ?? "",
+  }));
+}
+async function fetchWebResults(query: string): Promise<SearchResult[]> {
+  const urls = [
+    `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+    `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+    `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`,
+    `https://duckduckgo.com/lite/?q=${encodeURIComponent(query)}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: DEFAULT_FETCH_HEADERS,
+      });
+      if (!res.ok) {
+        continue;
+      }
+
+      const html = await res.text();
+      const results = parseDuckDuckGoHtmlSearch(html);
+      if (results.length > 0) {
+        return results;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return [];
+}
 export async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
   const [instant, web] = await Promise.allSettled([
     fetchInstantAnswer(query),
