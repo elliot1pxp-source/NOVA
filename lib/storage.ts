@@ -1,13 +1,23 @@
 "use client";
 
 // Simple localStorage-backed persistence. No login / backend required —
-// everything (chat list, pin state, model settings, and message history) lives in the browser.
+// everything (chat list, pin state, model settings, message history, and chat files) lives in the browser.
 
 export type StoredChat = {
   id: string;
   title: string;
   createdAt: string; // ISO string
   pinned?: boolean;
+};
+
+// --- CHAT FILE TYPES ---
+export type ChatFile = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  createdAt: string; // ISO string
 };
 
 // --- MODEL SETTINGS TYPES & DEFAULTS ---
@@ -38,9 +48,11 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
 // --- STORAGE KEYS ---
 const CHATS_KEY = "nova_chats_v1";
 const MESSAGES_PREFIX = "nova_messages_v1_";
+const FILES_PREFIX = "nova_files_v1_";
 const SETTINGS_KEY = "nova_model_settings_v1";
 
 const messagesKey = (chatId: string) => `${MESSAGES_PREFIX}${chatId}`;
+const filesKey = (chatId: string) => `${FILES_PREFIX}${chatId}`;
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -100,16 +112,71 @@ export function deleteChat(chatId: string) {
   const chats = loadChats().filter((c) => c.id !== chatId);
   saveChats(chats);
   deleteMessages(chatId);
+  deleteChatFiles(chatId);
 }
 
-/** Wipes every chat and every chat's message history from localStorage. */
+/** Wipes every chat and every chat's message history and files from localStorage. */
 export function clearAllChats() {
   if (!isBrowser()) return;
   try {
     const keysToRemove: string[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && (key === CHATS_KEY || key.startsWith(MESSAGES_PREFIX))) {
+      if (key && (key === CHATS_KEY || key.startsWith(MESSAGES_PREFIX) || key.startsWith(FILES_PREFIX))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+  } catch {
+    // storage disabled — fail silently
+  }
+}
+
+// --- CHAT FILES ---
+export function loadChatFiles(chatId: string): ChatFile[] {
+  if (!isBrowser()) return [];
+  try {
+    const raw = window.localStorage.getItem(filesKey(chatId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveChatFiles(chatId: string, files: ChatFile[]) {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(filesKey(chatId), JSON.stringify(files));
+  } catch {
+    // storage full — fail silently
+  }
+}
+
+export function addChatFile(chatId: string, file: ChatFile) {
+  const files = loadChatFiles(chatId);
+  files.push(file);
+  saveChatFiles(chatId, files);
+}
+
+export function deleteChatFile(chatId: string, fileId: string) {
+  const files = loadChatFiles(chatId).filter((f) => f.id !== fileId);
+  saveChatFiles(chatId, files);
+}
+
+export function deleteChatFiles(chatId: string) {
+  if (!isBrowser()) return;
+  window.localStorage.removeItem(filesKey(chatId));
+}
+
+export function clearAllChatFiles() {
+  if (!isBrowser()) return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(FILES_PREFIX)) {
         keysToRemove.push(key);
       }
     }
