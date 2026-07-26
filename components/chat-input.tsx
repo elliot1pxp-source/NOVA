@@ -225,7 +225,7 @@ export function ChatInput({
 
     <p className="text-center text-[11px] text-[#444] mt-3">
     NOVA can make mistakes. Consider checking important information.
-      JOIN OUR TELEGRAM CHANNEL: @NOVAPXP
+      Join our Telegram channel: @NOVAPXP
     </p>
     </div>
   );
