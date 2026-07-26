@@ -42,35 +42,50 @@ function lastUserText(messages: UIMessage[]): string {
   return "";
 }
 
-/**
- * Generates a concise search query using AI based on the full conversation
- * and the existing system prompt.
- */
 async function generateSearchQuery(
-  modelMessages: any[],
+  messages: UIMessage[],
   modelId: string,
   googleClient: ReturnType<typeof createGoogleGenerativeAI>,
   systemPrompt: string
 ): Promise<string> {
-  // Prepend the system prompt to the search-query instruction
+  const latestUserMessage = lastUserText(messages).trim();
+
+  if (!latestUserMessage) {
+    return "";
+  }
+
   const searchQueryPrompt = `${systemPrompt}
-You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
-- The query should be between 3 and 10 words.
-- Use keywords likely to appear in authoritative sources.
-- You must not output the user input back.
-- Output ONLY the query, with no extra commentary, punctuation, or formatting.
+
+YOUR ROLE:
+You are a web search query generator.
+
+Rewrite the user's latest request into an optimized web search query.
+
+Rules:
+- Do NOT answer the question.
+- Do NOT repeat the user's message verbatim unless it is already an ideal search query.
+- Expand abbreviations when appropriate.
+- Replace pronouns with explicit names if possible.
+- Remove unnecessary words.
+- Keep the query between 5 and 12 words.
+- Output ONLY the search query with no quotes or formatting.
 `;
-n
+
   try {
     const { text } = await generateText({
       model: googleClient(modelId),
       system: searchQueryPrompt,
-      messages: modelMessages,
+      messages: [
+        {
+          role: "user",
+          content: latestUserMessage,
+        },
+      ],
     });
-    // Clean up: trim and remove surrounding quotes
-    return text.trim().replace(/^["']|["']$/g, '');
+
+    return text.trim().replace(/^["']|["']$/g, "");
   } catch {
-    return ""; // Will be handled by fallback in the calling code
+    return latestUserMessage;
   }
 }
 
@@ -133,7 +148,7 @@ export async function POST(req: Request) {
 
         try {
           // Pass the base system prompt to the query generator
-          query = await generateSearchQuery(modelMessages, modelId, googleGeneral, baseSystemPrompt);
+          query = await generateSearchQuery(messages, modelId, googleGeneral, baseSystemPrompt);
           // If the generated query is too short or empty, fall back to the last user text
           if (!query || query.length < 3) {
             query = lastUserText(messages);
