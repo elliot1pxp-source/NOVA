@@ -8,8 +8,8 @@ import { Zap, Shield } from "lucide-react";
 import { ChatInput, PendingAttachment } from "./chat-input";
 import { ChatMessage, TypingIndicator } from "./chat-message";
 import { cn } from "@/lib/utils";
-import { loadMessages, saveMessages, ModelParams } from "@/lib/storage";
-import { getSupportedAttachmentMimeType, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
+import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
+import { getSupportedAttachmentMimeType, normalizeDataUrl, validateFileSize, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
 
 type Model = "instant" | "expert";
 
@@ -26,17 +26,24 @@ type Props = {
 
 const MODEL_TABS: { id: Model; label: string; icon: React.ReactNode }[] = [
   { id: "instant", label: "Instant", icon: <Zap className="w-3.5 h-3.5" /> },
-{ id: "expert", label: "Expert", icon: <Shield className="w-3.5 h-3.5" /> },
+  { id: "expert", label: "Expert", icon: <Shield className="w-3.5 h-3.5" /> },
 ];
 
 function generateAttachmentId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function fileToDataUrl(file: Blob): Promise<string> {
+function fileToDataUrl(file: File, normalizedMimeType: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // The browser embeds the original MIME type (e.g. text/x-go) in the
+      // data URL header. The AI SDK reads the MIME type from the data URL
+      // rather than from our explicitly-provided mediaType, so we must
+      // rewrite the header to the normalized type.
+      resolve(normalizeDataUrl(dataUrl, normalizedMimeType));
+    };
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
@@ -56,7 +63,8 @@ function createConversationSummary(text: string) {
     role: "system" as const,
     parts: [{
       type: "text" as const,
-      text: `Private summary of the earlier conversation. Use it as context and do not mention it to the user:\n${text}`,
+      text: `Private summary of the earlier conversation. Use it as context and do not mention it to the user:
+${text}`,
     }],
   };
 }
@@ -71,18 +79,24 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
   const [pendingRegenerateAfterEdit, setPendingRegenerateAfterEdit] = useState(false);
+  const [existingFiles, setExistingFiles] = useState<ChatFile[]>([]);
 
   const initialMessages = useRef(loadMessages(chatId)).current;
 
+  // Load existing files for this chat
+  useEffect(() => {
+    setExistingFiles(loadChatFiles(chatId));
+  }, [chatId]);
+
   const { messages, sendMessage, status, error, regenerate, setMessages } = useChat({
-  id: chatId,
-  messages: initialMessages as never,
-  transport: new DefaultChatTransport({
-    api: "/api/chat",
-    body: () => ({ model, deepThink, webSearch, modelSettings }),
-  }),
-});
-  
+    id: chatId,
+    messages: initialMessages as never,
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: () => ({ model, deepThink, webSearch, modelSettings }),
+    }),
+  });
+
   const isLoading = status === "submitted" || status === "streaming";
   const lastAssistantMessage = [...messages]
     .reverse()
@@ -163,10 +177,10 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       const firstUser = messages.find((m) => m.role === "user");
       if (firstUser) {
         const text = firstUser.parts
-        .filter((p) => p.type === "text")
-        .map((p) => (p as { type: "text"; text: string }).text)
-        .join("")
-        .slice(0, 40);
+          .filter((p) => p.type === "text")
+          .map((p) => (p as { type: "text"; text: string }).text)
+          .join("")
+          .slice(0, 40);
         if (text) {
           onFirstMessage(text);
           notifiedRef.current = true;
@@ -189,19 +203,25 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
   const handleAddFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const acceptedFiles = Array.from(files).filter((file) =>
-      getSupportedAttachmentMimeType({ mimeType: file.type, filename: file.name })
-    );
-    const rejectedCount = files.length - acceptedFiles.length;
-    setAttachmentError(
-      rejectedCount > 0
-        ? `Unsupported file type. ${SUPPORTED_ATTACHMENT_DESCRIPTION}`
-        : ""
-    );
+    const acceptedFiles: File[] = [];
+    let errorMsg = "";
+
+    for (const file of Array.from(files)) {
+      const validation = validateFileSize(file);
+      if (!validation.valid) {
+        errorMsg = validation.error || `Unsupported file type. ${SUPPORTED_ATTACHMENT_DESCRIPTION}`;
+        continue;
+      }
+      acceptedFiles.push(file);
+    }
+
+    setAttachmentError(errorMsg);
+
     const next: PendingAttachment[] = acceptedFiles.map((file) => ({
       id: generateAttachmentId(),
-                                                                       file,
-                                                                       previewUrl: URL.createObjectURL(file),
+      source: "file" as const,
+      file,
+      previewUrl: URL.createObjectURL(file),
     }));
     setAttachments((prev) => [...prev, ...next]);
   }, []);
@@ -209,8 +229,25 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachments((prev) => {
       const found = prev.find((a) => a.id === id);
-      if (found) URL.revokeObjectURL(found.previewUrl);
+      if (found && found.source === "file") URL.revokeObjectURL(found.previewUrl);
       return prev.filter((a) => a.id !== id);
+    });
+  }, []);
+
+  const handleAttachExistingFile = useCallback((file: ChatFile) => {
+    setAttachments((prev) => {
+      if (prev.some((a) => a.source === "existing" && a.existingFile.id === file.id)) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: generateAttachmentId(),
+          source: "existing" as const,
+          existingFile: file,
+          previewUrl: file.dataUrl,
+        },
+      ];
     });
   }, []);
 
@@ -230,17 +267,27 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
     const files = await Promise.all(
       pending.map(async (att) => {
-        const mediaType =
+        if (att.source === "existing") {
+          const mimeType = getSupportedAttachmentMimeType({
+            mimeType: att.existingFile.mimeType,
+            filename: att.existingFile.name,
+          }) || "application/octet-stream";
+          return {
+            type: "file" as const,
+            // Also normalize the data URL for existing files, in case the
+            // stored MIME type is a non-standard variant like text/x-go.
+            url: normalizeDataUrl(att.existingFile.dataUrl, mimeType),
+            mediaType: mimeType,
+            filename: att.existingFile.name,
+          };
+        }
+        const mimeType =
           getSupportedAttachmentMimeType({ mimeType: att.file.type, filename: att.file.name }) ??
           "application/octet-stream";
-
-        const normalizedFile =
-          att.file.type === mediaType ? att.file : new Blob([att.file], { type: mediaType });
-
         return {
           type: "file" as const,
-          url: await fileToDataUrl(normalizedFile),
-          mediaType,
+          url: await fileToDataUrl(att.file, mimeType),
+          mediaType: mimeType,
           filename: att.file.name,
         };
       })
@@ -262,7 +309,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           ...prev[idx],
           parts: [
             ...prev[idx].parts.filter((p) => p.type !== "text"),
-                  { type: "text" as const, text: newText },
+            { type: "text" as const, text: newText },
           ],
         };
         return [...prev.slice(0, idx), editedMessage];
@@ -276,127 +323,131 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
   return (
     <div className="flex flex-col h-full w-full bg-[#0d0d0d]">
-    {/* Empty state / Welcome */}
-    {isEmpty ? (
-      <div className="flex flex-col flex-1 items-center justify-center gap-8 px-4">
-      {/* Logo + title */}
-      <div className="flex items-center gap-3">
-      <Image src="/nova-logo.png" alt="NOVA" width={40} height={40} className="rounded-xl" />
-      <h1 className="text-2xl font-semibold text-white">Start chatting with NOVA</h1>
-      </div>
+      {/* Empty state / Welcome */}
+      {isEmpty ? (
+        <div className="flex flex-col flex-1 items-center justify-center gap-8 px-4">
+          {/* Logo + title */}
+          <div className="flex items-center gap-3">
+            <Image src="/nova-logo.png" alt="NOVA" width={40} height={40} className="rounded-xl" />
+            <h1 className="text-2xl font-semibold text-white">Start chatting with NOVA</h1>
+          </div>
 
-      {/* Model tabs */}
-      <div className="flex items-center gap-1 bg-[#111] border border-[#1e1e1e] rounded-full p-1">
-      {MODEL_TABS.map((tab) => (
-        <button
-        key={tab.id}
-        onClick={() => onModelChange(tab.id)}
-        className={cn(
-          "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all",
-          model === tab.id
-          ? "bg-[#1e2a4a] text-[#4a6cf7] border border-[#4a6cf7]/30"
-          : "text-[#666] hover:text-[#aaa]"
-        )}
-        >
-        {tab.icon}
-        {tab.label}
-        </button>
-      ))}
-      </div>
+          {/* Model tabs */}
+          <div className="flex items-center gap-1 bg-[#111] border border-[#1e1e1e] rounded-full p-1">
+            {MODEL_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => onModelChange(tab.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all",
+                  model === tab.id
+                    ? "bg-[#1e2a4a] text-[#4a6cf7] border border-[#4a6cf7]/30"
+                    : "text-[#666] hover:text-[#aaa]"
+                )}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-      {/* Input */}
-      <div className="w-full max-w-3xl">
-      <ChatInput
-      input={input}
-      onInputChange={setInput}
-      onSubmit={handleSubmit}
-      isLoading={isLoading}
-      model={model}
-      deepThink={deepThink}
-      onToggleDeepThink={() => setDeepThink((v) => !v)}
-      webSearch={webSearch}
-      onToggleWebSearch={() => setWebSearch((v) => !v)}
-      attachments={attachments}
-      attachmentError={attachmentError}
-      onAddFiles={handleAddFiles}
-      onRemoveAttachment={handleRemoveAttachment}
-      />
-      </div>
-      </div>
-    ) : (
-      <>
-      {/* Model switcher bar (compact, shown when chatting) */}
-      <div className="flex justify-center pt-4 pb-2">
-      <div className="flex items-center gap-1 bg-[#111] border border-[#1e1e1e] rounded-full p-0.5">
-      {MODEL_TABS.map((tab) => (
-        <button
-        key={tab.id}
-        onClick={() => onModelChange(tab.id)}
-        className={cn(
-          "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
-          model === tab.id
-          ? "bg-[#1e2a4a] text-[#4a6cf7]"
-          : "text-[#555] hover:text-[#aaa]"
-        )}
-        >
-        {tab.icon}
-        {tab.label}
-        </button>
-      ))}
-      </div>
-      </div>
+          {/* Input */}
+          <div className="w-full max-w-3xl">
+            <ChatInput
+              input={input}
+              onInputChange={setInput}
+              onSubmit={handleSubmit}
+              isLoading={isLoading}
+              model={model}
+              deepThink={deepThink}
+              onToggleDeepThink={() => setDeepThink((v) => !v)}
+              webSearch={webSearch}
+              onToggleWebSearch={() => setWebSearch((v) => !v)}
+              attachments={attachments}
+              attachmentError={attachmentError}
+              onAddFiles={handleAddFiles}
+              onRemoveAttachment={handleRemoveAttachment}
+              existingFiles={existingFiles}
+              onAttachExistingFile={handleAttachExistingFile}
+            />
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Model switcher bar (compact, shown when chatting) */}
+          <div className="flex justify-center pt-4 pb-2">
+            <div className="flex items-center gap-1 bg-[#111] border border-[#1e1e1e] rounded-full p-0.5">
+              {MODEL_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => onModelChange(tab.id)}
+                  className={cn(
+                    "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                    model === tab.id
+                      ? "bg-[#1e2a4a] text-[#4a6cf7]"
+                      : "text-[#555] hover:text-[#aaa]"
+                  )}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4">
-        <div className="max-w-3xl mx-auto">
-          {visibleMessages.map((message, i) => {
-            const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
-            return (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                onRegenerate={isLastAssistant ? () => regenerate() : undefined}
-                onEdit={message.role === "user" ? handleEditMessage : undefined}
-                isStreaming={isLastAssistant && isLoading}
-                disableActions={isLoading}
-              />
-            );
-          })}
-          {showTypingIndicator && <TypingIndicator />}
-      {error && (
-        <div className="flex gap-4 w-full max-w-3xl mx-auto py-4">
-        <div className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1">
-        <img src="/nova-logo.png" alt="NOVA" width={20} height={20} />
-        </div>
-        <div className="flex-1 text-sm leading-relaxed text-[#e87070] bg-[#1e1010] border border-[#3a1a1a] rounded-xl px-4 py-3">
-        Something went wrong. Please check your API quota or try again in a moment.
-        </div>
-        </div>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4">
+            <div className="max-w-3xl mx-auto">
+              {visibleMessages.map((message, i) => {
+                const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
+                return (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    onRegenerate={isLastAssistant ? () => regenerate() : undefined}
+                    onEdit={message.role === "user" ? handleEditMessage : undefined}
+                    isStreaming={isLastAssistant && isLoading}
+                    disableActions={isLoading}
+                  />
+                );
+              })}
+              {showTypingIndicator && <TypingIndicator />}
+              {error && (
+                <div className="flex gap-4 w-full max-w-3xl mx-auto py-4">
+                  <div className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1">
+                    <img src="/nova-logo.png" alt="NOVA" width={20} height={20} />
+                  </div>
+                  <div className="flex-1 text-sm leading-relaxed text-[#e87070] bg-[#1e1010] border border-[#3a1a1a] rounded-xl px-4 py-3">
+                    Something went wrong. Please check your internet connection or try again in a moment.
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          {/* Input */}
+          <div className="px-4 pb-6 pt-3">
+            <ChatInput
+              input={input}
+              onInputChange={setInput}
+              onSubmit={handleSubmit}
+              isLoading={isLoading}
+              model={model}
+              deepThink={deepThink}
+              onToggleDeepThink={() => setDeepThink((v) => !v)}
+              webSearch={webSearch}
+              onToggleWebSearch={() => setWebSearch((v) => !v)}
+              attachments={attachments}
+              attachmentError={attachmentError}
+              onAddFiles={handleAddFiles}
+              onRemoveAttachment={handleRemoveAttachment}
+              existingFiles={existingFiles}
+              onAttachExistingFile={handleAttachExistingFile}
+            />
+          </div>
+        </>
       )}
-      <div ref={bottomRef} />
-      </div>
-      </div>
-
-      {/* Input */}
-      <div className="px-4 pb-6 pt-3">
-      <ChatInput
-      input={input}
-      onInputChange={setInput}
-      onSubmit={handleSubmit}
-      isLoading={isLoading}
-      model={model}
-      deepThink={deepThink}
-      onToggleDeepThink={() => setDeepThink((v) => !v)}
-      webSearch={webSearch}
-      onToggleWebSearch={() => setWebSearch((v) => !v)}
-      attachments={attachments}
-      attachmentError={attachmentError}
-      onAddFiles={handleAddFiles}
-      onRemoveAttachment={handleRemoveAttachment}
-      />
-      </div>
-      </>
-    )}
     </div>
   );
 }
