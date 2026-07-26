@@ -3,7 +3,16 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { NovaSidebar, Chat } from "@/components/nova-sidebar";
 import { ChatView } from "@/components/chat-view";
-import { loadChats, saveChats, clearAllChats, deleteChat, StoredChat } from "@/lib/storage";
+import {
+  loadChats,
+  saveChats,
+  clearAllChats,
+  deleteChat,
+  StoredChat,
+  ModelSettings,
+  loadModelSettings,
+  saveModelSettings,
+} from "@/lib/storage";
 
 type Model = "instant" | "expert";
 
@@ -23,11 +32,10 @@ export default function Home() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [model, setModel] = useState<Model>("instant");
-  // Stable ID for the "new chat" session that persists until user navigates away
+  const [modelSettings, setModelSettings] = useState<ModelSettings>(loadModelSettings);
   const pendingChatIdRef = useRef<string>(generateId());
   const hydratedRef = useRef(false);
 
-  // Load chat list + pin state from localStorage on first mount.
   useEffect(() => {
     const stored = loadChats();
     if (stored.length > 0) {
@@ -36,19 +44,21 @@ export default function Home() {
     hydratedRef.current = true;
   }, []);
 
-  // Persist the chat list (titles + pin state) any time it changes.
   useEffect(() => {
     if (!hydratedRef.current) return;
     saveChats(chats.map(toStored));
   }, [chats]);
 
+  const handleUpdateModelSettings = useCallback((newSettings: ModelSettings) => {
+    setModelSettings(newSettings);
+    saveModelSettings(newSettings);
+  }, []);
+
   const handleNewChat = useCallback(() => {
-    // Generate a fresh pending ID for the new session
     pendingChatIdRef.current = generateId();
     setActiveChatId(null);
   }, []);
 
-  // Called when the user sends their first message in a pending chat
   const handleFirstMessage = useCallback(
     (chatId: string, title: string) => {
       setChats((prev) => {
@@ -90,31 +100,32 @@ export default function Home() {
     pendingChatIdRef.current = generateId();
   }, []);
 
-  // If there's an active chat selected from sidebar, use it.
-  // Otherwise use the stable pending ID so the session persists while typing.
   const currentChatId = activeChatId ?? pendingChatIdRef.current;
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#0d0d0d]">
-    <NovaSidebar
-    chats={chats}
-    activeChatId={activeChatId}
-    onNewChat={handleNewChat}
-    onSelectChat={setActiveChatId}
-    onTogglePin={handleTogglePin}
-    onRenameChat={handleRenameChat}
-    onDeleteChat={handleDeleteChat}
-    onDeleteAllChats={handleDeleteAllChats}
-    />
-    <main className="flex flex-1 overflow-hidden">
-    <ChatView
-    key={currentChatId}
-    chatId={currentChatId}
-    model={model}
-    onModelChange={setModel}
-    onFirstMessage={(title) => handleFirstMessage(currentChatId, title)}
-    />
-    </main>
+      <NovaSidebar
+        chats={chats}
+        activeChatId={activeChatId}
+        onNewChat={handleNewChat}
+        onSelectChat={setActiveChatId}
+        onTogglePin={handleTogglePin}
+        onRenameChat={handleRenameChat}
+        onDeleteChat={handleDeleteChat}
+        onDeleteAllChats={handleDeleteAllChats}
+        modelSettings={modelSettings}
+        onUpdateModelSettings={handleUpdateModelSettings}
+      />
+      <main className="flex flex-1 overflow-hidden">
+        <ChatView
+          key={currentChatId}
+          chatId={currentChatId}
+          model={model}
+          modelSettings={modelSettings[model]}
+          onModelChange={setModel}
+          onFirstMessage={(title) => handleFirstMessage(currentChatId, title)}
+        />
+      </main>
     </div>
   );
 }
