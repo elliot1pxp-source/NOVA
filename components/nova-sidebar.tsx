@@ -84,13 +84,13 @@ function ChatItem({
         className={cn(
           "relative w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 flex items-center gap-2.5 select-none",
           isActive
-            ? "bg-[#1d243a] text-white border border-[#4a6cf7]/30 shadow-[0_0_15px_rgba(74,108,247,0.12)]"
-            : "text-[#888c99] hover:bg-[#16171d] hover:text-[#e1e4ed]"
+            ? "bg-gradient-to-r from-[#4a6cf7]/20 via-[#4a6cf7]/10 to-transparent text-white shadow-[0_0_20px_rgba(74,108,247,0.15)]"
+            : "text-[#888c99] hover:bg-white/[0.04] hover:text-[#e1e4ed]"
         )}
       >
-        {/* Active Indicator Bar */}
+        {/* Soft Glowing Edge Marker for Active Chat */}
         {isActive && (
-          <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#4a6cf7] shadow-[0_0_8px_#4a6cf7]" />
+          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-[#4a6cf7] shadow-[0_0_12px_#4a6cf7]" />
         )}
 
         {chat.pinned ? (
@@ -131,14 +131,14 @@ function ChatItem({
 
       {/* Context Menu Dropdown */}
       {menuOpen && (
-        <div className="absolute right-2 top-9 z-30 w-40 rounded-xl border border-white/10 bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1 animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="absolute right-2 top-9 z-30 w-40 rounded-2xl bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onRename();
             }}
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-lg transition-colors"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-xl transition-colors"
           >
             <Pencil className="w-3.5 h-3.5 text-[#888]" />
             Rename
@@ -149,7 +149,7 @@ function ChatItem({
               e.stopPropagation();
               onTogglePin();
             }}
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-lg transition-colors"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-xl transition-colors"
           >
             {chat.pinned ? (
               <>
@@ -163,14 +163,13 @@ function ChatItem({
               </>
             )}
           </button>
-          <div className="my-1 border-t border-white/5" />
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
             }}
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#f87171] hover:bg-[#2a1416] rounded-lg transition-colors"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#f87171] hover:bg-[#2a1416] rounded-xl transition-colors mt-1"
           >
             <Trash2 className="w-3.5 h-3.5" />
             Delete
@@ -183,11 +182,10 @@ function ChatItem({
 
 function SectionLabel({ label }: { label: string }) {
   return (
-    <div className="px-3 pt-4 pb-1.5 flex items-center gap-2">
-      <span className="text-[10px] font-bold tracking-wider text-[#555a6d] uppercase">
+    <div className="px-3 pt-4 pb-1">
+      <span className="text-[10px] font-bold tracking-wider text-[#505462] uppercase">
         {label}
       </span>
-      <div className="flex-1 h-[1px] bg-white/[0.04]" />
     </div>
   );
 }
@@ -246,7 +244,7 @@ export function NovaSidebar({
     onDeleteAllChats();
   };
 
-  // Global search shortcut (Cmd+K / Ctrl+K)
+  // Shortcut (Cmd+K / Ctrl+K)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -302,16 +300,14 @@ export function NovaSidebar({
     <>
       <aside
         className={cn(
-          "relative flex flex-col h-full bg-[#0e0f12] transition-all duration-300 ease-in-out select-none",
-          historyOpen
-            ? "w-[250px] min-w-[250px] border-r border-white/[0.06]"
-            : "w-0 min-w-0 border-r-0"
+          "relative flex flex-col h-full bg-[#0c0d10] transition-all duration-300 ease-in-out select-none",
+          historyOpen ? "w-[250px] min-w-[250px]" : "w-0 min-w-0"
         )}
       >
         {/* Compact Floating Controls (When Sidebar Collapsed) */}
         <div
           className={cn(
-            "absolute left-3 top-3 z-30 flex items-center gap-1 rounded-full border border-white/10 bg-[#121318]/90 p-1 shadow-2xl shadow-black/60 backdrop-blur-2xl transition-all duration-300 ease-in-out",
+            "absolute left-3 top-3 z-30 flex items-center gap-1 rounded-full bg-[#121318]/90 p-1 shadow-2xl shadow-black/80 backdrop-blur-2xl transition-all duration-300 ease-in-out",
             historyOpen
               ? "opacity-0 scale-90 pointer-events-none -translate-x-2"
               : "opacity-100 scale-100 pointer-events-auto translate-x-0"
@@ -359,14 +355,14 @@ export function NovaSidebar({
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
+          <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="relative p-0.5 rounded-lg border border-white/10 bg-[#181920] shadow-sm">
+              <div className="relative p-0.5 rounded-lg bg-[#181920]">
                 <Image src="/nova-logo.png" alt="NOVA" width={22} height={22} className="rounded-md" />
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-white font-semibold text-sm tracking-wide">NOVA</span>
-                <span className="text-[10px] font-bold text-[#4a6cf7] bg-[#4a6cf7]/10 px-1.5 py-0.5 rounded-md border border-[#4a6cf7]/20">
+                <span className="text-[10px] font-bold text-[#4a6cf7] bg-[#4a6cf7]/15 px-1.5 py-0.5 rounded-md">
                   UNCENSORED
                 </span>
               </div>
@@ -400,28 +396,28 @@ export function NovaSidebar({
             </div>
           </div>
 
-          {/* New Chat Button */}
+          {/* New Chat Button (Blended Gradient, Borderless) */}
           <div className="px-3 py-2 flex-shrink-0">
             <button
               onClick={() => {
                 onNewChat();
                 openHistoryAndReset();
               }}
-              className="group relative w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gradient-to-r from-[#1b2238] to-[#121624] border border-[#2e3b60]/50 hover:border-[#4a6cf7]/60 text-white text-xs font-medium shadow-md shadow-black/30 hover:shadow-[0_0_18px_rgba(74,108,247,0.2)] transition-all duration-200 active:scale-[0.98]"
+              className="group relative w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gradient-to-r from-[#4a6cf7]/20 via-[#4a6cf7]/10 to-transparent hover:from-[#4a6cf7]/30 hover:via-[#4a6cf7]/15 hover:to-transparent text-white text-xs font-medium transition-all duration-200 active:scale-[0.98]"
             >
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-5 h-5 rounded-md bg-[#4a6cf7] text-white shadow-sm group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-center w-5 h-5 rounded-lg bg-[#4a6cf7] text-white shadow-[0_0_12px_rgba(74,108,247,0.4)] group-hover:scale-105 transition-transform">
                   <Plus className="w-3.5 h-3.5" />
                 </div>
-                <span>New chat</span>
+                <span className="font-medium text-white/90">New chat</span>
               </div>
-              <span className="text-[10px] text-[#6b7280] font-mono bg-[#0c0e14] border border-white/5 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] text-[#6b7280] font-mono bg-white/[0.04] px-1.5 py-0.5 rounded-md">
                 ⌘K
               </span>
             </button>
           </div>
 
-          {/* Search Input Bar */}
+          {/* Search Input Bar (Borderless) */}
           {searchOpen && (
             <div className="px-3 pb-2 pt-1 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-150">
               <div className="relative flex items-center">
@@ -431,7 +427,7 @@ export function NovaSidebar({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search history..."
-                  className="w-full bg-[#14151b] border border-white/10 rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-[#555a6d] focus:outline-none focus:border-[#4a6cf7]/50 transition-colors"
+                  className="w-full bg-white/[0.03] rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-[#555a6d] focus:outline-none focus:bg-white/[0.06] transition-colors"
                 />
                 {searchQuery && (
                   <button
@@ -496,14 +492,14 @@ export function NovaSidebar({
             )}
           </nav>
 
-          {/* Footer / Settings Menu */}
-          <div className="relative px-3 py-3 border-t border-white/[0.06] flex-shrink-0">
+          {/* Settings Footer */}
+          <div className="relative px-3 py-3 flex-shrink-0">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setSettingsOpen((v) => !v);
               }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/5 text-[#888c99] hover:text-white transition-all text-xs font-medium"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.04] text-[#888c99] hover:text-white transition-all text-xs font-medium"
               aria-label="Settings"
             >
               <Settings className="w-4 h-4 text-[#666a7a]" />
@@ -513,7 +509,7 @@ export function NovaSidebar({
             {settingsOpen && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute bottom-14 left-3 right-3 rounded-2xl border border-white/10 bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1.5 z-30 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                className="absolute bottom-14 left-3 right-3 rounded-2xl bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1.5 z-30 animate-in fade-in slide-in-from-bottom-2 duration-150"
               >
                 <button
                   type="button"
@@ -532,7 +528,7 @@ export function NovaSidebar({
         </div>
       </aside>
 
-      {/* Glassmorphic Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal */}
       {(deletePendingChatId || deleteAllPending) && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 animate-in fade-in duration-200"
@@ -541,7 +537,7 @@ export function NovaSidebar({
           onClick={cancelDelete}
         >
           <div
-            className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#14151b]/90 p-6 shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 duration-200"
+            className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-[#14151b]/95 p-6 shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[#4a6cf7]">
@@ -559,7 +555,7 @@ export function NovaSidebar({
               <button
                 type="button"
                 onClick={cancelDelete}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-[#ccc] hover:bg-white/10 hover:text-white transition-all active:scale-95"
+                className="rounded-xl bg-white/5 px-4 py-2 text-xs font-medium text-[#ccc] hover:bg-white/10 hover:text-white transition-all active:scale-95"
               >
                 Cancel
               </button>
