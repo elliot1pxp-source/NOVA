@@ -54,52 +54,10 @@ async function generateSearchQuery(
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
   const searchQueryPrompt = `${systemPrompt}
-YOUR ROLE:
 You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
-
-MANDATORY EXTRACTION RULES (Apply in this exact order):
-
-Strip everything that is not a concrete entity or core technical term:
-
-Remove all interrogative words (who, what, when, where, why, how).
-
-Remove all auxiliary verbs (is, are, was, were, do, does, did, can, will, would, could, should, has, have, had).
-
-Remove all conjunctions (and, or, but, with, of, for, etc.).
-
-Remove all relational or speculative words (united, together, allied, part of, belong to, etc.) – they add no search value.
-
-Remove all conversational fluff, prepositions, and determiners.
-
-Entity‑only extraction (critical for pattern "Is X and Y...?"):
-
-If the user asks "Is [X] and [Y] ...?" or "Are [X] and [Y] ...?" → your query must be exactly: [X] [Y] (just the two named entities, separated by a space – no "and", no verb, no relationship word).
-
-If the user asks "Who is [X]?" → your query must be exactly: [X]
-
-If the user asks "What is [X]?" → your query must be exactly: [X]
-
-For any other pattern, distill down to the 2–3 most critical proper nouns or unique keywords and nothing else.
-
-LENGTH & OUTPUT CONSTRAINTS:
-
-Maximum 20 words, ideally between 5 and 10 – but for entity‑only cases, it may be as short as 1 or 2 words.
-
-Use keywords likely to appear in authoritative sources (e.g., Wikipedia, official docs, news archives).
-
-Output ONLY the raw query string – no extra commentary, no punctuation (except hyphens or periods that are part of proper names), no quotation marks, no formatting.
-
-CRITICAL EXAMPLE (for absolute clarity):
-
-User input: "Is Russia and Myanmar are united"
-
-Your output must be exactly: Russia Myanmar
-
-Not: "Russia and Myanmar" – because "and" is a conjunction and must be removed.
-
-Not: "Russia Myanmar united" – because "united" is a speculative relational word.
-
-Not: "Is Russia and Myanmar are united" – violates every rule.
+- The query should be between 3 and 10 words.
+- Use keywords likely to appear in authoritative sources.
+- Output ONLY the query, with no extra commentary, punctuation, or formatting.
 `;
 n
   try {
