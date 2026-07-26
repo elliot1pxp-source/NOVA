@@ -57,6 +57,7 @@ async function generateSearchQuery(
 You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
 - The query should be between 3 and 10 words.
 - Use keywords likely to appear in authoritative sources.
+- You must not output the user input back.
 - Output ONLY the query, with no extra commentary, punctuation, or formatting.
 `;
 n
