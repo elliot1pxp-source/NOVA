@@ -75,13 +75,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const initialMessages = useRef(loadMessages(chatId)).current;
 
   const { messages, sendMessage, status, error, regenerate, setMessages } = useChat({
-    id: chatId,
-    messages: initialMessages as never,
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: { model, deepThink, webSearch, modelSettings },
-    }),
-  });
+  id: chatId,
+  messages: initialMessages as never,
+  transport: new DefaultChatTransport({
+    api: "/api/chat",
+    body: () => ({ model, deepThink, webSearch, modelSettings }),
+  }),
+});
   
   const isLoading = status === "submitted" || status === "streaming";
   const lastAssistantMessage = [...messages]
