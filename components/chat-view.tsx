@@ -33,7 +33,7 @@ function generateAttachmentId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function fileToDataUrl(file: File): Promise<string> {
+function fileToDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -229,14 +229,21 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }
 
     const files = await Promise.all(
-      pending.map(async (att) => ({
-        type: "file" as const,
-        url: await fileToDataUrl(att.file),
-        mediaType:
+      pending.map(async (att) => {
+        const mediaType =
           getSupportedAttachmentMimeType({ mimeType: att.file.type, filename: att.file.name }) ??
-          "application/octet-stream",
-                                  filename: att.file.name,
-      }))
+          "application/octet-stream";
+
+        const normalizedFile =
+          att.file.type === mediaType ? att.file : new Blob([att.file], { type: mediaType });
+
+        return {
+          type: "file" as const,
+          url: await fileToDataUrl(normalizedFile),
+          mediaType,
+          filename: att.file.name,
+        };
+      })
     );
 
     sendMessage({ text, files });
