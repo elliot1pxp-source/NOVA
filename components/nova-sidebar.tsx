@@ -19,6 +19,7 @@ type Props = {
   onSelectChat: (id: string) => void;
   onTogglePin: (id: string) => void;
   onRenameChat: (id: string, title: string) => void;
+  onDeleteChat: (id: string) => void;
   onDeleteAllChats: () => void;
 };
 
@@ -51,6 +52,7 @@ function ChatItem({
   onToggleMenu,
   onTogglePin,
   onRename,
+  onDelete,
 }: {
   chat: Chat;
   isActive: boolean;
@@ -59,6 +61,7 @@ function ChatItem({
   onToggleMenu: () => void;
   onTogglePin: () => void;
   onRename: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="relative">
@@ -108,27 +111,36 @@ function ChatItem({
             Rename
           </button>
           <button
-            onClick={(e) => {
+        onClick={(e) => {
               e.stopPropagation();
               onTogglePin();
-            }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
-          >
-            {chat.pinned ? (
+        }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#252525] hover:text-white transition-colors"
+        >
+        {chat.pinned ? (
               <>
-                <PinOff className="w-3.5 h-3.5" />
-                Unpin
+              <PinOff className="w-3.5 h-3.5" />
+              Unpin
               </>
-            ) : (
+        ) : (
               <>
-                <Pin className="w-3.5 h-3.5" />
-                Pin
+              <Pin className="w-3.5 h-3.5" />
+              Pin
               </>
-            )}
-          </button>
+        )}
+        </button>
+        <button
+        onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+        }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
+        >
+        <Trash2 className="w-3.5 h-3.5" />
+        Delete
+        </button>
         </div>
-      )}
-    </div>
+      )}    </div>
   );
 }
 
@@ -145,6 +157,7 @@ export function NovaSidebar({
   onSelectChat,
   onTogglePin,
   onRenameChat,
+  onDeleteChat,
   onDeleteAllChats,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -152,6 +165,8 @@ export function NovaSidebar({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
+  const [deletePendingChatId, setDeletePendingChatId] = useState<string | null>(null);
+  const [deleteAllPending, setDeleteAllPending] = useState(false);
   const groups = groupChats(chats);
 
   const openHistoryWithSearch = () => {
@@ -166,6 +181,27 @@ export function NovaSidebar({
     setSearchOpen(false);
     setMenuOpenId(null);
     setSettingsOpen(false);
+  };
+
+  const confirmDeleteChat = (chatId: string) => {
+    setDeletePendingChatId(chatId);
+    setMenuOpenId(null);
+  };
+
+  const cancelDelete = () => {
+    setDeletePendingChatId(null);
+    setDeleteAllPending(false);
+  };
+
+  const submitDeleteChat = () => {
+    if (!deletePendingChatId) return;
+    onDeleteChat(deletePendingChatId);
+    setDeletePendingChatId(null);
+  };
+
+  const submitDeleteAllChats = () => {
+    setDeleteAllPending(false);
+    onDeleteAllChats();
   };
 
   // Close the pin menu / settings menu when clicking anywhere else
@@ -183,28 +219,32 @@ export function NovaSidebar({
     ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
     : null;
 
-  const renderList = (list: Chat[]) =>
+    const renderList = (list: Chat[]) =>
     list.map((chat) => (
       <ChatItem
-        key={chat.id}
-        chat={chat}
-        isActive={chat.id === activeChatId}
-        onClick={() => onSelectChat(chat.id)}
-        menuOpen={menuOpenId === chat.id}
-        onToggleMenu={() => setMenuOpenId((id) => (id === chat.id ? null : chat.id))}
-        onTogglePin={() => {
+      key={chat.id}
+      chat={chat}
+      isActive={chat.id === activeChatId}
+      onClick={() => onSelectChat(chat.id)}
+      menuOpen={menuOpenId === chat.id}
+      onToggleMenu={() => setMenuOpenId((id) => (id === chat.id ? null : chat.id))}
+      onTogglePin={() => {
           onTogglePin(chat.id);
           setMenuOpenId(null);
-        }}
-        onRename={() => {
+      }}
+      onRename={() => {
           const title = window.prompt("Rename chat", chat.title)?.trim();
           if (title) onRenameChat(chat.id, title);
           setMenuOpenId(null);
-        }}
+      }}
+      onDelete={() => {
+          confirmDeleteChat(chat.id);
+      }}
       />
     ));
 
   return (
+    <>
     <aside
       className={cn(
         "relative flex flex-col h-full bg-[#111] transition-[width] duration-200 ease-out",
@@ -372,7 +412,7 @@ export function NovaSidebar({
                 <button
                   onClick={() => {
                     setSettingsOpen(false);
-                    onDeleteAllChats();
+                    setDeleteAllPending(true);
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#e87070] hover:bg-[#252525] transition-colors"
                 >
@@ -385,5 +425,46 @@ export function NovaSidebar({
         </>
       )}
     </aside>
+
+    {(deletePendingChatId || deleteAllPending) && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="deleteChatDialogTitle"
+      >
+        <div className="relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-white/10 p-6 shadow-2xl shadow-black/35 backdrop-blur-3xl">
+          <div className="pointer-events-none absolute -top-4 right-4 h-14 w-14 rounded-full bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.18)] backdrop-blur-xl" />
+          <div className="mb-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#bfc9d8]">
+            {deleteAllPending ? "Delete all history" : "Delete chat"}
+          </div>
+          <div id="deleteChatDialogTitle" className="mb-4 text-xl font-semibold text-white">
+            {deleteAllPending ? "Delete all chat history?" : "Delete this chat?"}
+          </div>
+          <p className="mb-6 text-sm leading-6 text-[#d2dce8]">
+            {deleteAllPending
+              ? "This will permanently remove every chat and its message history. This action cannot be undone."
+              : "This will permanently remove the selected chat and its message history. This action cannot be undone."}
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={cancelDelete}
+              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-[#c7d0e0] transition hover:border-white/20 hover:bg-white/15"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={deleteAllPending ? submitDeleteAllChats : submitDeleteChat}
+              className="rounded-2xl bg-[#df4d66] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#ff5a76]"
+            >
+              {deleteAllPending ? "Delete all chats" : "Delete chat"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
