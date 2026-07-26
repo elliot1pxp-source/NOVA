@@ -5,7 +5,16 @@ import Image from "next/image";
 import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
-import { ChevronDown, Copy, RotateCcw, Pencil, FileText, Search, Check, Brain } from "lucide-react";
+import {
+  ChevronDown,
+  Copy,
+  RotateCcw,
+  Pencil,
+  FileText,
+  Search,
+  Check,
+  Brain,
+} from "lucide-react";
 
 type Props = {
   message: UIMessage;
@@ -70,7 +79,7 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
         </span>
       </div>
 
-      {/* Code Container - Horizontally & Vertically stable */}
+      {/* Code Container */}
       <div className="overflow-x-auto max-h-[480px] overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-white/10">
         <pre className="m-0 font-mono text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
           <code className={className}>{codeString}</code>
@@ -84,14 +93,22 @@ const markdownComponents = {
   pre({ children }: any) {
     return <div className="max-w-full overflow-hidden my-2">{children}</div>;
   },
-  code({ inline, className, children, ...props }: any) {
-    if (inline) {
+  code({ node, inline, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || "");
+    // Inline code check: keep single backticks like `example` inline
+    const isInline = inline ?? (!match && !String(children).includes("\n"));
+
+    if (isInline) {
       return (
-        <code className="bg-[#2a2a2a] px-1.5 py-0.5 rounded text-[#a8d8ff] text-xs font-mono break-words" {...props}>
+        <code
+          className="bg-[#2a2a2a] px-1.5 py-0.5 rounded text-[#a8d8ff] text-xs font-mono break-words"
+          {...props}
+        >
           {children}
         </code>
       );
     }
+
     return <CodeBlock className={className}>{children}</CodeBlock>;
   },
   p({ children }: any) {
@@ -183,7 +200,7 @@ function ThoughtBlock({ data }: { data: any }) {
         />
       </button>
 
-      {/* Thought content rendered with ReactMarkdown */}
+      {/* Thought content with Markdown */}
       {open && (
         <div className="mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-3 text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
           {data?.text ? (
@@ -224,7 +241,12 @@ function SearchBlock({ data }: { data: any }) {
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 text-xs text-[#888] hover:text-[#bbb] transition-colors select-none group w-full text-left"
       >
-        <Search className={cn("w-3.5 h-3.5 transition-colors", isSearching ? "text-[#4a6cf7] animate-spin" : "text-[#888]")} />
+        <Search
+          className={cn(
+            "w-3.5 h-3.5 transition-colors",
+            isSearching ? "text-[#4a6cf7] animate-spin" : "text-[#888]"
+          )}
+        />
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
           {isSearching
             ? `Searching the web for "${data?.query || "information"}"…`
@@ -232,7 +254,12 @@ function SearchBlock({ data }: { data: any }) {
             ? "Web search unavailable"
             : `Searched the web (${results.length} result${results.length === 1 ? "" : "s"})`}
         </span>
-        <ChevronDown className={cn("w-3.5 h-3.5 ml-auto transition-transform duration-200 text-[#666]", open && "rotate-180")} />
+        <ChevronDown
+          className={cn(
+            "w-3.5 h-3.5 ml-auto transition-transform duration-200 text-[#666]",
+            open && "rotate-180"
+          )}
+        />
       </button>
       {open && results.length > 0 && (
         <div className="mt-2 border-l-2 border-[#2a2a2a] pl-3 space-y-2 animate-in fade-in duration-200">
