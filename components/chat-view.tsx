@@ -344,21 +344,21 @@ export function ChatView({ chatId, model, onModelChange, onFirstMessage }: Props
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4">
-      <div className="max-w-3xl mx-auto">
-      {visibleMessages.map((message, i) => {
-        const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
-        return (
-          <ChatMessage
-          key={message.id}
-          message={message}
-          onRegenerate={isLastAssistant ? () => regenerate() : undefined}
-          onEdit={message.role === "user" ? handleEditMessage : undefined}
-          isStreaming={isLastAssistant && isLoading}
-          disableActions={isLoading}
-          />
-        );
-      })}
-      {status === "submitted" && <TypingIndicator />}
+        <div className="max-w-3xl mx-auto">
+          {visibleMessages.map((message, i) => {
+            const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
+            return (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                onRegenerate={isLastAssistant ? () => regenerate() : undefined}
+                onEdit={message.role === "user" ? handleEditMessage : undefined}
+                isStreaming={isLastAssistant && isLoading}
+                disableActions={isLoading}
+              />
+            );
+          })}
+          {showTypingIndicator && <TypingIndicator />}
       {error && (
         <div className="flex gap-4 w-full max-w-3xl mx-auto py-4">
         <div className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1">
