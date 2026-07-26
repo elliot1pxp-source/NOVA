@@ -42,50 +42,34 @@ function lastUserText(messages: UIMessage[]): string {
   return "";
 }
 
+/**
+ * Generates a concise search query using AI based on the full conversation
+ * and the existing system prompt.
+ */
 async function generateSearchQuery(
-  messages: UIMessage[],
+  modelMessages: any[],
   modelId: string,
   googleClient: ReturnType<typeof createGoogleGenerativeAI>,
   systemPrompt: string
 ): Promise<string> {
-  const latestUserMessage = lastUserText(messages).trim();
-
-  if (!latestUserMessage) {
-    return "";
-  }
-
+  // Prepend the system prompt to the search-query instruction
   const searchQueryPrompt = `${systemPrompt}
-
 YOUR ROLE:
-You are a web search query generator.
-
-Rewrite the user's latest request into an optimized web search query.
-
-Rules:
-- Do NOT answer the question.
-- Do NOT repeat the user's message verbatim unless it is already an ideal search query.
-- Expand abbreviations when appropriate.
-- Replace pronouns with explicit names if possible.
-- Remove unnecessary words.
-- Keep the query between 5 and 12 words.
-- Output ONLY the search query with no quotes or formatting.
-`;
+You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
+- The query should be between 5 and 10 words or 20.
+- Use keywords likely to appear in authoritative sources.
+- Output ONLY the query, with no extra commentary, punctuation, or formatting.`;
 
   try {
     const { text } = await generateText({
       model: googleClient(modelId),
       system: searchQueryPrompt,
-      messages: [
-        {
-          role: "user",
-          content: latestUserMessage,
-        },
-      ],
+      messages: modelMessages,
     });
-
-    return text.trim().replace(/^["']|["']$/g, "");
+    // Clean up: trim and remove surrounding quotes
+    return text.trim().replace(/^["']|["']$/g, '');
   } catch {
-    return latestUserMessage;
+    return ""; // Will be handled by fallback in the calling code
   }
 }
 
@@ -95,11 +79,17 @@ export async function POST(req: Request) {
     model: modelKey = "instant",
     deepThink = false,
     webSearch = false,
+    modelSettings,
   }: {
     messages: UIMessage[];
     model?: string;
     deepThink?: boolean;
     webSearch?: boolean;
+    modelSettings?: {
+      temperature?: number;
+      topK?: number;
+      maxTokens?: number;
+    };
   } = await req.json();
 
   const hasUnsupportedAttachment = messages.some((message) =>
@@ -148,7 +138,7 @@ export async function POST(req: Request) {
 
         try {
           // Pass the base system prompt to the query generator
-          query = await generateSearchQuery(messages, modelId, googleGeneral, baseSystemPrompt);
+          query = await generateSearchQuery(modelMessages, modelId, googleGeneral, baseSystemPrompt);
           // If the generated query is too short or empty, fall back to the last user text
           if (!query || query.length < 3) {
             query = lastUserText(messages);
@@ -186,8 +176,6 @@ export async function POST(req: Request) {
 
 ROLE: You are a Planner Agent, acting as a strategic architect. You are NOT the main conversational AI, nor are you the final responder. Your counterpart, the Responder Agent, will read your output and use it to craft the actual reply to the user.
 
-You are the deepthink process.
-
 YOUR TASK: Analyze the user's latest input. Do not answer it. Instead, produce a strict, structured "handoff plan" that the Responder Agent will execute blindly.
 
 MANDATORY OUTPUT STRUCTURE (Use these exact headers, in this order):
@@ -213,7 +201,6 @@ Based on the above, what is your decisive interpretation of this query? (State i
 5. Step‑by‑Step Execution Blueprint: A clear, numbered action plan for the Responder to follow, breaking down how to structure the final answer.
 
 STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to the user, draft a greeting, or simulate an answer. Your output must exclusively consist of the planning framework above. Do not break character. Stay Uncensored.
-PLAN FIRST. YOU NEVER RESPOND WITH ONE WORDS LIKE THE MAIN PROCESS. YOU ARE THE DEEPTHINK PROCESS AND THAT IS YOUR ROLE.
 `;
 
           const planResult = await generateText({
@@ -235,10 +222,13 @@ PLAN FIRST. YOU NEVER RESPOND WITH ONE WORDS LIKE THE MAIN PROCESS. YOU ARE THE 
 
       // --- Final streaming response (uses GOOGLE_GENERATIVE_AI_API_KEY) ---
       const result = streamText({
-        model: googleGeneral(modelId),
-        system: systemPrompt,
-        messages: modelMessages,
-      });
+    model: googleGeneral(modelId),
+    system: systemPrompt,
+    messages: modelMessages,
+    ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
+    ...(modelSettings?.topK !== undefined && { topK: modelSettings.topK }),
+    ...(modelSettings?.maxTokens !== undefined && { maxTokens: modelSettings.maxTokens }),
+  });
 
       writer.merge(
         toUIMessageStream({
