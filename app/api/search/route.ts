@@ -19,7 +19,7 @@ const DEFAULT_FETCH_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const MAX_RESULTS = 5;
+const MAX_RESULTS = 10;
 const MAX_PAGE_TEXT_LENGTH = 100_000;
 
 // --- HTML stripping (unchanged) ---
