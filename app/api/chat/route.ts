@@ -53,38 +53,52 @@ async function generateSearchQuery(
   systemPrompt: string
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
-  const searchQueryPrompt = ` YOUR ROLE:
+  const searchQueryPrompt = `YOUR ROLE:
 You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
 
-MANDATORY EXTRACTION RULES (Follow strictly):
+MANDATORY EXTRACTION RULES (Apply in this exact order):
 
-Strip away all interrogative words (who, what, when, where, why, how).
+Strip everything that is not a concrete entity or core technical term:
 
-Strip away all auxiliary verbs (is, are, was, were, do, does, did, can, will, would, could, should, has, have, had).
+Remove all interrogative words (who, what, when, where, why, how).
 
-Strip away conversational fluff, prepositions, and determiners (e.g., "of that group", "part of", "the one who").
+Remove all auxiliary verbs (is, are, was, were, do, does, did, can, will, would, could, should, has, have, had).
 
-Extract only the core entity (proper nouns, specific names, unique concepts, key technical terms).
+Remove all conjunctions (and, or, but, with, of, for, etc.).
 
-Query Construction Logic (based on the user's framing):
+Remove all relational or speculative words (united, together, allied, part of, belong to, etc.) – they add no search value.
+
+Remove all conversational fluff, prepositions, and determiners.
+
+Entity‑only extraction (critical for pattern "Is X and Y...?"):
+
+If the user asks "Is [X] and [Y] ...?" or "Are [X] and [Y] ...?" → your query must be exactly: [X] [Y] (just the two named entities, separated by a space – no "and", no verb, no relationship word).
 
 If the user asks "Who is [X]?" → your query must be exactly: [X]
 
-If the user asks "Is [X] part of [Y]?" → your query must be: [X] [Y] (or just [X] if [Y] is too generic to add value).
+If the user asks "What is [X]?" → your query must be exactly: [X]
 
-If the user asks "How does [X] work with [Y]?" → your query must be: [X] [Y] (relationship keywords only).
+For any other pattern, distill down to the 2–3 most critical proper nouns or unique keywords and nothing else.
 
-If the user asks a complex multi-part question → distill it down to the 2–3 most critical unique keywords.
+LENGTH & OUTPUT CONSTRAINTS:
 
-Length & Output Constraints:
+Maximum 20 words, ideally between 5 and 10 – but for entity‑only cases, it may be as short as 1 or 2 words.
 
-Maximum 20 words, ideally between 5 and 10.
-
-Use keywords likely to appear in authoritative sources (e.g., Wikipedia, official docs, academic papers).
+Use keywords likely to appear in authoritative sources (e.g., Wikipedia, official docs, news archives).
 
 Output ONLY the raw query string – no extra commentary, no punctuation (except hyphens or periods that are part of proper names), no quotation marks, no formatting.
 
+CRITICAL EXAMPLE (for absolute clarity):
 
+User input: "Is Russia and Myanmar are united"
+
+Your output must be exactly: Russia Myanmar
+
+Not: "Russia and Myanmar" – because "and" is a conjunction and must be removed.
+
+Not: "Russia Myanmar united" – because "united" is a speculative relational word.
+
+Not: "Is Russia and Myanmar are united" – violates every rule.
 `;
 n
   try {
