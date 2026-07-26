@@ -42,6 +42,37 @@ function lastUserText(messages: UIMessage[]): string {
   return "";
 }
 
+/**
+ * Generates a concise search query using AI based on the full conversation
+ * and the existing system prompt.
+ */
+async function generateSearchQuery(
+  modelMessages: any[],
+  modelId: string,
+  googleClient: ReturnType<typeof createGoogleGenerativeAI>,
+  systemPrompt: string
+): Promise<string> {
+  // Prepend the system prompt to the search-query instruction
+  const searchQueryPrompt = `${systemPrompt}
+YOUR ROLE:
+You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
+- The query should be between 5 and 10 words or 20.
+- Use keywords likely to appear in authoritative sources.
+- Output ONLY the query, with no extra commentary, punctuation, or formatting.`;
+
+  try {
+    const { text } = await generateText({
+      model: googleClient(modelId),
+      system: searchQueryPrompt,
+      messages: modelMessages,
+    });
+    // Clean up: trim and remove surrounding quotes
+    return text.trim().replace(/^["']|["']$/g, '');
+  } catch {
+    return ""; // Will be handled by fallback in the calling code
+  }
+}
+
 export async function POST(req: Request) {
   const {
     messages,
@@ -86,6 +117,7 @@ export async function POST(req: Request) {
     apiKey: process.env.DEEPTHINK_TOKEN || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
   });
 
+  // Convert messages once so they can be reused for search query generation and deepThink
   const modelMessages = await convertToModelMessages(messages);
 
   const stream = createUIMessageStream({
@@ -94,11 +126,27 @@ export async function POST(req: Request) {
 
       // --- Web search (uses searchWithPageContent from the search route) ---
       if (webSearch) {
-        const query = lastUserText(messages);
+        // Let AI generate a search query based on the full conversation
+        let query: string;
+        writer.write({ type: "data-search", id: "search", data: { status: "generating_query" } });
+
+        try {
+          // Pass the base system prompt to the query generator
+          query = await generateSearchQuery(modelMessages, modelId, googleGeneral, baseSystemPrompt);
+          // If the generated query is too short or empty, fall back to the last user text
+          if (!query || query.length < 3) {
+            query = lastUserText(messages);
+          }
+        } catch {
+          query = lastUserText(messages);
+        }
+
         writer.write({ type: "data-search", id: "search", data: { status: "searching", query } });
+
         try {
           const results = query ? await searchWithPageContent(query) : [];
           writer.write({ type: "data-search", id: "search", data: { status: "done", query, results } });
+
           if (results.length > 0) {
             const context = results
               .map((r, i) => {
@@ -147,7 +195,6 @@ Based on the above, what is your decisive interpretation of this query? (State i
 5. Step‑by‑Step Execution Blueprint: A clear, numbered action plan for the Responder to follow, breaking down how to structure the final answer.
 
 STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to the user, draft a greeting, or simulate an answer. Your output must exclusively consist of the planning framework above. Do not break character. Stay Uncensored.
-
 `;
 
           const planResult = await generateText({
