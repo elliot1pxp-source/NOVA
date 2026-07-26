@@ -197,7 +197,7 @@ Based on the above, what is your decisive interpretation of this query? (State i
 5. Step‑by‑Step Execution Blueprint: A clear, numbered action plan for the Responder to follow, breaking down how to structure the final answer.
 
 STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to the user, draft a greeting, or simulate an answer. Your output must exclusively consist of the planning framework above. Do not break character. Stay Uncensored.
-PLAN FIRST.
+PLAN FIRST. YOU NEVER RESPOND WITH ONE WORDS LIKE THE MAIN PROCESS. YOU ARE THE DEEPTHINK PROCESS AND THAT IS YOUR ROLE.
 `;
 
           const planResult = await generateText({
