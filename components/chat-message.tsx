@@ -24,13 +24,124 @@ function messageText(message: UIMessage) {
     .join("");
 }
 
+function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const match = /language-(\w+)/.exec(className || "");
+  const language = match ? match[1] : "";
+  const codeString = String(children).replace(/\n$/, "");
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(codeString);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard fallback
+    }
+  };
+
+  return (
+    <div className="relative my-3 rounded-xl border border-[#2a2a2a] bg-[#111115] overflow-hidden max-w-full shadow-md">
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#18181c] border-b border-[#2a2a2a] text-xs">
+        {/* Copy button on TOP LEFT */}
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#22232b] hover:bg-[#2c2d38] text-[#ccc] hover:text-white transition-all text-xs font-sans active:scale-95 select-none cursor-pointer"
+          aria-label="Copy code"
+        >
+          {copied ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-emerald-400 font-medium text-[11px]">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3.5 h-3.5 text-[#aaa]" />
+              <span className="text-[11px]">Copy code</span>
+            </>
+          )}
+        </button>
+
+        {/* Language Badge on TOP RIGHT */}
+        <span className="font-mono text-[10px] text-[#777] uppercase tracking-wider font-semibold">
+          {language || "code"}
+        </span>
+      </div>
+
+      {/* Code Container - Horizontally & Vertically stable */}
+      <div className="overflow-x-auto max-h-[480px] overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-white/10">
+        <pre className="m-0 font-mono text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
+          <code className={className}>{codeString}</code>
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+const markdownComponents = {
+  pre({ children }: any) {
+    return <div className="max-w-full overflow-hidden my-2">{children}</div>;
+  },
+  code({ inline, className, children, ...props }: any) {
+    if (inline) {
+      return (
+        <code className="bg-[#2a2a2a] px-1.5 py-0.5 rounded text-[#a8d8ff] text-xs font-mono break-words" {...props}>
+          {children}
+        </code>
+      );
+    }
+    return <CodeBlock className={className}>{children}</CodeBlock>;
+  },
+  p({ children }: any) {
+    return <p className="mb-3 last:mb-0 text-[#ccc] leading-relaxed">{children}</p>;
+  },
+  ul({ children }: any) {
+    return <ul className="list-disc pl-5 mb-3 space-y-1 text-[#ccc]">{children}</ul>;
+  },
+  ol({ children }: any) {
+    return <ol className="list-decimal pl-5 mb-3 space-y-1 text-[#ccc]">{children}</ol>;
+  },
+  h1({ children }: any) {
+    return <h1 className="text-xl font-bold text-white mb-3 mt-4">{children}</h1>;
+  },
+  h2({ children }: any) {
+    return <h2 className="text-lg font-semibold text-white mb-2 mt-3">{children}</h2>;
+  },
+  h3({ children }: any) {
+    return <h3 className="text-base font-semibold text-white mb-2 mt-2">{children}</h3>;
+  },
+  blockquote({ children }: any) {
+    return (
+      <blockquote className="border-l-2 border-[#4a6cf7] pl-4 my-3 text-[#888] italic">
+        {children}
+      </blockquote>
+    );
+  },
+  strong({ children }: any) {
+    return <strong className="font-semibold text-white">{children}</strong>;
+  },
+  a({ href, children }: any) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[#4a6cf7] underline underline-offset-2 hover:text-[#6a8cf7] transition-colors"
+      >
+        {children}
+      </a>
+    );
+  },
+};
+
 function ThoughtBlock({ data }: { data: any }) {
   const status = data?.status;
   const seconds = data?.seconds;
   const isThinking = status === "thinking";
   const [open, setOpen] = useState(true);
 
-  // Auto-expand whenever a new thinking phase begins
   useEffect(() => {
     if (isThinking) {
       setOpen(true);
@@ -40,7 +151,7 @@ function ThoughtBlock({ data }: { data: any }) {
   return (
     <div
       className={cn(
-        "mb-3 rounded-xl transition-all duration-300",
+        "mb-3 rounded-xl transition-all duration-300 min-w-0 overflow-hidden",
         isThinking ? "bg-[#141414] border border-[#2a2a2a] p-3 shadow-sm" : "bg-transparent"
       )}
     >
@@ -72,16 +183,18 @@ function ThoughtBlock({ data }: { data: any }) {
         />
       </button>
 
-      {/* Thought content rendered in real-time during thinking */}
+      {/* Thought content rendered with ReactMarkdown */}
       {open && (
-        <div className="mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-3 text-xs text-[#999] leading-relaxed whitespace-pre-wrap animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-3 text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
           {data?.text ? (
-            <span>
-              {data.text}
+            <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
+              <ReactMarkdown components={markdownComponents}>
+                {data.text}
+              </ReactMarkdown>
               {isThinking && (
                 <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#4a6cf7] animate-pulse align-middle rounded-sm" />
               )}
-            </span>
+            </div>
           ) : isThinking ? (
             <div className="flex items-center gap-2 text-[#777] italic py-1">
               <span className="w-1.5 h-1.5 bg-[#4a6cf7] rounded-full animate-ping" />
@@ -206,7 +319,6 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
     setIsEditing(false);
   };
 
-  // AI replies only show their actions (copy/retry) once fully finished.
   const showActions = isUser || (!isStreaming && !disableActions);
 
   return (
@@ -226,7 +338,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
       )}
 
       {/* Content */}
-      <div className={cn("flex flex-col gap-2", isUser ? "items-end max-w-[80%] ml-auto" : "flex-1")}>
+      <div className={cn("flex flex-col gap-2 min-w-0", isUser ? "items-end max-w-[80%] ml-auto" : "flex-1")}>
         {fileParts.length > 0 && (
           <div className={cn("flex flex-wrap gap-2", isUser && "justify-end")}>
             {fileParts.map((part, i) => (
@@ -274,7 +386,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
         ) : (
           <div
             className={cn(
-              "text-sm leading-relaxed",
+              "text-sm leading-relaxed min-w-0 w-full overflow-hidden",
               isUser
                 ? "bg-[#1e1e1e] border border-[#2a2a2a] rounded-2xl rounded-tr-sm px-4 py-3 text-white shadow-sm"
                 : "text-[#ddd] prose prose-invert prose-sm max-w-none"
@@ -290,68 +402,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
                   );
                 }
                 return (
-                  <ReactMarkdown
-                    key={index}
-                    components={{
-                      code({ className, children, ...props }) {
-                        const isBlock = className?.includes("language-");
-                        if (isBlock) {
-                          return (
-                            <pre className="bg-[#111] border border-[#2a2a2a] rounded-lg p-4 overflow-x-auto my-3 shadow-inner">
-                              <code className={cn("text-[#e8e8e8] text-xs font-mono", className)} {...props}>
-                                {children}
-                              </code>
-                            </pre>
-                          );
-                        }
-                        return (
-                          <code className="bg-[#2a2a2a] px-1.5 py-0.5 rounded text-[#a8d8ff] text-xs font-mono" {...props}>
-                            {children}
-                          </code>
-                        );
-                      },
-                      p({ children }) {
-                        return <p className="mb-3 last:mb-0 text-[#ccc]">{children}</p>;
-                      },
-                      ul({ children }) {
-                        return <ul className="list-disc pl-5 mb-3 space-y-1 text-[#ccc]">{children}</ul>;
-                      },
-                      ol({ children }) {
-                        return <ol className="list-decimal pl-5 mb-3 space-y-1 text-[#ccc]">{children}</ol>;
-                      },
-                      h1({ children }) {
-                        return <h1 className="text-xl font-bold text-white mb-3">{children}</h1>;
-                      },
-                      h2({ children }) {
-                        return <h2 className="text-lg font-semibold text-white mb-2">{children}</h2>;
-                      },
-                      h3({ children }) {
-                        return <h3 className="text-base font-semibold text-white mb-2">{children}</h3>;
-                      },
-                      blockquote({ children }) {
-                        return (
-                          <blockquote className="border-l-2 border-[#4a6cf7] pl-4 my-3 text-[#888] italic">
-                            {children}
-                          </blockquote>
-                        );
-                      },
-                      strong({ children }) {
-                        return <strong className="font-semibold text-white">{children}</strong>;
-                      },
-                      a({ href, children }) {
-                        return (
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[#4a6cf7] underline underline-offset-2 hover:text-[#6a8cf7] transition-colors"
-                          >
-                            {children}
-                          </a>
-                        );
-                      },
-                    }}
-                  >
+                  <ReactMarkdown key={index} components={markdownComponents}>
                     {part.text}
                   </ReactMarkdown>
                 );
@@ -361,7 +412,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
           </div>
         )}
 
-        {/* Action row: Hidden completely while response is streaming or generating */}
+        {/* Action row */}
         {!isEditing && showActions && (
           <div className={cn("flex items-center gap-1 text-[#666] animate-in fade-in duration-200", isUser ? "justify-end" : "justify-start")}>
             <button
