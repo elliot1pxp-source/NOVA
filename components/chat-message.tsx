@@ -372,8 +372,8 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
           </div>
         )}
 
-        {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
-        {!isUser && searchParts.map((p, i) => <SearchBlock key={`s-${i}`} data={(p as any).data} />)}
+       {!isUser && searchParts.map((p, i) => <SearchBlock key={`s-${i}`} data={(p as any).data} />)}
+       {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
 
         {isUser && isEditing ? (
           <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-2xl rounded-tr-sm px-4 py-3 text-white w-full min-w-[240px] shadow-lg animate-in fade-in duration-200">
