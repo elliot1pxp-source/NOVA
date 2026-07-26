@@ -8,7 +8,7 @@ import { Zap, Shield } from "lucide-react";
 import { ChatInput, PendingAttachment } from "./chat-input";
 import { ChatMessage, TypingIndicator } from "./chat-message";
 import { cn } from "@/lib/utils";
-import { loadMessages, saveMessages } from "@/lib/storage";
+import { loadMessages, saveMessages, ModelParams } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
 
 type Model = "instant" | "expert";
@@ -19,6 +19,7 @@ const RECENT_MESSAGES_TO_KEEP = 46;
 type Props = {
   chatId: string;
   model: Model;
+  modelSettings?: ModelParams;
   onModelChange: (m: Model) => void;
   onFirstMessage: (title: string) => void;
 };
@@ -60,7 +61,7 @@ function createConversationSummary(text: string) {
   };
 }
 
-export function ChatView({ chatId, model, onModelChange, onFirstMessage }: Props) {
+export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const notifiedRef = useRef(false);
   const summarizingHistoryRef = useRef(false);
@@ -75,15 +76,13 @@ export function ChatView({ chatId, model, onModelChange, onFirstMessage }: Props
 
   const { messages, sendMessage, status, error, regenerate, setMessages } = useChat({
     id: chatId,
-    // AI SDK 7 calls this `messages`; using the obsolete `initialMessages`
-    // option meant restored chats were not part of the hook's supported API.
     messages: initialMessages as never,
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      body: { model, deepThink, webSearch },
+      body: { model, deepThink, webSearch, modelSettings },
     }),
   });
-
+  
   const isLoading = status === "submitted" || status === "streaming";
   const lastAssistantMessage = [...messages]
     .reverse()

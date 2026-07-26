@@ -18,6 +18,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SettingsDialog } from "@/components/settings-dialog";
+import { ModelSettings } from "@/lib/storage";
 
 export type Chat = {
   id: string;
@@ -35,6 +37,8 @@ type Props = {
   onRenameChat: (id: string, title: string) => void;
   onDeleteChat: (id: string) => void;
   onDeleteAllChats: () => void;
+  modelSettings: ModelSettings;
+  onUpdateModelSettings: (settings: ModelSettings) => void;
 };
 
 function groupChats(chats: Chat[]) {
@@ -88,7 +92,6 @@ function ChatItem({
             : "text-[#888c99] hover:bg-white/[0.04] hover:text-[#e1e4ed]"
         )}
       >
-        {/* Left Indicator (Glow Removed) */}
         {isActive && (
           <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-[#4a6cf7]" />
         )}
@@ -129,7 +132,6 @@ function ChatItem({
         </span>
       </button>
 
-      {/* Context Menu Dropdown */}
       {menuOpen && (
         <div className="absolute right-2 top-9 z-30 w-40 rounded-2xl bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
           <button
@@ -199,6 +201,8 @@ export function NovaSidebar({
   onRenameChat,
   onDeleteChat,
   onDeleteAllChats,
+  modelSettings,
+  onUpdateModelSettings,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -206,21 +210,19 @@ export function NovaSidebar({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [deletePendingChatId, setDeletePendingChatId] = useState<string | null>(null);
-  const [deleteAllPending, setDeleteAllPending] = useState(false);
+
   const groups = groupChats(chats);
 
   const openHistoryWithSearch = () => {
     setHistoryOpen(true);
     setSearchOpen(true);
     setMenuOpenId(null);
-    setSettingsOpen(false);
   };
 
   const openHistoryAndReset = () => {
     setHistoryOpen(true);
     setSearchOpen(false);
     setMenuOpenId(null);
-    setSettingsOpen(false);
   };
 
   const confirmDeleteChat = (chatId: string) => {
@@ -230,7 +232,6 @@ export function NovaSidebar({
 
   const cancelDelete = () => {
     setDeletePendingChatId(null);
-    setDeleteAllPending(false);
   };
 
   const submitDeleteChat = () => {
@@ -239,12 +240,6 @@ export function NovaSidebar({
     setDeletePendingChatId(null);
   };
 
-  const submitDeleteAllChats = () => {
-    setDeleteAllPending(false);
-    onDeleteAllChats();
-  };
-
-  // Shortcut (Cmd+K / Ctrl+K)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -257,16 +252,12 @@ export function NovaSidebar({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onNewChat]);
 
-  // Close menus on outside click
   useEffect(() => {
-    if (!menuOpenId && !settingsOpen) return;
-    const close = () => {
-      setMenuOpenId(null);
-      setSettingsOpen(false);
-    };
+    if (!menuOpenId) return;
+    const close = () => setMenuOpenId(null);
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
-  }, [menuOpenId, settingsOpen]);
+  }, [menuOpenId]);
 
   const filtered = searchQuery.trim()
     ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -304,7 +295,6 @@ export function NovaSidebar({
           historyOpen ? "w-[250px] min-w-[250px]" : "w-0 min-w-0"
         )}
       >
-        {/* Compact Floating Controls (When Sidebar Collapsed) */}
         <div
           className={cn(
             "absolute left-3 top-3 z-30 flex items-center gap-1 rounded-full bg-[#121318]/90 p-1 shadow-2xl shadow-black/80 backdrop-blur-2xl transition-all duration-300 ease-in-out",
@@ -318,7 +308,6 @@ export function NovaSidebar({
               setHistoryOpen(true);
               setSearchOpen(false);
               setMenuOpenId(null);
-              setSettingsOpen(false);
             }}
             className="flex h-8 w-8 items-center justify-center rounded-full text-[#aaa] transition-colors hover:bg-white/10 hover:text-white"
             aria-label="Open chat history"
@@ -347,7 +336,6 @@ export function NovaSidebar({
           </button>
         </div>
 
-        {/* Sidebar Container */}
         <div
           className={cn(
             "flex flex-col h-full w-[250px] transition-opacity duration-200 ease-in-out overflow-hidden",
@@ -385,7 +373,6 @@ export function NovaSidebar({
                   setHistoryOpen(false);
                   setSearchOpen(false);
                   setMenuOpenId(null);
-                  setSettingsOpen(false);
                 }}
                 className="p-1.5 rounded-lg text-[#777b8e] hover:text-white hover:bg-white/10 transition-colors"
                 aria-label="Close chat history"
@@ -396,7 +383,7 @@ export function NovaSidebar({
             </div>
           </div>
 
-          {/* New Chat Button (Blended Gradient, Borderless) */}
+          {/* New Chat Button */}
           <div className="px-3 py-2 flex-shrink-0">
             <button
               onClick={() => {
@@ -417,7 +404,6 @@ export function NovaSidebar({
             </button>
           </div>
 
-          {/* Search Input Bar (Borderless) */}
           {searchOpen && (
             <div className="px-3 pb-2 pt-1 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-150">
               <div className="relative flex items-center">
@@ -441,7 +427,7 @@ export function NovaSidebar({
             </div>
           )}
 
-          {/* Scrollable Chat List */}
+          {/* Chat List */}
           <nav className="flex-1 overflow-y-auto px-1 py-1 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
             {filtered ? (
               filtered.length > 0 ? (
@@ -492,44 +478,31 @@ export function NovaSidebar({
             )}
           </nav>
 
-          {/* Settings Footer */}
-          <div className="relative px-3 py-3 flex-shrink-0">
+          {/* Footer Settings Button */}
+          <div className="relative px-3 py-3 flex-shrink-0 border-t border-white/5">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSettingsOpen((v) => !v);
-              }}
+              onClick={() => setSettingsOpen(true)}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.04] text-[#888c99] hover:text-white transition-all text-xs font-medium"
               aria-label="Settings"
             >
               <Settings className="w-4 h-4 text-[#666a7a]" />
               <span className="flex-1 text-left">Settings</span>
             </button>
-
-            {settingsOpen && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="absolute bottom-14 left-3 right-3 rounded-2xl bg-[#16171d]/95 backdrop-blur-2xl shadow-2xl p-1.5 z-30 animate-in fade-in slide-in-from-bottom-2 duration-150"
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSettingsOpen(false);
-                    setDeleteAllPending(true);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#f87171] hover:bg-[#2a1416] rounded-xl transition-colors font-medium"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete all history
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </aside>
 
-      {/* Delete Confirmation Modal */}
-      {(deletePendingChatId || deleteAllPending) && (
+      {/* Liquid Glass Settings Dialog Modal */}
+      <SettingsDialog
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={modelSettings}
+        onUpdateSettings={onUpdateModelSettings}
+        onDeleteAllChats={onDeleteAllChats}
+      />
+
+      {/* Delete Chat Modal */}
+      {deletePendingChatId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 animate-in fade-in duration-200"
           role="dialog"
@@ -541,15 +514,11 @@ export function NovaSidebar({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[#4a6cf7]">
-              {deleteAllPending ? "Clear Workspace" : "Delete Chat"}
+              Delete Chat
             </div>
-            <div className="mb-3 text-lg font-semibold text-white">
-              {deleteAllPending ? "Delete all chat history?" : "Delete this chat?"}
-            </div>
+            <div className="mb-3 text-lg font-semibold text-white">Delete this chat?</div>
             <p className="mb-6 text-xs leading-relaxed text-[#888c99]">
-              {deleteAllPending
-                ? "This will permanently delete every conversation and message stored in your browser. This action cannot be undone."
-                : "This will permanently remove this conversation history. This action cannot be undone."}
+              This will permanently remove this conversation history.
             </p>
             <div className="flex items-center justify-end gap-2.5">
               <button
@@ -561,10 +530,10 @@ export function NovaSidebar({
               </button>
               <button
                 type="button"
-                onClick={deleteAllPending ? submitDeleteAllChats : submitDeleteChat}
+                onClick={submitDeleteChat}
                 className="rounded-xl bg-[#e11d48] hover:bg-[#f43f5e] px-4 py-2 text-xs font-semibold text-white transition-all active:scale-95 shadow-lg shadow-rose-950/40"
               >
-                {deleteAllPending ? "Delete all" : "Delete"}
+                Delete
               </button>
             </div>
           </div>
