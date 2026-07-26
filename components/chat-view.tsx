@@ -41,10 +41,7 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-function isProgressOnlyAssistantMessage(message: {
-  role: string;
-  parts: Array<{ type: string }>;
-}) {
+function isProgressOnlyAssistantMessage(message: { role: string; parts: Array<{ type: string }> }) {
   return (
     message.role === "assistant" &&
     message.parts.some((part) => part.type === "data-search" || part.type === "data-thought") &&
@@ -88,18 +85,19 @@ export function ChatView({ chatId, model, onModelChange, onFirstMessage }: Props
   });
 
   const isLoading = status === "submitted" || status === "streaming";
-  // Legacy conversations can contain a progress-only assistant message from
-  // the stream-ID bug. Hide it when the following assistant message contains
-  // the actual reply. This is derived at render time, so it cannot cause a
-  // state-update loop in the chat hook.
-  const visibleMessages = messages.filter(
-    (message, index) =>
-      !(
-        message.role === "system" ||
-        isProgressOnlyAssistantMessage(message) &&
-        messages[index + 1]?.role === "assistant"
-      )
-  );
+  const lastAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+  const waitingForDeepThink =
+    isLoading && lastAssistantMessage && isProgressOnlyAssistantMessage(lastAssistantMessage);
+  const visibleMessages = messages.filter((message, index) => {
+    if (message.role === "system") return false;
+    return !(
+      isProgressOnlyAssistantMessage(message) &&
+      messages[index + 1]?.role === "assistant"
+    );
+  });
+  const showTypingIndicator = isLoading && !waitingForDeepThink;
 
   // Scroll to bottom on new messages
   useEffect(() => {
