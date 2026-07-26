@@ -53,12 +53,12 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <Check className="w-3.5 h-3.5 text-emerald-400"/>
               <span className="text-emerald-400 font-medium text-[11px]">Copied!</span>
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5 text-[#aaa]" />
+              <Copy className="w-3.5 h-3.5 text-[#aaa]"/>
               <span className="text-[11px]">Copy code</span>
             </>
           )}
@@ -70,7 +70,7 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
         </span>
       </div>
 
-      {/* Code Container - Horizontally & Vertically stable */}
+      {/* Code Container */}
       <div className="overflow-x-auto max-h-[480px] overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-white/10">
         <pre className="m-0 font-mono text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
           <code className={className}>{codeString}</code>
@@ -84,15 +84,23 @@ const markdownComponents = {
   pre({ children }: any) {
     return <div className="max-w-full overflow-hidden my-2">{children}</div>;
   },
-  code({ inline, className, children, ...props }: any) {
-    if (inline) {
+  code({ node, inline, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || "");
+    // Reliably distinguish inline backticks from block code
+    const isInline = inline ?? (!match && !String(children).includes("\n"));
+
+    if (isInline) {
       return (
-        <code className="bg-[#2a2a2a] px-1.5 py-0.5 rounded text-[#a8d8ff] text-xs font-mono break-words" {...props}>
+        <code
+          className="bg-[#2a2a2a] px-1.5 py-0.5 rounded text-[#a8d8ff] text-xs font-mono break-words"
+          {...props}
+        >
           {children}
         </code>
       );
     }
-    return <CodeBlock className={className}>{children}</CodeBlock>;
+
+    return <CodeBlock className="{className}">{children}</CodeBlock>;
   },
   p({ children }: any) {
     return <p className="mb-3 last:mb-0 text-[#ccc] leading-relaxed">{children}</p>;
@@ -160,14 +168,7 @@ function ThoughtBlock({ data }: { data: any }) {
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 text-xs text-[#888] hover:text-[#bbb] transition-colors w-full text-left select-none group"
       >
-        <Brain
-          className={cn(
-            "w-4 h-4 transition-all duration-300",
-            isThinking
-              ? "text-[#4a6cf7] animate-pulse scale-110"
-              : "text-[#888] group-hover:text-[#bbb]"
-          )}
-        />
+        <Brain "text-[#4a6cf7] "text-[#888] "w-4 )} : ? animate-pulse className="{cn(" duration-300", group-hover:text-[#bbb]" h-4 isThinking scale-110" transition-all/>
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
           {isThinking
             ? "Thinking…"
@@ -175,20 +176,15 @@ function ThoughtBlock({ data }: { data: any }) {
             ? "Thinking (unavailable)"
             : `Thought for ${seconds ?? 1} second${seconds === 1 ? "" : "s"}`}
         </span>
-        <ChevronDown
-          className={cn(
-            "w-3.5 h-3.5 ml-auto transition-transform duration-200 text-[#666] group-hover:text-[#aaa]",
-            open && "rotate-180"
-          )}
-        />
+        <ChevronDown "rotate-180" "w-3.5 && )} className="{cn(" duration-200 group-hover:text-[#aaa]", h-3.5 ml-auto open text-[#666] transition-transform/>
       </button>
 
-      {/* Thought content rendered with ReactMarkdown */}
+      {/* Thought content with Markdown */}
       {open && (
         <div className="mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-3 text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
           {data?.text ? (
             <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
-              <ReactMarkdown components={markdownComponents}>
+              <ReactMarkdown components="{markdownComponents}">
                 {data.text}
               </ReactMarkdown>
               {isThinking && (
@@ -224,7 +220,7 @@ function SearchBlock({ data }: { data: any }) {
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 text-xs text-[#888] hover:text-[#bbb] transition-colors select-none group w-full text-left"
       >
-        <Search className={cn("w-3.5 h-3.5 transition-colors", isSearching ? "text-[#4a6cf7] animate-spin" : "text-[#888]")} />
+        <Search "text-[#4a6cf7] "text-[#888]")} : ? animate-spin" className="{cn("w-3.5" h-3.5 isSearching transition-colors",/>
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
           {isSearching
             ? `Searching the web for "${data?.query || "information"}"…`
@@ -232,7 +228,7 @@ function SearchBlock({ data }: { data: any }) {
             ? "Web search unavailable"
             : `Searched the web (${results.length} result${results.length === 1 ? "" : "s"})`}
         </span>
-        <ChevronDown className={cn("w-3.5 h-3.5 ml-auto transition-transform duration-200 text-[#666]", open && "rotate-180")} />
+        <ChevronDown "rotate-180")} && className="{cn("w-3.5" duration-200 h-3.5 ml-auto open text-[#666]", transition-transform/>
       </button>
       {open && results.length > 0 && (
         <div className="mt-2 border-l-2 border-[#2a2a2a] pl-3 space-y-2 animate-in fade-in duration-200">
@@ -275,7 +271,7 @@ function Attachment({ part }: { part: any }) {
   }
   return (
     <div className="flex items-center gap-2 bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2 text-xs text-[#ccc]">
-      <FileText className="w-4 h-4 text-[#888]" />
+      <FileText className="w-4 h-4 text-[#888]"/>
       <span className="truncate max-w-[160px]">{part.filename || "file"}</span>
     </div>
   );
@@ -332,7 +328,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
       {!isUser && (
         <div className="flex-shrink-0 mt-1">
           <div className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden shadow-md">
-            <Image src="/nova-logo.png" alt="NOVA" width={20} height={20} />
+            <Image alt="NOVA" height="{20}" src="/nova-logo.png" width="{20}"/>
           </div>
         </div>
       )}
@@ -342,13 +338,13 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
         {fileParts.length > 0 && (
           <div className={cn("flex flex-wrap gap-2", isUser && "justify-end")}>
             {fileParts.map((part, i) => (
-              <Attachment key={i} part={part} />
+              <Attachment key="{i}" part="{part}"/>
             ))}
           </div>
         )}
 
-        {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
-        {!isUser && searchParts.map((p, i) => <SearchBlock key={`s-${i}`} data={(p as any).data} />)}
+        {!isUser && thoughtParts.map((p, i) => <ThoughtBlock any).data} as data="{(p" key="{`t-${i}`}"/>)}
+        {!isUser && searchParts.map((p, i) => <SearchBlock any).data} as data="{(p" key="{`s-${i}`}"/>)}
 
         {isUser && isEditing ? (
           <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-2xl rounded-tr-sm px-4 py-3 text-white w-full min-w-[240px] shadow-lg animate-in fade-in duration-200">
@@ -402,7 +398,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
                   );
                 }
                 return (
-                  <ReactMarkdown key={index} components={markdownComponents}>
+                  <ReactMarkdown components="{markdownComponents}" key="{index}">
                     {part.text}
                   </ReactMarkdown>
                 );
@@ -420,7 +416,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
               className="p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90"
               aria-label="Copy message"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-[#4a6cf7] scale-110 transition-transform" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-[#4a6cf7] scale-110 transition-transform"/> : <Copy className="w-3.5 h-3.5"/>}
             </button>
 
             {isUser && onEdit && (
@@ -430,7 +426,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
                 className="p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
                 aria-label="Edit message"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                <Pencil className="w-3.5 h-3.5"/>
               </button>
             )}
 
@@ -441,7 +437,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
                 className="p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
                 aria-label="Regenerate response"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3.5 h-3.5"/>
               </button>
             )}
           </div>
@@ -455,7 +451,7 @@ export function TypingIndicator() {
   return (
     <div className="flex gap-4 w-full max-w-3xl mx-auto py-4 animate-in fade-in duration-300">
       <div className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1 shadow-md">
-        <Image src="/nova-logo.png" alt="NOVA" width={20} height={20} className="animate-pulse" />
+        <Image alt="NOVA" className="animate-pulse" height="{20}" src="/nova-logo.png" width="{20}"/>
       </div>
       <div className="flex items-center gap-1.5 pt-3">
         <span className="w-2 h-2 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:0ms]" />
