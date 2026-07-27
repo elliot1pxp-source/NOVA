@@ -76,12 +76,12 @@ async function fetchPageContent(url: string): Promise<string | undefined> {
   }
 }
 
-// --- NEW: Serper.dev search function ---
-async function searchSerper(query: string): Promise<SearchResult[]> {
-  const apiKey = process.env.SERPER_API_KEY;
+// --- Serper.dev search function with optional API key ---
+async function searchSerper(query: string, apiKey?: string): Promise<SearchResult[]> {
+  const key = apiKey || process.env.SERPER_API_KEY;
   
-  if (!apiKey) {
-    console.error("SERPER_API_KEY is not set in environment variables");
+  if (!key) {
+    console.error("SERPER_API_KEY is not available");
     return [];
   }
 
@@ -89,7 +89,7 @@ async function searchSerper(query: string): Promise<SearchResult[]> {
     const response = await fetch("https://google.serper.dev/search", {
       method: "POST",
       headers: {
-        "X-API-KEY": apiKey,
+        "X-API-KEY": key,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -105,7 +105,6 @@ async function searchSerper(query: string): Promise<SearchResult[]> {
 
     const data = await response.json();
     
-    // Map Serper's response to our SearchResult format
     const organicResults = data.organic || [];
     return organicResults.slice(0, MAX_RESULTS).map((result: any) => ({
       title: result.title || "Untitled",
@@ -118,17 +117,18 @@ async function searchSerper(query: string): Promise<SearchResult[]> {
   }
 }
 
-// --- Replace search function ---
-export async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
+// --- Search function with optional API key ---
+export async function searchDuckDuckGo(query: string, apiKey?: string): Promise<SearchResult[]> {
   // This function name is kept for backward compatibility; it now uses Serper.
-  return searchSerper(query);
+  return searchSerper(query, apiKey);
 }
 
 /**
- * Finds the five best search results and retrieves their readable page text.
+ * Finds the best search results and retrieves their readable page text.
+ * Optionally accepts an API key override.
  */
-export async function searchWithPageContent(query: string): Promise<SearchResult[]> {
-  const results = await searchDuckDuckGo(query);
+export async function searchWithPageContent(query: string, apiKey?: string): Promise<SearchResult[]> {
+  const results = await searchDuckDuckGo(query, apiKey);
   const content = await Promise.all(
     results.map((result) =>
       result.url ? fetchPageContent(result.url) : Promise.resolve(undefined)
@@ -138,6 +138,7 @@ export async function searchWithPageContent(query: string): Promise<SearchResult
   return results.map((result, index) => ({ ...result, content: content[index] }));
 }
 
+// --- GET handler (unchanged) ---
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q");
