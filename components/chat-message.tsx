@@ -50,38 +50,38 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
   };
 
   return (
-    <div className="relative my-3 rounded-xl border border-[#2a2a2a] bg-[#111115] overflow-hidden max-w-full shadow-md">
+    <div className="relative my-2 sm:my-3 rounded-lg sm:rounded-xl border border-[#2a2a2a] bg-[#111115] overflow-hidden max-w-full shadow-md">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#18181c] border-b border-[#2a2a2a] text-xs">
+      <div className="flex items-center justify-between px-2.5 py-1 sm:px-3 sm:py-1.5 bg-[#18181c] border-b border-[#2a2a2a] text-[11px] sm:text-xs">
         {/* Copy button on TOP LEFT */}
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#22232b] hover:bg-[#2c2d38] text-[#ccc] hover:text-white transition-all text-xs font-sans active:scale-95 select-none cursor-pointer"
+          className="flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md bg-[#22232b] hover:bg-[#2c2d38] text-[#ccc] hover:text-white transition-all text-[11px] sm:text-xs font-sans active:scale-95 select-none cursor-pointer"
           aria-label="Copy code"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400 font-medium text-[11px]">Copied!</span>
+              <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
+              <span className="text-emerald-400 font-medium text-[10px] sm:text-[11px]">Copied!</span>
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5 text-[#aaa]" />
-              <span className="text-[11px]">Copy code</span>
+              <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#aaa]" />
+              <span className="text-[10px] sm:text-[11px]">Copy code</span>
             </>
           )}
         </button>
 
         {/* Language Badge on TOP RIGHT */}
-        <span className="font-mono text-[10px] text-[#777] uppercase tracking-wider font-semibold">
+        <span className="font-mono text-[9px] sm:text-[10px] text-[#777] uppercase tracking-wider font-semibold">
           {language || "code"}
         </span>
       </div>
 
       {/* Code Container */}
-      <div className="overflow-x-auto max-h-[480px] overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-white/10">
-        <pre className="m-0 font-mono text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
+      <div className="overflow-x-auto max-h-[360px] sm:max-h-[480px] overflow-y-auto p-2.5 sm:p-4 scrollbar-thin scrollbar-thumb-white/10">
+        <pre className="m-0 font-mono text-[11px] sm:text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
           <code className={className}>{codeString}</code>
         </pre>
       </div>
@@ -91,17 +91,16 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
 
 const markdownComponents = {
   pre({ children }: any) {
-    return <div className="max-w-full overflow-hidden my-2">{children}</div>;
+    return <div className="max-w-full overflow-hidden my-1.5 sm:my-2">{children}</div>;
   },
   code({ node, inline, className, children, ...props }: any) {
     const match = /language-(\w+)/.exec(className || "");
-    // Inline code check: keep single backticks like `example` inline
     const isInline = inline ?? (!match && !String(children).includes("\n"));
 
     if (isInline) {
       return (
         <code
-          className="bg-[#2a2a2a] px-1.5 py-0.5 rounded text-[#a8d8ff] text-xs font-mono break-words"
+          className="bg-[#2a2a2a] px-1 sm:px-1.5 py-0.5 rounded text-[#a8d8ff] text-[11px] sm:text-xs font-mono break-words"
           {...props}
         >
           {children}
@@ -112,26 +111,26 @@ const markdownComponents = {
     return <CodeBlock className={className}>{children}</CodeBlock>;
   },
   p({ children }: any) {
-    return <p className="mb-3 last:mb-0 text-[#ccc] leading-relaxed">{children}</p>;
+    return <p className="mb-2 sm:mb-3 last:mb-0 text-[#ccc] leading-relaxed">{children}</p>;
   },
   ul({ children }: any) {
-    return <ul className="list-disc pl-5 mb-3 space-y-1 text-[#ccc]">{children}</ul>;
+    return <ul className="list-disc pl-4 sm:pl-5 mb-2 sm:mb-3 space-y-1 text-[#ccc]">{children}</ul>;
   },
   ol({ children }: any) {
-    return <ol className="list-decimal pl-5 mb-3 space-y-1 text-[#ccc]">{children}</ol>;
+    return <ol className="list-decimal pl-4 sm:pl-5 mb-2 sm:mb-3 space-y-1 text-[#ccc]">{children}</ol>;
   },
   h1({ children }: any) {
-    return <h1 className="text-xl font-bold text-white mb-3 mt-4">{children}</h1>;
+    return <h1 className="text-lg sm:text-xl font-bold text-white mb-2 sm:mb-3 mt-3 sm:mt-4">{children}</h1>;
   },
   h2({ children }: any) {
-    return <h2 className="text-lg font-semibold text-white mb-2 mt-3">{children}</h2>;
+    return <h2 className="text-base sm:text-lg font-semibold text-white mb-1.5 sm:mb-2 mt-2.5 sm:mt-3">{children}</h2>;
   },
   h3({ children }: any) {
-    return <h3 className="text-base font-semibold text-white mb-2 mt-2">{children}</h3>;
+    return <h3 className="text-sm sm:text-base font-semibold text-white mb-1.5 sm:mb-2 mt-2">{children}</h3>;
   },
   blockquote({ children }: any) {
     return (
-      <blockquote className="border-l-2 border-[#4a6cf7] pl-4 my-3 text-[#888] italic">
+      <blockquote className="border-l-2 border-[#4a6cf7] pl-3 sm:pl-4 my-2 sm:my-3 text-[#888] italic">
         {children}
       </blockquote>
     );
@@ -168,18 +167,18 @@ function ThoughtBlock({ data }: { data: any }) {
   return (
     <div
       className={cn(
-        "mb-3 rounded-xl transition-all duration-300 min-w-0 overflow-hidden",
-        isThinking ? "bg-[#141414] border border-[#2a2a2a] p-3 shadow-sm" : "bg-transparent"
+        "mb-2.5 sm:mb-3 rounded-xl transition-all duration-300 min-w-0 overflow-hidden",
+        isThinking ? "bg-[#141414] border border-[#2a2a2a] p-2.5 sm:p-3 shadow-sm" : "bg-transparent"
       )}
     >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 text-xs text-[#888] hover:text-[#bbb] transition-colors w-full text-left select-none group"
+        className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-[#888] hover:text-[#bbb] transition-colors w-full text-left select-none group"
       >
         <Brain
           className={cn(
-            "w-4 h-4 transition-all duration-300",
+            "w-3.5 h-3.5 sm:w-4 sm:h-4 transition-all duration-300",
             isThinking
               ? "text-[#4a6cf7] animate-pulse scale-110"
               : "text-[#888] group-hover:text-[#bbb]"
@@ -194,7 +193,7 @@ function ThoughtBlock({ data }: { data: any }) {
         </span>
         <ChevronDown
           className={cn(
-            "w-3.5 h-3.5 ml-auto transition-transform duration-200 text-[#666] group-hover:text-[#aaa]",
+            "w-3 h-3 sm:w-3.5 sm:h-3.5 ml-auto transition-transform duration-200 text-[#666] group-hover:text-[#aaa]",
             open && "rotate-180"
           )}
         />
@@ -202,7 +201,7 @@ function ThoughtBlock({ data }: { data: any }) {
 
       {/* Thought content with Markdown */}
       {open && (
-        <div className="mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-3 text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
+        <div className="mt-2 sm:mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-2.5 sm:pl-3 text-[11px] sm:text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
           {data?.text ? (
             <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
               <ReactMarkdown components={markdownComponents}>
@@ -235,36 +234,36 @@ function SearchBlock({ data }: { data: any }) {
   }, [isSearching]);
 
   return (
-    <div className="mb-3">
+    <div className="mb-2.5 sm:mb-3">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 text-xs text-[#888] hover:text-[#bbb] transition-colors select-none group w-full text-left"
+        className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#888] hover:text-[#bbb] transition-colors select-none group w-full text-left"
       >
         <Search
           className={cn(
-            "w-3.5 h-3.5 transition-colors",
+            "w-3 h-3 sm:w-3.5 sm:h-3.5 transition-colors",
             isSearching ? "text-[#4a6cf7] animate-spin" : "text-[#888]"
           )}
         />
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
           {isSearching
-            ? `Searching the web for "${data?.query || "information"}"…`
+            ? `Searching web for "${data?.query || "information"}"…`
             : status === "error"
             ? "Web search unavailable"
-            : `Searched the web (${results.length} result${results.length === 1 ? "" : "s"})`}
+            : `Searched web (${results.length} result${results.length === 1 ? "" : "s"})`}
         </span>
         <ChevronDown
           className={cn(
-            "w-3.5 h-3.5 ml-auto transition-transform duration-200 text-[#666]",
+            "w-3 h-3 sm:w-3.5 sm:h-3.5 ml-auto transition-transform duration-200 text-[#666]",
             open && "rotate-180"
           )}
         />
       </button>
       {open && results.length > 0 && (
-        <div className="mt-2 border-l-2 border-[#2a2a2a] pl-3 space-y-2 animate-in fade-in duration-200">
+        <div className="mt-1.5 sm:mt-2 border-l-2 border-[#2a2a2a] pl-2.5 sm:pl-3 space-y-1.5 sm:space-y-2 animate-in fade-in duration-200">
           {results.map((r: any, i: number) => (
-            <div key={i} className="text-xs">
+            <div key={i} className="text-[11px] sm:text-xs">
               {r.url ? (
                 <a
                   href={r.url}
@@ -296,14 +295,14 @@ function Attachment({ part }: { part: any }) {
       <img
         src={part.url}
         alt={part.filename || "attachment"}
-        className="max-w-[220px] max-h-[220px] rounded-lg border border-[#2a2a2a] object-cover transition-transform hover:scale-[1.02]"
+        className="max-w-[160px] max-h-[160px] sm:max-w-[220px] sm:max-h-[220px] rounded-lg border border-[#2a2a2a] object-cover transition-transform hover:scale-[1.02]"
       />
     );
   }
   return (
-    <div className="flex items-center gap-2 bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2 text-xs text-[#ccc]">
-      <FileText className="w-4 h-4 text-[#888]" />
-      <span className="truncate max-w-[160px]">{part.filename || "file"}</span>
+    <div className="flex items-center gap-1.5 sm:gap-2 bg-[#111] border border-[#2a2a2a] rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs text-[#ccc]">
+      <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#888]" />
+      <span className="truncate max-w-[120px] sm:max-w-[160px]">{part.filename || "file"}</span>
     </div>
   );
 }
@@ -351,32 +350,32 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
   return (
     <div
       className={cn(
-        "flex gap-4 w-full max-w-3xl mx-auto py-4 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
+        "flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-2.5 sm:py-4 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
         isUser ? "flex-row-reverse" : "flex-row"
       )}
     >
       {/* Avatar — assistant only */}
       {!isUser && (
-        <div className="flex-shrink-0 mt-1">
-            <Image src="/nova-logo.png" alt="NOVA" width={30} height={30} />
+        <div className="flex-shrink-0 mt-0.5 sm:mt-1">
+          <Image src="/nova-logo.png" alt="NOVA" width={24} height={24} className="w-6 h-6 sm:w-[30px] sm:h-[30px] rounded-md sm:rounded-lg" />
         </div>
       )}
 
       {/* Content */}
-      <div className={cn("flex flex-col gap-2 min-w-0", isUser ? "items-end max-w-[80%] ml-auto" : "flex-1")}>
+      <div className={cn("flex flex-col gap-1.5 sm:gap-2 min-w-0", isUser ? "items-end max-w-[85%] sm:max-w-[80%] ml-auto" : "flex-1")}>
         {fileParts.length > 0 && (
-          <div className={cn("flex flex-wrap gap-2", isUser && "justify-end")}>
+          <div className={cn("flex flex-wrap gap-1.5 sm:gap-2", isUser && "justify-end")}>
             {fileParts.map((part, i) => (
               <Attachment key={i} part={part} />
             ))}
           </div>
         )}
 
-       {!isUser && searchParts.map((p, i) => <SearchBlock key={`s-${i}`} data={(p as any).data} />)}
-       {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
+        {!isUser && searchParts.map((p, i) => <SearchBlock key={`s-${i}`} data={(p as any).data} />)}
+        {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
 
         {isUser && isEditing ? (
-          <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-2xl rounded-tr-sm px-4 py-3 text-white w-full min-w-[240px] shadow-lg animate-in fade-in duration-200">
+          <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3 py-2 sm:px-4 sm:py-3 text-white w-full min-w-[200px] sm:min-w-[240px] shadow-lg animate-in fade-in duration-200">
             <textarea
               autoFocus
               value={editValue}
@@ -391,18 +390,18 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
                 }
               }}
               rows={Math.min(10, Math.max(2, editValue.split("\n").length))}
-              className="w-full bg-transparent text-sm leading-relaxed text-white resize-none focus:outline-none"
+              className="w-full bg-transparent text-xs sm:text-sm leading-relaxed text-white resize-none focus:outline-none"
             />
-            <div className="flex items-center justify-end gap-2 mt-2">
+            <div className="flex items-center justify-end gap-1.5 sm:gap-2 mt-2">
               <button
                 onClick={handleEditCancel}
-                className="px-3 py-1 rounded-md text-xs text-[#aaa] hover:text-white hover:bg-[#2a2a2a] transition-all duration-150 active:scale-95"
+                className="px-2.5 py-1 rounded-md text-[11px] sm:text-xs text-[#aaa] hover:text-white hover:bg-[#2a2a2a] transition-all duration-150 active:scale-95"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSave}
-                className="px-3 py-1 rounded-md text-xs bg-[#4a6cf7] text-white hover:bg-[#3a5ce7] transition-all duration-150 active:scale-95 shadow-sm"
+                className="px-2.5 py-1 rounded-md text-[11px] sm:text-xs bg-[#4a6cf7] text-white hover:bg-[#3a5ce7] transition-all duration-150 active:scale-95 shadow-sm"
               >
                 Save
               </button>
@@ -411,10 +410,10 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
         ) : (
           <div
             className={cn(
-              "text-sm leading-relaxed min-w-0 w-full overflow-hidden",
+              "text-xs sm:text-sm leading-relaxed min-w-0 w-full overflow-hidden",
               isUser
-                ? "bg-[#1e1e1e] border border-[#2a2a2a] rounded-2xl rounded-tr-sm px-4 py-3 text-white shadow-sm"
-                : "text-[#ddd] prose prose-invert prose-sm max-w-none"
+                ? "bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3.5 py-2.5 sm:px-4 sm:py-3 text-white shadow-sm"
+                : "text-[#ddd] prose prose-invert prose-xs sm:prose-sm max-w-none"
             )}
           >
             {message.parts.map((part, index) => {
@@ -442,20 +441,20 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
           <div className={cn("flex items-center gap-1 text-[#666] animate-in fade-in duration-200", isUser ? "justify-end" : "justify-start")}>
             <button
               onClick={handleCopy}
-              className="p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90"
+              className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90"
               aria-label="Copy message"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-[#4a6cf7] scale-110 transition-transform" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4a6cf7] scale-110 transition-transform" /> : <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
             </button>
 
             {isUser && onEdit && (
               <button
                 onClick={() => setIsEditing(true)}
                 disabled={disableActions}
-                className="p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
+                className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
                 aria-label="Edit message"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
             )}
 
@@ -463,10 +462,10 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
               <button
                 onClick={onRegenerate}
                 disabled={disableActions}
-                className="p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
+                className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
                 aria-label="Regenerate response"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
             )}
           </div>
@@ -478,12 +477,12 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
 
 export function TypingIndicator() {
   return (
-    <div className="flex gap-4 w-full max-w-3xl mx-auto py-4 animate-in fade-in duration-300">
-      <div className="flex items-center gap-0.5 pt-3">
+    <div className="flex gap-4 w-full max-w-3xl mx-auto py-3 sm:py-4 animate-in fade-in duration-300">
+      <div className="flex items-center gap-0.5 pt-2 sm:pt-3">
         <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:0ms]" />
         <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:150ms]" />
         <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:300ms]" />
       </div>
     </div>
-  )
+  );
 }

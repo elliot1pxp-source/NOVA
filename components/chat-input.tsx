@@ -74,11 +74,11 @@ export function ChatInput({
   const canSubmit = (input.trim().length > 0 || attachments.length > 0) && !isLoading;
 
   return (
-    <div className="w-full max-w-3xl mx-auto flex flex-col gap-2">
+    <div className="w-full max-w-3xl mx-auto flex flex-col gap-1.5 sm:gap-2">
       {/* Attachment Error Banner */}
       {attachmentError && (
-        <div className="flex items-center gap-2 px-4 py-2 text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 rounded-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-1">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 rounded-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-1">
+          <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
           <span>{attachmentError}</span>
         </div>
       )}
@@ -86,14 +86,14 @@ export function ChatInput({
       {/* Main Dynamic Input Container */}
       <div className="relative group w-full">
         {/* Soft Ambient White Glow Layer */}
-        <div className="absolute -inset-1 rounded-[28px] bg-gradient-to-r from-white/10 via-white/20 to-white/10 blur-xl opacity-30 group-hover:opacity-60 group-focus-within:opacity-100 transition duration-500 pointer-events-none" />
+        <div className="absolute -inset-1 rounded-[20px] sm:rounded-[28px] bg-gradient-to-r from-white/10 via-white/20 to-white/10 blur-xl opacity-30 group-hover:opacity-60 group-focus-within:opacity-100 transition duration-500 pointer-events-none" />
 
         {/* Floating Capsule Body */}
-        <div className="relative flex flex-col bg-[#0a0a0c]/85 backdrop-blur-2xl border border-white/20 focus-within:border-white/40 rounded-[26px] p-3 shadow-[0_12px_40px_rgba(0,0,0,0.85),0_0_20px_rgba(255,255,255,0.06)] transition-all duration-300">
+        <div className="relative flex flex-col bg-[#0a0a0c]/85 backdrop-blur-2xl border border-white/20 focus-within:border-white/40 rounded-[20px] sm:rounded-[26px] p-2 sm:p-3 shadow-[0_12px_40px_rgba(0,0,0,0.85),0_0_20px_rgba(255,255,255,0.06)] transition-all duration-300">
           
           {/* Pending Attachments List */}
           {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-2 pt-1 pb-3 border-b border-white/10 mb-2">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 px-1.5 pt-0.5 pb-2 sm:px-2 sm:pt-1 sm:pb-3 border-b border-white/10 mb-1.5 sm:mb-2">
               {attachments.map((att) => {
                 const name = att.source === "file" ? att.file.name : att.existingFile.name;
                 const isImage = att.previewUrl && (att.source === "file" ? att.file.type.startsWith("image/") : att.existingFile.mimeType.startsWith("image/"));
@@ -101,21 +101,21 @@ export function ChatInput({
                 return (
                   <div
                     key={att.id}
-                    className="group/chip relative flex items-center gap-2 bg-white/10 border border-white/15 rounded-xl p-1.5 pr-2 text-xs text-white shadow-sm transition hover:bg-white/15"
+                    className="group/chip relative flex items-center gap-1.5 sm:gap-2 bg-white/10 border border-white/15 rounded-lg sm:rounded-xl p-1 pr-1.5 sm:p-1.5 sm:pr-2 text-[11px] sm:text-xs text-white shadow-sm transition hover:bg-white/15"
                   >
                     {isImage ? (
-                      <img src={att.previewUrl} alt={name} className="w-7 h-7 object-cover rounded-lg" />
+                      <img src={att.previewUrl} alt={name} className="w-6 h-6 sm:w-7 sm:h-7 object-cover rounded-md sm:rounded-lg" />
                     ) : (
-                      <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-white/70" />
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-white/10 flex items-center justify-center">
+                        <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
                       </div>
                     )}
-                    <span className="max-w-[130px] truncate font-medium">{name}</span>
+                    <span className="max-w-[100px] sm:max-w-[130px] truncate font-medium">{name}</span>
                     <button
                       onClick={() => onRemoveAttachment(att.id)}
-                      className="ml-1 p-0.5 rounded-full hover:bg-white/20 text-white/60 hover:text-white transition"
+                      className="ml-0.5 p-0.5 rounded-full hover:bg-white/20 text-white/60 hover:text-white transition"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     </button>
                   </div>
                 );
@@ -131,25 +131,25 @@ export function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={`Message NOVA ${model === "instant" ? "Instant" : "Expert"}...`}
             rows={1}
-            className="w-full bg-transparent text-white placeholder-[#787a85] text-sm px-3 py-1.5 focus:outline-none resize-none max-h-[200px] leading-relaxed scrollbar-none"
+            className="w-full bg-transparent text-white placeholder-[#787a85] text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 focus:outline-none resize-none max-h-[160px] sm:max-h-[200px] leading-relaxed scrollbar-none"
           />
 
           {/* Input Action Controls Bar */}
-          <div className="flex items-center justify-between pt-2 px-1">
+          <div className="flex items-center justify-between pt-1.5 sm:pt-2 px-0.5 sm:px-1 gap-1">
             {/* Left Controls: Feature Pills & File Upload */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
               {/* DeepThink Switcher Pill */}
               <button
                 type="button"
                 onClick={onToggleDeepThink}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 border select-none",
+                  "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
                   deepThink
                     ? "bg-white/20 border-white/40 text-white shadow-[0_0_12px_rgba(255,255,255,0.2)]"
                     : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
                 )}
               >
-                <Brain className="w-3.5 h-3.5" />
+                <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span>DeepThink</span>
               </button>
 
@@ -158,13 +158,13 @@ export function ChatInput({
                 type="button"
                 onClick={onToggleWebSearch}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 border select-none",
+                  "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
                   webSearch
                     ? "bg-white/20 border-white/40 text-white shadow-[0_0_12px_rgba(255,255,255,0.2)]"
                     : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
                 )}
               >
-                <Globe className="w-3.5 h-3.5" />
+                <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span>Search</span>
               </button>
 
@@ -172,10 +172,10 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-1.5 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
+                className="p-1 sm:p-1.5 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
                 title="Attach files"
               >
-                <Paperclip className="w-4 h-4" />
+                <Paperclip className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
               <input
                 ref={fileInputRef}
@@ -188,25 +188,25 @@ export function ChatInput({
                 }}
               />
 
-              {/* Reuse Storage Files Dropdown/Pill (if available) */}
+              {/* Reuse Storage Files Dropdown/Pill */}
               {existingFiles.length > 0 && onAttachExistingFile && (
                 <div className="relative group/files">
                   <button
                     type="button"
-                    className="p-1.5 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
+                    className="p-1 sm:p-1.5 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
                     title="Reuse existing chat files"
                   >
-                    <FolderOpen className="w-4 h-4" />
+                    <FolderOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
 
                   {/* Context menu for existing files */}
-                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover/files:flex flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 shadow-2xl z-50 min-w-[200px] max-h-[180px] overflow-y-auto">
-                    <span className="text-[10px] font-semibold text-white/50 uppercase px-2 py-1">Recent Chat Files</span>
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover/files:flex flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 shadow-2xl z-50 min-w-[180px] sm:min-w-[200px] max-h-[180px] overflow-y-auto">
+                    <span className="text-[9px] sm:text-[10px] font-semibold text-white/50 uppercase px-2 py-1">Recent Chat Files</span>
                     {existingFiles.map((file) => (
                       <button
                         key={file.id}
                         onClick={() => onAttachExistingFile(file)}
-                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/10 rounded-xl text-xs text-white/90 text-left truncate transition"
+                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/10 rounded-xl text-[11px] sm:text-xs text-white/90 text-left truncate transition"
                       >
                         <FileText className="w-3.5 h-3.5 text-white/60 flex-shrink-0" />
                         <span className="truncate">{file.name}</span>
@@ -223,20 +223,20 @@ export function ChatInput({
               onClick={onSubmit}
               disabled={!canSubmit}
               className={cn(
-                "p-2 rounded-full transition-all duration-300 flex items-center justify-center",
+                "p-1.5 sm:p-2 rounded-full transition-all duration-300 flex items-center justify-center",
                 canSubmit
                   ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                   : "bg-white/10 text-white/30 cursor-not-allowed"
               )}
             >
-              <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+              <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
             </button>
           </div>
         </div>
       </div>
 
       {/* Footer Disclaimer */}
-      <p className="text-[11px] text-center text-[#6e717c] font-medium tracking-wide">
+      <p className="text-[9px] sm:text-[11px] text-center text-[#6e717c] font-medium tracking-wide">
         NOVA can make mistakes. Consider checking important information.
       </p>
     </div>
