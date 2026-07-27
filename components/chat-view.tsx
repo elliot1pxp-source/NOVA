@@ -39,10 +39,6 @@ function fileToDataUrl(file: File, normalizedMimeType: string): Promise<string> 
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
-      // The browser embeds the original MIME type (e.g. text/x-go) in the
-      // data URL header. The AI SDK reads the MIME type from the data URL
-      // rather than from our explicitly-provided mediaType, so we must
-      // rewrite the header to the normalized type.
       resolve(normalizeDataUrl(dataUrl, normalizedMimeType));
     };
     reader.onerror = () => reject(reader.error);
@@ -64,8 +60,7 @@ function createConversationSummary(text: string) {
     role: "system" as const,
     parts: [{
       type: "text" as const,
-      text: `Private summary of the earlier conversation. Use it as context and do not mention it to the user:
-${text}`,
+      text: `Private summary of the earlier conversation. Use it as context and do not mention it to the user:\n${text}`,
     }],
   };
 }
@@ -86,7 +81,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
   const initialMessages = useRef(loadMessages(chatId)).current;
 
-  // Load existing files for this chat
   useEffect(() => {
     setExistingFiles(loadChatFiles(chatId));
   }, [chatId]);
@@ -115,7 +109,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   });
   const showTypingIndicator = isLoading && !waitingForDeepThink;
 
-  // Build nav items from user messages only
   const userMessages = useMemo(() => {
     return visibleMessages.filter((m) => m.role === "user");
   }, [visibleMessages]);
@@ -135,14 +128,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     });
   }, [userMessages]);
 
-  // Track which user message is in view based on scroll position
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container || userMessages.length === 0) return;
 
     const handleScroll = () => {
       const messageElements = container.querySelectorAll("[data-message-id]");
-      // Only consider user messages for active tracking
       const userIds = new Set(userMessages.map((m) => m.id));
       let closestId: string | undefined;
       let closestDistance = Infinity;
@@ -164,12 +155,10 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
-    // Run once on mount to set initial active
     setTimeout(handleScroll, 100);
     return () => container.removeEventListener("scroll", handleScroll);
   }, [userMessages]);
 
-  // Scroll to a specific message when navigator item is clicked
   const handleNavSelect = useCallback((id: string) => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -179,21 +168,16 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }
   }, []);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, status]);
 
-  // Persist messages for this chat locally (no login, no backend)
   useEffect(() => {
     if (messages.length > 0) {
       saveMessages(chatId, messages as unknown[]);
     }
   }, [messages, chatId]);
 
-  // Once a conversation reaches 50 messages, compact its oldest four into a
-  // private system summary and retain the most recent 46 turns. The updater
-  // keeps any messages that arrive while the background request is running.
   useEffect(() => {
     const conversationMessages = messages.filter((message) => message.role !== "system");
     if (
@@ -230,15 +214,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           ),
         ]);
       })
-      .catch(() => {
-        // Retain the complete history if background compaction fails.
-      })
+      .catch(() => {})
       .finally(() => {
         summarizingHistoryRef.current = false;
       });
   }, [messages, model, setMessages, status]);
 
-  // Notify parent about first message for sidebar title
   useEffect(() => {
     if (!notifiedRef.current && messages.length >= 1) {
       const firstUser = messages.find((m) => m.role === "user");
@@ -256,16 +237,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }
   }, [messages, onFirstMessage]);
 
-  // After an edited user message truncates the conversation, ask for a
-  // fresh assistant response. This runs in an effect (rather than right
-  // after setMessages) so it fires only once the hook's own state has
-  // actually caught up with the edit.
   useEffect(() => {
     if (pendingRegenerateAfterEdit) {
       setPendingRegenerateAfterEdit(false);
       regenerate();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingRegenerateAfterEdit]);
 
   const handleAddFiles = useCallback((files: FileList | null) => {
@@ -341,8 +317,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           }) || "application/octet-stream";
           return {
             type: "file" as const,
-            // Also normalize the data URL for existing files, in case the
-            // stored MIME type is a non-standard variant like text/x-go.
             url: normalizeDataUrl(att.existingFile.dataUrl, mimeType),
             mediaType: mimeType,
             filename: att.existingFile.name,
@@ -363,9 +337,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     sendMessage({ text, files });
   };
 
-  // Editing a user message: swap its text, drop everything that came after
-  // it (the conversation now branches from here), then regenerate the AI
-  // reply based on the edited message.
   const handleEditMessage = useCallback(
     (messageId: string, newText: string) => {
       if (isLoading) return;
@@ -389,7 +360,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0d0d0d]">
+    <div className="relative flex flex-col h-full w-full bg-[#0d0d0d] overflow-hidden">
       {/* Empty state / Welcome */}
       {isEmpty ? (
         <div className="flex flex-col flex-1 items-center justify-center gap-8 px-4">
@@ -399,26 +370,29 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             <h1 className="text-2xl font-semibold text-white">Start chatting with NOVA</h1>
           </div>
 
-          {/* Model tabs */}
-          <div className="flex items-center gap-1 bg-[#111] border border-[#1e1e1e] rounded-full p-1">
-            {MODEL_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => onModelChange(tab.id)}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all",
-                  model === tab.id
-                    ? "bg-[#1e2a4a] text-[#4a6cf7] border border-[#4a6cf7]/30"
-                    : "text-[#666] hover:text-[#aaa]"
-                )}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
+          {/* Dynamic Island Model Switcher */}
+          <div className="relative group">
+            <div className="absolute -inset-1 rounded-full bg-white/20 blur-md opacity-50 group-hover:opacity-80 transition duration-500 pointer-events-none" />
+            <div className="relative flex items-center gap-1 bg-[#0a0a0c]/85 backdrop-blur-2xl border border-white/20 rounded-full p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+              {MODEL_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => onModelChange(tab.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all duration-300 select-none",
+                    model === tab.id
+                      ? "bg-white/15 text-white border border-white/25 shadow-[0_0_12px_rgba(255,255,255,0.15)]"
+                      : "text-[#888c99] hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Input */}
+          {/* Input in Empty State */}
           <div className="w-full max-w-3xl">
             <ChatInput
               input={input}
@@ -441,29 +415,32 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         </div>
       ) : (
         <>
-          {/* Model switcher bar (compact, shown when chatting) */}
-          <div className="flex justify-center pt-4 pb-2">
-            <div className="flex items-center gap-1 bg-[#111] border border-[#1e1e1e] rounded-full p-0.5">
-              {MODEL_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => onModelChange(tab.id)}
-                  className={cn(
-                    "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
-                    model === tab.id
-                      ? "bg-[#1e2a4a] text-[#4a6cf7]"
-                      : "text-[#555] hover:text-[#aaa]"
-                  )}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              ))}
+          {/* Top Floating Dynamic Island Header */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+            <div className="relative group">
+              <div className="absolute -inset-1 rounded-full bg-white/20 blur-md opacity-60 group-hover:opacity-90 transition duration-500 pointer-events-none" />
+              <div className="relative flex items-center gap-1 bg-[#0a0a0c]/85 backdrop-blur-2xl border border-white/20 rounded-full p-1 shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+                {MODEL_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => onModelChange(tab.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 select-none",
+                      model === tab.id
+                        ? "bg-white/15 text-white border border-white/25 shadow-[0_0_10px_rgba(255,255,255,0.15)]"
+                        : "text-[#888c99] hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Messages */}
-          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4">
+          {/* Messages Container (Full Viewport Scroll with pb-36 padding for the Floating Input) */}
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 pt-16 pb-36">
             <div className="max-w-3xl mx-auto">
               {visibleMessages.map((message, i) => {
                 const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
@@ -503,25 +480,27 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             />
           )}
 
-          {/* Input */}
-          <div className="px-4 pb-6 pt-3">
-            <ChatInput
-              input={input}
-              onInputChange={setInput}
-              onSubmit={handleSubmit}
-              isLoading={isLoading}
-              model={model}
-              deepThink={deepThink}
-              onToggleDeepThink={() => setDeepThink((v) => !v)}
-              webSearch={webSearch}
-              onToggleWebSearch={() => setWebSearch((v) => !v)}
-              attachments={attachments}
-              attachmentError={attachmentError}
-              onAddFiles={handleAddFiles}
-              onRemoveAttachment={handleRemoveAttachment}
-              existingFiles={existingFiles}
-              onAttachExistingFile={handleAttachExistingFile}
-            />
+          {/* Floating Bottom Input Bar with Soft Gradient Mask */}
+          <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none bg-gradient-to-t from-[#0d0d0d] via-[#0d0d0d]/85 to-transparent pt-10 pb-5 px-4">
+            <div className="pointer-events-auto">
+              <ChatInput
+                input={input}
+                onInputChange={setInput}
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+                model={model}
+                deepThink={deepThink}
+                onToggleDeepThink={() => setDeepThink((v) => !v)}
+                webSearch={webSearch}
+                onToggleWebSearch={() => setWebSearch((v) => !v)}
+                attachments={attachments}
+                attachmentError={attachmentError}
+                onAddFiles={handleAddFiles}
+                onRemoveAttachment={handleRemoveAttachment}
+                existingFiles={existingFiles}
+                onAttachExistingFile={handleAttachExistingFile}
+              />
+            </div>
           </div>
         </>
       )}
