@@ -7,7 +7,7 @@ export type GlobalConfig = {
 };
 
 export type PaidCodeEntry = {
-  expiry: string;
+  expiry: string; // ISO date string
   tokens: GlobalConfig;
 };
 
