@@ -90,23 +90,22 @@ function ChatItem({
       <button
         onClick={onClick}
         className={cn(
-          "relative w-full text-left px-2.5 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-medium transition-all duration-200 flex items-center gap-2 sm:gap-2.5 select-none",
+          "relative w-full text-left px-3.5 py-2.5 rounded-2xl text-xs font-medium transition-all duration-200 flex items-center gap-2.5 select-none",
           isActive
             ? "bg-white/10 text-white font-semibold"
             : "text-[#8c8f9c] hover:bg-white/[0.04] hover:text-white"
         )}
       >
-        {/* Active Pill Indicator */}
         {isActive && (
-          <span className="absolute left-1 top-2 bottom-2 sm:top-2.5 sm:bottom-2.5 w-1 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)]" />
+          <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)]" />
         )}
 
         {chat.pinned ? (
-          <Pin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white flex-shrink-0" />
+          <Pin className="w-3.5 h-3.5 text-white flex-shrink-0" />
         ) : (
           <MessageSquare
             className={cn(
-              "w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0 transition-colors",
+              "w-3.5 h-3.5 flex-shrink-0 transition-colors",
               isActive ? "text-white" : "text-[#5e616e] group-hover:text-white/80"
             )}
           />
@@ -128,27 +127,26 @@ function ChatItem({
             }
           }}
           className={cn(
-            "p-0.5 sm:p-1 rounded-lg flex-shrink-0 transition-all duration-200 hover:bg-white/10 hover:text-white",
+            "p-1 rounded-lg flex-shrink-0 transition-all duration-200 hover:bg-white/10 hover:text-white",
             menuOpen ? "opacity-100 bg-white/10 text-white" : "opacity-0 group-hover:opacity-70"
           )}
           aria-label="Chat options"
         >
-          <MoreHorizontal className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <MoreHorizontal className="w-3.5 h-3.5" />
         </span>
       </button>
 
-      {/* Options Menu */}
       {menuOpen && (
-        <div className="absolute right-2 top-8 sm:top-9 z-30 w-36 sm:w-44 rounded-xl sm:rounded-2xl bg-[#121216]/95 backdrop-blur-2xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.8)] p-1 sm:p-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="absolute right-2 top-9 z-30 w-44 rounded-2xl bg-[#121216]/95 backdrop-blur-2xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.8)] p-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onRename();
             }}
-            className="w-full flex items-center gap-2 sm:gap-2.5 px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-lg sm:rounded-xl transition-colors font-medium"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-xl transition-colors font-medium"
           >
-            <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#8c8f9c]" />
+            <Pencil className="w-3.5 h-3.5 text-[#8c8f9c]" />
             Rename
           </button>
           <button
@@ -157,16 +155,16 @@ function ChatItem({
               e.stopPropagation();
               onTogglePin();
             }}
-            className="w-full flex items-center gap-2 sm:gap-2.5 px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-lg sm:rounded-xl transition-colors font-medium"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-[#ccc] hover:bg-white/10 hover:text-white rounded-xl transition-colors font-medium"
           >
             {chat.pinned ? (
               <>
-                <PinOff className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#8c8f9c]" />
+                <PinOff className="w-3.5 h-3.5 text-[#8c8f9c]" />
                 Unpin
               </>
             ) : (
               <>
-                <Pin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#8c8f9c]" />
+                <Pin className="w-3.5 h-3.5 text-[#8c8f9c]" />
                 Pin
               </>
             )}
@@ -177,9 +175,9 @@ function ChatItem({
               e.stopPropagation();
               onDelete();
             }}
-            className="w-full flex items-center gap-2 sm:gap-2.5 px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs text-rose-400 hover:bg-rose-950/40 rounded-lg sm:rounded-xl transition-colors mt-1 font-medium"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-rose-400 hover:bg-rose-950/40 rounded-xl transition-colors mt-1 font-medium"
           >
-            <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <Trash2 className="w-3.5 h-3.5" />
             Delete
           </button>
         </div>
@@ -190,12 +188,12 @@ function ChatItem({
 
 function SectionLabel({ label, count }: { label: string; count?: number }) {
   return (
-    <div className="px-2.5 sm:px-3 pt-3 sm:pt-4 pb-1 sm:pb-1.5 flex items-center justify-between select-none">
-      <span className="text-[9px] sm:text-[10px] font-bold tracking-widest text-[#5e616e] uppercase">
+    <div className="px-3 pt-4 pb-1.5 flex items-center justify-between select-none">
+      <span className="text-[10px] font-bold tracking-widest text-[#5e616e] uppercase">
         {label}
       </span>
       {count !== undefined && count > 0 && (
-        <span className="text-[9px] sm:text-[10px] font-mono text-[#4a4d5a] bg-white/[0.04] px-1.5 py-0.2 rounded-md">
+        <span className="text-[10px] font-mono text-[#4a4d5a] bg-white/[0.04] px-1.5 py-0.2 rounded-md">
           {count}
         </span>
       )}
@@ -208,10 +206,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Upload Files Modal                                                */
-/* ------------------------------------------------------------------ */
 
 function UploadFilesModal({
   chats,
@@ -310,43 +304,43 @@ function UploadFilesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md px-3 sm:px-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md px-4 animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-[92vw] sm:max-w-xl rounded-[22px] sm:rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-4 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-xl rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#8c8f9c]">
+        <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#8c8f9c]">
           Upload Files
         </div>
-        <div className="mb-3 sm:mb-4 text-lg sm:text-xl font-semibold text-white">Manage Chat Files</div>
+        <div className="mb-4 text-xl font-semibold text-white">Manage Chat Files</div>
 
         <div className="mb-4">
-          <label className="block text-[11px] sm:text-xs font-medium text-[#8c8f9c] mb-1.5 sm:mb-2">
+          <label className="block text-xs font-medium text-[#8c8f9c] mb-2">
             Select a chat
           </label>
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setDropdownOpen((v) => !v)}
-              className="w-full flex items-center justify-between bg-white/[0.05] border border-white/10 rounded-xl sm:rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm text-white hover:bg-white/[0.09] focus:outline-none transition-all text-left"
+              className="w-full flex items-center justify-between bg-white/[0.05] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white hover:bg-white/[0.09] focus:outline-none transition-all text-left"
             >
               <span className={cn("truncate", !selectedChat && "text-[#5e616e]")}>
                 {selectedChat ? selectedChat.title : "Choose a conversation…"}
               </span>
               <ChevronDown
                 className={cn(
-                  "w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#8c8f9c] transition-transform duration-200 flex-shrink-0 ml-2",
+                  "w-4 h-4 text-[#8c8f9c] transition-transform duration-200 flex-shrink-0 ml-2",
                   dropdownOpen && "rotate-180"
                 )}
               />
             </button>
 
             {dropdownOpen && (
-              <div className="absolute left-0 right-0 top-full mt-2 z-50 max-h-60 sm:max-h-80 overflow-y-auto rounded-xl sm:rounded-2xl bg-[#141419]/98 border border-white/10 shadow-2xl backdrop-blur-2xl p-1.5 sm:p-2 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150 scrollbar-thin scrollbar-thumb-white/20">
+              <div className="absolute left-0 right-0 top-full mt-2 z-50 max-h-80 overflow-y-auto rounded-2xl bg-[#141419]/98 border border-white/10 shadow-2xl backdrop-blur-2xl p-2 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150 scrollbar-thin scrollbar-thumb-white/20">
                 {chats.length === 0 ? (
                   <div className="px-3 py-3 text-xs text-[#5e616e] text-center">
                     No conversations available
@@ -361,13 +355,13 @@ function UploadFilesModal({
                         setDropdownOpen(false);
                       }}
                       className={cn(
-                        "w-full flex items-center gap-2.5 sm:gap-3 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm text-left transition-colors",
+                        "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-left transition-colors",
                         selectedChatId === chat.id
                           ? "bg-white/15 text-white font-medium"
                           : "text-[#ccc] hover:bg-white/10 hover:text-white"
                       )}
                     >
-                      <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 text-[#8c8f9c]" />
+                      <MessageSquare className="w-4 h-4 flex-shrink-0 text-[#8c8f9c]" />
                       <span className="truncate flex-1">{chat.title}</span>
                     </button>
                   ))
@@ -391,57 +385,57 @@ function UploadFilesModal({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 sm:px-4 sm:py-3.5 rounded-xl sm:rounded-2xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-[11px] sm:text-xs font-medium text-[#8c8f9c] hover:text-white transition-all disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-xs font-medium text-[#8c8f9c] hover:text-white transition-all disabled:opacity-50"
             >
-              <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Upload className="w-4 h-4" />
               {uploading ? "Uploading…" : "Click to upload files to this chat"}
             </button>
 
             {uploadError && (
-              <p className="mt-2 text-[11px] sm:text-xs text-rose-400">{uploadError}</p>
+              <p className="mt-2 text-xs text-rose-400">{uploadError}</p>
             )}
 
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#5e616e]">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#5e616e]">
                   Files in this chat
                 </span>
-                <span className="text-[9px] sm:text-[10px] text-[#8c8f9c]">{files.length} file(s)</span>
+                <span className="text-[10px] text-[#8c8f9c]">{files.length} file(s)</span>
               </div>
 
               {files.length === 0 ? (
-                <div className="text-center py-5 sm:py-6 text-xs text-[#5e616e] bg-white/[0.03] border border-white/5 rounded-xl sm:rounded-2xl">
+                <div className="text-center py-6 text-xs text-[#5e616e] bg-white/[0.03] border border-white/5 rounded-2xl">
                   No files uploaded yet for this chat
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-48 sm:max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
+                <div className="space-y-1.5 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
                   {files.map((file) => (
                     <div
                       key={file.id}
-                      className="flex items-center gap-2 sm:gap-2.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl bg-white/[0.04] border border-white/5 hover:bg-white/[0.08] transition-colors group"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/5 hover:bg-white/[0.08] transition-colors group"
                     >
                       {file.mimeType.startsWith("image/") ? (
                         <img
                           src={file.dataUrl}
                           alt={file.name}
-                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg object-cover flex-shrink-0"
+                          className="w-7 h-7 rounded-lg object-cover flex-shrink-0"
                         />
                       ) : (
-                        <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#8c8f9c] flex-shrink-0" />
+                        <FileText className="w-4 h-4 text-[#8c8f9c] flex-shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11px] sm:text-xs text-white truncate font-medium">{file.name}</div>
-                        <div className="text-[9px] sm:text-[10px] text-[#8c8f9c]">
+                        <div className="text-xs text-white truncate font-medium">{file.name}</div>
+                        <div className="text-[10px] text-[#8c8f9c]">
                           {formatBytes(file.size)} · {file.mimeType}
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleDeleteFile(file.id)}
-                        className="p-1 rounded-lg text-[#8c8f9c] hover:text-rose-400 hover:bg-rose-950/40 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        className="p-1.5 rounded-lg text-[#8c8f9c] hover:text-rose-400 hover:bg-rose-950/40 transition-colors opacity-0 group-hover:opacity-100"
                         aria-label="Delete file"
                       >
-                        <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -452,16 +446,16 @@ function UploadFilesModal({
         )}
 
         {!selectedChatId && (
-          <div className="text-center py-6 sm:py-8 text-xs text-[#5e616e]">
+          <div className="text-center py-8 text-xs text-[#5e616e]">
             Select a chat above to manage its files
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2 sm:gap-2.5 mt-4 sm:mt-5">
+        <div className="flex items-center justify-end gap-2.5 mt-5">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-white text-black hover:bg-white/90 px-4 py-1.5 sm:px-5 sm:py-2 text-[11px] sm:text-xs font-semibold transition-all active:scale-95 shadow-md"
+            className="rounded-full bg-white text-black hover:bg-white/90 px-5 py-2 text-xs font-semibold transition-all active:scale-95 shadow-md"
           >
             Done
           </button>
@@ -470,10 +464,6 @@ function UploadFilesModal({
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Sidebar Component                                                 */
-/* ------------------------------------------------------------------ */
 
 export function NovaSidebar({
   chats,
@@ -495,30 +485,7 @@ export function NovaSidebar({
   const [deletePendingChatId, setDeletePendingChatId] = useState<string | null>(null);
   const [uploadFilesOpen, setUploadFilesOpen] = useState(false);
 
-  // Set initial desktop sidebar state
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth >= 768) {
-      setHistoryOpen(true);
-    }
-  }, []);
-
   const groups = groupChats(chats);
-
-  const handleChatSelect = (id: string) => {
-    onSelectChat(id);
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setHistoryOpen(false);
-    }
-  };
-
-  const handleNewChatAction = () => {
-    onNewChat();
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setHistoryOpen(false);
-    } else {
-      openHistoryAndReset();
-    }
-  };
 
   const openHistoryWithSearch = () => {
     setHistoryOpen(true);
@@ -576,7 +543,13 @@ export function NovaSidebar({
         key={chat.id}
         chat={chat}
         isActive={chat.id === activeChatId}
-        onClick={() => handleChatSelect(chat.id)}
+        onClick={() => {
+          onSelectChat(chat.id);
+          // On mobile screens, auto-close sidebar on chat select
+          if (window.innerWidth < 768) {
+            setHistoryOpen(false);
+          }
+        }}
         menuOpen={menuOpenId === chat.id}
         onToggleMenu={() => setMenuOpenId((id) => (id === chat.id ? null : chat.id))}
         onTogglePin={() => {
@@ -596,97 +569,93 @@ export function NovaSidebar({
 
   return (
     <>
-      {/* Mobile Backdrop Overlay */}
-      {historyOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-xs md:hidden transition-opacity duration-300"
-          onClick={() => setHistoryOpen(false)}
-        />
-      )}
-
-      <aside
-        className={cn(
-          "fixed md:relative inset-y-0 left-0 flex flex-col h-full bg-[#0a0a0c]/95 md:bg-[#0a0a0c]/90 border-r border-white/10 backdrop-blur-xl transition-all duration-300 ease-in-out select-none z-40 md:z-30",
-          historyOpen
-            ? "translate-x-0 w-[240px] sm:w-[270px] md:w-[270px] md:min-w-[270px]"
-            : "-translate-x-full md:translate-x-0 md:w-0 md:min-w-0 pointer-events-none md:pointer-events-auto"
-        )}
-      >
-        {/* Floating Capsule Controls when Closed */}
-        <div
-          className={cn(
-            "absolute left-3 top-3 sm:left-4 sm:top-4 z-30 flex items-center gap-1 transition-all duration-300 ease-in-out group",
-            historyOpen
-              ? "opacity-0 scale-90 pointer-events-none -translate-x-2"
-              : "opacity-100 scale-100 pointer-events-auto translate-x-0"
-          )}
-        >
-          <div className="absolute -inset-1 rounded-full bg-white/10 blur-md opacity-40 group-hover:opacity-70 transition duration-500 pointer-events-none" />
-
-          <div className="relative flex items-center gap-0.5 sm:gap-1 rounded-full bg-[#0a0a0c]/90 border border-white/15 p-0.5 sm:p-1 shadow-2xl backdrop-blur-2xl">
+      {/* Persistent Floating Controls Button (Always rendered outside sidebar container when closed) */}
+      {!historyOpen && (
+        <div className="fixed left-4 top-4 z-40 flex items-center gap-1 animate-in fade-in duration-200">
+          <div className="relative flex items-center gap-1 rounded-full bg-[#0a0a0c]/90 border border-white/15 p-1 shadow-2xl backdrop-blur-2xl">
             <button
               onClick={() => {
                 setHistoryOpen(true);
                 setSearchOpen(false);
                 setMenuOpenId(null);
               }}
-              className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Open chat history"
               title="Open chat history"
             >
-              <PanelLeftOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <PanelLeftOpen className="w-4 h-4" />
             </button>
             <button
               onClick={openHistoryWithSearch}
-              className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Search chats"
               title="Search chats"
             >
-              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Search className="w-4 h-4" />
             </button>
             <button
-              onClick={handleNewChatAction}
-              className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              onClick={() => {
+                onNewChat();
+                openHistoryAndReset();
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
               aria-label="New chat"
               title="New chat"
             >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Plus className="w-4 h-4" />
             </button>
           </div>
         </div>
+      )}
 
-        {/* Sidebar Main Content Area */}
+      {/* Mobile Backdrop Overlay when sidebar is open */}
+      {historyOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden animate-in fade-in duration-200"
+          onClick={() => setHistoryOpen(false)}
+        />
+      )}
+
+      {/* Main Sidebar Element */}
+      <aside
+        className={cn(
+          "fixed md:relative inset-y-0 left-0 z-40 md:z-30 flex flex-col h-full bg-[#0a0a0c]/95 md:bg-[#0a0a0c]/90 border-r border-white/10 backdrop-blur-xl transition-all duration-300 ease-in-out select-none",
+          historyOpen
+            ? "w-[280px] min-w-[280px] translate-x-0"
+            : "w-0 min-w-0 -translate-x-full md:translate-x-0 overflow-hidden border-none"
+        )}
+      >
         <div
           className={cn(
-            "flex flex-col h-full w-[240px] sm:w-[270px] md:w-[270px] transition-opacity duration-200 ease-in-out overflow-hidden",
+            "flex flex-col h-full w-[280px] transition-opacity duration-200 ease-in-out overflow-hidden",
             historyOpen ? "opacity-100 delay-100" : "opacity-0 pointer-events-none"
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-3.5 pt-3.5 sm:px-4 sm:pt-4 pb-2.5 sm:pb-3 flex-shrink-0">
-            <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
+            <div className="flex items-center gap-2.5">
               <div className="relative group/logo">
-                <Image src="/nova-logo.png" alt="NOVA" width={24} height={24} className="relative rounded-md sm:rounded-lg sm:w-[28px] sm:h-[28px]" />
+                <Image src="/nova-logo.png" alt="NOVA" width={28} height={28} className="relative rounded-lg" />
               </div>
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <span className="text-white font-semibold text-xs sm:text-sm tracking-wide">NOVA</span>
-                <span className="text-[8px] sm:text-[9px] font-bold text-white/90 bg-white/15 px-1 sm:px-1.5 py-0.5 rounded-md tracking-wider">
+              <div className="flex items-center gap-1.5">
+                <span className="text-white font-semibold text-sm tracking-wide">NOVA</span>
+                <span className="text-[9px] font-bold text-white/90 bg-white/15 px-1.5 py-0.5 rounded-md tracking-wider">
                   V1
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-0.5 sm:gap-1">
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setSearchOpen((v) => !v)}
                 className={cn(
-                  "p-1 sm:p-1.5 rounded-lg text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors",
+                  "p-1.5 rounded-lg text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors",
                   searchOpen && "bg-white/10 text-white"
                 )}
                 aria-label="Search chats"
                 title="Search chats"
               >
-                <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Search className="w-4 h-4" />
               </button>
               <button
                 onClick={() => {
@@ -694,39 +663,42 @@ export function NovaSidebar({
                   setSearchOpen(false);
                   setMenuOpenId(null);
                 }}
-                className="p-1 sm:p-1.5 rounded-lg text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-lg text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors"
                 aria-label="Close chat history"
                 title="Close sidebar"
               >
-                <PanelLeftClose className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <PanelLeftClose className="w-4 h-4" />
               </button>
             </div>
           </div>
 
           {/* Action Buttons: New Chat & Upload */}
-          <div className="px-2.5 sm:px-3 pt-1 pb-2 space-y-1 flex-shrink-0">
+          <div className="px-3 pt-1 pb-2 space-y-1 flex-shrink-0">
             <button
-              onClick={handleNewChatAction}
-              className="w-full flex items-center justify-between px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/15 text-white text-[11px] sm:text-xs font-semibold transition-all duration-200 active:scale-[0.98]"
+              onClick={() => {
+                onNewChat();
+                openHistoryAndReset();
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-all duration-200 active:scale-[0.98]"
             >
-              <div className="flex items-center gap-2 sm:gap-2.5">
-                <div className="flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded-md sm:rounded-lg bg-white text-black font-bold">
-                  <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-center w-5 h-5 rounded-lg bg-white text-black font-bold">
+                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                 </div>
                 <span className="font-semibold text-white">New chat</span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-white/70 font-mono bg-white/10 px-1 sm:px-1.5 py-0.5 rounded-md">
+              <span className="text-[10px] text-white/70 font-mono bg-white/10 px-1.5 py-0.5 rounded-md">
                 ⌘K
               </span>
             </button>
 
             <button
               onClick={() => setUploadFilesOpen(true)}
-              className="w-full flex items-center justify-between px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-[#8c8f9c] hover:text-white text-[11px] sm:text-xs font-medium transition-all duration-200 active:scale-[0.98]"
+              className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-[#8c8f9c] hover:text-white text-xs font-medium transition-all duration-200 active:scale-[0.98]"
             >
-              <div className="flex items-center gap-2 sm:gap-2.5">
-                <div className="p-0.5 sm:p-1 rounded-md bg-white/5 text-[#8c8f9c] group-hover:text-white transition-colors">
-                  <Upload className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <div className="flex items-center gap-2.5">
+                <div className="p-1 rounded-md bg-white/5 text-[#8c8f9c] group-hover:text-white transition-colors">
+                  <Upload className="w-3.5 h-3.5" />
                 </div>
                 <span className="font-medium">Upload files</span>
               </div>
@@ -735,15 +707,15 @@ export function NovaSidebar({
 
           {/* Search Input Bar */}
           {searchOpen && (
-            <div className="px-2.5 sm:px-3 pb-2 pt-1 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="px-3 pb-2 pt-1 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-150">
               <div className="relative flex items-center">
-                <Search className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#8c8f9c] absolute left-2.5 sm:left-3 pointer-events-none" />
+                <Search className="w-3.5 h-3.5 text-[#8c8f9c] absolute left-3 pointer-events-none" />
                 <input
                   autoFocus
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search history..."
-                  className="w-full bg-white/[0.05] focus:bg-white/[0.08] rounded-lg sm:rounded-xl pl-7 sm:pl-8 pr-6 sm:pr-7 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white placeholder-[#5e616e] focus:outline-none transition-colors"
+                  className="w-full bg-white/[0.05] focus:bg-white/[0.08] rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-[#5e616e] focus:outline-none transition-colors"
                 />
                 {searchQuery && (
                   <button
@@ -808,15 +780,15 @@ export function NovaSidebar({
             )}
           </nav>
 
-          {/* Clean Footer (Settings Only) */}
-          <div className="p-2.5 sm:p-3 flex-shrink-0 flex items-center justify-between">
+          {/* Footer (Settings) */}
+          <div className="p-3 flex-shrink-0 flex items-center justify-between">
             <button
               onClick={() => setSettingsOpen(true)}
-              className="flex items-center gap-2 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors text-[11px] sm:text-xs font-medium"
+              className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors text-xs font-medium"
               aria-label="Settings"
               title="Settings"
             >
-              <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Settings className="w-4 h-4" />
               <span>Settings</span>
             </button>
           </div>
@@ -849,28 +821,28 @@ export function NovaSidebar({
           onClick={cancelDelete}
         >
           <div
-            className="relative w-full max-w-xs sm:max-w-sm overflow-hidden rounded-[22px] sm:rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-5 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
+            className="relative w-full max-w-sm overflow-hidden rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#8c8f9c]">
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#8c8f9c]">
               Delete Chat
             </div>
-            <div className="mb-2 sm:mb-3 text-base sm:text-lg font-semibold text-white">Delete this chat?</div>
-            <p className="mb-5 sm:mb-6 text-[11px] sm:text-xs leading-relaxed text-[#8c8f9c]">
+            <div className="mb-3 text-lg font-semibold text-white">Delete this chat?</div>
+            <p className="mb-6 text-xs leading-relaxed text-[#8c8f9c]">
               This will permanently remove this conversation history and all its uploaded files.
             </p>
-            <div className="flex items-center justify-end gap-2 sm:gap-2.5">
+            <div className="flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={cancelDelete}
-                className="rounded-full bg-white/5 px-3.5 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-medium text-[#ccc] hover:bg-white/10 hover:text-white transition-all active:scale-95"
+                className="rounded-full bg-white/5 px-4 py-2 text-xs font-medium text-[#ccc] hover:bg-white/10 hover:text-white transition-all active:scale-95"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={submitDeleteChat}
-                className="rounded-full bg-rose-600 hover:bg-rose-500 px-3.5 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-semibold text-white transition-all active:scale-95 shadow-lg shadow-rose-950/50"
+                className="rounded-full bg-rose-600 hover:bg-rose-500 px-4 py-2 text-xs font-semibold text-white transition-all active:scale-95 shadow-lg shadow-rose-950/50"
               >
                 Delete
               </button>
