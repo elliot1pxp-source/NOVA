@@ -24,7 +24,7 @@ const MODELS: Record<string, string> = {
   instant: "gemini-3-flash-preview",
   expert: "gemini-3.1-flash-lite",
   deepthink: "gemini-3-flash-preview",
-  websearch: "gemini-robotics-er-1.6-preview,
+  websearch: "gemini-robotics-er-1.6-preview",
 };
 
 function readSystemPrompt(): string {
