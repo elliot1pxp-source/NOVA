@@ -106,6 +106,8 @@ type PaidCode = {
   redeemed: boolean;
 };
 
+type PaidTierTokens = PaidCode["tokens"];
+
 async function readGlobalSettings(): Promise<GlobalSettings> {
   try {
     return await readData<GlobalSettings>(STORAGE_KEYS.GLOBAL_SETTINGS, {});
@@ -131,6 +133,7 @@ export async function POST(req: Request) {
     webSearch = false,
     modelSettings,
     paidTierCode,
+    paidTierTokens,
   }: {
     messages: UIMessage[];
     model?: string;
@@ -142,6 +145,7 @@ export async function POST(req: Request) {
       maxTokens?: number;
     };
     paidTierCode?: string;
+    paidTierTokens?: PaidTierTokens | null;
   } = await req.json();
 
   const hasUnsupportedAttachment = messages.some((message) =>
@@ -185,6 +189,10 @@ export async function POST(req: Request) {
         if (paidCode.tokens.DEEPTHINK_TOKEN) deepThinkApiKey = paidCode.tokens.DEEPTHINK_TOKEN;
         if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
       }
+    } else if (paidTierTokens) {
+      if (paidTierTokens.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = paidTierTokens.GOOGLE_GENERATIVE_AI_API_KEY;
+      if (paidTierTokens.DEEPTHINK_TOKEN) deepThinkApiKey = paidTierTokens.DEEPTHINK_TOKEN;
+      if (paidTierTokens.SERPER_API_KEY) serperApiKey = paidTierTokens.SERPER_API_KEY;
     }
   } else {
     // Use global settings for free users / expired users

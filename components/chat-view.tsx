@@ -94,8 +94,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       body: () => {
         const paidData = getPaidTierData();
         const serverMode = getServerMode();
-        const paidTierCode = serverMode === "paid" && paidData ? paidData.code : null;
-        return { model, deepThink, webSearch, modelSettings, paidTierCode };
+        const hasActivePaidTier =
+          serverMode === "paid" &&
+          paidData &&
+          new Date(paidData.expiresAt) > new Date();
+        const paidTierCode = hasActivePaidTier ? paidData.code : null;
+        const paidTierTokens = hasActivePaidTier ? paidData.tokens : null;
+        return { model, deepThink, webSearch, modelSettings, paidTierCode, paidTierTokens };
       },
     }),
   });
