@@ -17,6 +17,7 @@ import {
   normalizeAttachmentForModel,
   SUPPORTED_ATTACHMENT_DESCRIPTION,
 } from "@/lib/attachments";
+import { readData, STORAGE_KEYS } from "@/lib/server-storage";
 
 export const maxDuration = 60;
 
@@ -88,22 +89,35 @@ Given the conversation history, produce a concise, effective web search query th
   }
 }
 
-function readGlobalSettings() {
+type GlobalSettings = {
+  GOOGLE_GENERATIVE_AI_API_KEY?: string;
+  DEEPTHINK_TOKEN?: string;
+  SERPER_API_KEY?: string;
+};
+
+type PaidCode = {
+  code: string;
+  expiresAt: string;
+  tokens: {
+    GOOGLE_GENERATIVE_AI_API_KEY?: string;
+    DEEPTHINK_TOKEN?: string;
+    SERPER_API_KEY?: string;
+  };
+  redeemed: boolean;
+};
+
+async function readGlobalSettings(): Promise<GlobalSettings> {
   try {
-    const filePath = path.join(process.cwd(), "data", "global-settings.json");
-    const raw = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(raw);
+    return await readData<GlobalSettings>(STORAGE_KEYS.GLOBAL_SETTINGS, {});
   } catch {
     return {};
   }
 }
 
-function readPaidCodeByRedeemedCode(code: string) {
+async function readPaidCodeByRedeemedCode(code: string): Promise<PaidCode | null> {
   try {
-    const filePath = path.join(process.cwd(), "data", "paid-codes.json");
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const codes = JSON.parse(raw);
-    return codes.find((c: any) => c.code === code && c.redeemed) || null;
+    const codes = await readData<PaidCode[]>(STORAGE_KEYS.PAID_CODES, []);
+    return codes.find((c) => c.code === code && c.redeemed) || null;
   } catch {
     return null;
   }
@@ -163,7 +177,7 @@ export async function POST(req: Request) {
   let serperApiKey = process.env.SERPER_API_KEY;
 
   if (paidTierCode) {
-    const paidCode = readPaidCodeByRedeemedCode(paidTierCode);
+    const paidCode = await readPaidCodeByRedeemedCode(paidTierCode);
     if (paidCode) {
       const expiresAt = new Date(paidCode.expiresAt);
       if (expiresAt > new Date()) {
@@ -174,7 +188,7 @@ export async function POST(req: Request) {
     }
   } else {
     // Use global settings for free users / expired users
-    const globalSettings = readGlobalSettings();
+    const globalSettings = await readGlobalSettings();
     if (globalSettings.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = globalSettings.GOOGLE_GENERATIVE_AI_API_KEY;
     if (globalSettings.DEEPTHINK_TOKEN) deepThinkApiKey = globalSettings.DEEPTHINK_TOKEN;
     if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;

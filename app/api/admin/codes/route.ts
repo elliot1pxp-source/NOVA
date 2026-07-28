@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
+import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const CODES_FILE = path.join(DATA_DIR, "paid-codes.json");
 const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type PaidCode = {
@@ -19,31 +16,18 @@ export type PaidCode = {
   redeemedAt?: string | null;
 };
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-function readCodes(): PaidCode[] {
+async function readCodes(): Promise<PaidCode[]> {
   try {
-    ensureDataDir();
-    if (!fs.existsSync(CODES_FILE)) {
-      fs.writeFileSync(CODES_FILE, "[]");
-      return [];
-    }
-    const raw = fs.readFileSync(CODES_FILE, "utf-8");
-    return JSON.parse(raw);
+    return await readData<PaidCode[]>(STORAGE_KEYS.PAID_CODES, []);
   } catch (err) {
     console.error("readCodes error:", err);
     return [];
   }
 }
 
-function writeCodes(codes: PaidCode[]) {
+async function writeCodes(codes: PaidCode[]): Promise<void> {
   try {
-    ensureDataDir();
-    fs.writeFileSync(CODES_FILE, JSON.stringify(codes, null, 2));
+    await writeData(STORAGE_KEYS.PAID_CODES, codes);
   } catch (err) {
     console.error("writeCodes error:", err);
     throw err;
@@ -59,7 +43,7 @@ export async function GET(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const codes = readCodes();
+  const codes = await readCodes();
   return NextResponse.json({ codes });
 }
 
@@ -76,7 +60,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields: code, expiresAt, tokens" }, { status: 400 });
     }
 
-    const codes = readCodes();
+    const codes = await readCodes();
     
     // Check if code already exists
     if (codes.find((c) => c.code === code)) {
@@ -95,7 +79,7 @@ export async function POST(req: Request) {
     };
 
     codes.push(newCode);
-    writeCodes(codes);
+    await writeCodes(codes);
 
     return NextResponse.json({ success: true, code: newCode });
   } catch (err) {
@@ -117,7 +101,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Missing required field: code" }, { status: 400 });
     }
 
-    const codes = readCodes();
+    const codes = await readCodes();
     const index = codes.findIndex((c) => c.code === code);
 
     if (index === -1) {
@@ -131,7 +115,7 @@ export async function PUT(req: Request) {
       if (tokens.SERPER_API_KEY !== undefined) codes[index].tokens.SERPER_API_KEY = tokens.SERPER_API_KEY;
     }
 
-    writeCodes(codes);
+    await writeCodes(codes);
     return NextResponse.json({ success: true, code: codes[index] });
   } catch (err) {
     console.error("PUT /api/admin/codes error:", err);
@@ -152,7 +136,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Missing required field: code" }, { status: 400 });
     }
 
-    const codes = readCodes();
+    const codes = await readCodes();
     const index = codes.findIndex((c) => c.code === code);
 
     if (index === -1) {
@@ -160,7 +144,7 @@ export async function DELETE(req: Request) {
     }
 
     codes.splice(index, 1);
-    writeCodes(codes);
+    await writeCodes(codes);
 
     return NextResponse.json({ success: true });
   } catch (err) {
