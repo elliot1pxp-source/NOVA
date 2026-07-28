@@ -23,14 +23,18 @@ function isVercelProduction(): boolean {
   return process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production";
 }
 
+function hasKvConfig(): boolean {
+  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
 // Fallback for local development: in-memory store (since file system doesn't work on Vercel)
 // In production with proper KV setup, this won't be used
 const memoryStore: Record<string, string> = {};
 
 export async function readData<T = any>(key: string, defaultValue: T): Promise<T> {
-  const kvClient = await getKv();
+  const kvClient = hasKvConfig() ? await getKv() : null;
   
-  if (kvClient && process.env.KV_URL) {
+  if (kvClient) {
     // Use Vercel KV (Redis)
     try {
       const data = await kvClient.get(key);
@@ -42,7 +46,7 @@ export async function readData<T = any>(key: string, defaultValue: T): Promise<T
     }
   }
   
-  if (isVercelProduction() && !process.env.KV_URL) {
+  if (isVercelProduction() && !hasKvConfig()) {
     console.warn(`Vercel KV not configured. Set up a KV store in Vercel dashboard for persistent storage. Using in-memory store (data will be lost on cold start).`);
   }
   
@@ -58,15 +62,15 @@ export async function readData<T = any>(key: string, defaultValue: T): Promise<T
 }
 
 export async function writeData<T = any>(key: string, data: T): Promise<void> {
-  const kvClient = await getKv();
+  const kvClient = hasKvConfig() ? await getKv() : null;
   
-  if (kvClient && process.env.KV_URL) {
+  if (kvClient) {
     // Use Vercel KV (Redis)
     await kvClient.set(key, data);
     return;
   }
   
-  if (isVercelProduction() && !process.env.KV_URL) {
+  if (isVercelProduction() && !hasKvConfig()) {
     console.warn(`Vercel KV not configured. Data for "${key}" will not persist between cold starts.`);
   }
   
