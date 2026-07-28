@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 
-const CODES_FILE = path.join(process.cwd(), "data", "paid-codes.json");
+const DATA_DIR = path.join(process.cwd(), "data");
+const CODES_FILE = path.join(DATA_DIR, "paid-codes.json");
 const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type PaidCode = {
@@ -18,17 +19,35 @@ export type PaidCode = {
   redeemedAt?: string | null;
 };
 
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
 function readCodes(): PaidCode[] {
   try {
+    ensureDataDir();
+    if (!fs.existsSync(CODES_FILE)) {
+      fs.writeFileSync(CODES_FILE, "[]");
+      return [];
+    }
     const raw = fs.readFileSync(CODES_FILE, "utf-8");
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.error("readCodes error:", err);
     return [];
   }
 }
 
 function writeCodes(codes: PaidCode[]) {
-  fs.writeFileSync(CODES_FILE, JSON.stringify(codes, null, 2));
+  try {
+    ensureDataDir();
+    fs.writeFileSync(CODES_FILE, JSON.stringify(codes, null, 2));
+  } catch (err) {
+    console.error("writeCodes error:", err);
+    throw err;
+  }
 }
 
 function isAuthorized(req: Request) {
@@ -50,10 +69,11 @@ export async function POST(req: Request) {
   }
   
   try {
-    const { code, expiresAt, tokens } = await req.json();
+    const body = await req.json();
+    const { code, expiresAt, tokens } = body;
     
     if (!code || !expiresAt || !tokens) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Missing required fields: code, expiresAt, tokens" }, { status: 400 });
     }
 
     const codes = readCodes();
@@ -78,8 +98,9 @@ export async function POST(req: Request) {
     writeCodes(codes);
 
     return NextResponse.json({ success: true, code: newCode });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (err) {
+    console.error("POST /api/admin/codes error:", err);
+    return NextResponse.json({ error: `Invalid request: ${err instanceof Error ? err.message : "Unknown error"}` }, { status: 400 });
   }
 }
 
@@ -89,7 +110,13 @@ export async function PUT(req: Request) {
   }
 
   try {
-    const { code, expiresAt, tokens } = await req.json();
+    const body = await req.json();
+    const { code, expiresAt, tokens } = body;
+    
+    if (!code) {
+      return NextResponse.json({ error: "Missing required field: code" }, { status: 400 });
+    }
+
     const codes = readCodes();
     const index = codes.findIndex((c) => c.code === code);
 
@@ -106,8 +133,9 @@ export async function PUT(req: Request) {
 
     writeCodes(codes);
     return NextResponse.json({ success: true, code: codes[index] });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (err) {
+    console.error("PUT /api/admin/codes error:", err);
+    return NextResponse.json({ error: `Invalid request: ${err instanceof Error ? err.message : "Unknown error"}` }, { status: 400 });
   }
 }
 
@@ -117,7 +145,13 @@ export async function DELETE(req: Request) {
   }
 
   try {
-    const { code } = await req.json();
+    const body = await req.json();
+    const { code } = body;
+    
+    if (!code) {
+      return NextResponse.json({ error: "Missing required field: code" }, { status: 400 });
+    }
+
     const codes = readCodes();
     const index = codes.findIndex((c) => c.code === code);
 
@@ -129,7 +163,8 @@ export async function DELETE(req: Request) {
     writeCodes(codes);
 
     return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (err) {
+    console.error("DELETE /api/admin/codes error:", err);
+    return NextResponse.json({ error: `Invalid request: ${err instanceof Error ? err.message : "Unknown error"}` }, { status: 400 });
   }
 }

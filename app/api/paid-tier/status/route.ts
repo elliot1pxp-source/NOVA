@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 
-const CODES_FILE = path.join(process.cwd(), "data", "paid-codes.json");
+const DATA_DIR = path.join(process.cwd(), "data");
+const CODES_FILE = path.join(DATA_DIR, "paid-codes.json");
 
 type PaidCode = {
   code: string;
@@ -17,18 +18,31 @@ type PaidCode = {
   redeemedAt?: string | null;
 };
 
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
 function readCodes(): PaidCode[] {
   try {
+    ensureDataDir();
+    if (!fs.existsSync(CODES_FILE)) {
+      fs.writeFileSync(CODES_FILE, "[]");
+      return [];
+    }
     const raw = fs.readFileSync(CODES_FILE, "utf-8");
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.error("readCodes error:", err);
     return [];
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { code } = await req.json();
+    const body = await req.json();
+    const { code } = body;
 
     if (!code || typeof code !== "string") {
       return NextResponse.json({ error: "Code is required" }, { status: 400 });
@@ -55,7 +69,8 @@ export async function POST(req: Request) {
         tokens: found.tokens,
       },
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (err) {
+    console.error("POST /api/paid-tier/status error:", err);
+    return NextResponse.json({ error: `Invalid request: ${err instanceof Error ? err.message : "Unknown error"}` }, { status: 400 });
   }
 }

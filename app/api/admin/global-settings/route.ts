@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 
-const SETTINGS_FILE = path.join(process.cwd(), "data", "global-settings.json");
+const DATA_DIR = path.join(process.cwd(), "data");
+const SETTINGS_FILE = path.join(DATA_DIR, "global-settings.json");
 const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type GlobalSettings = {
@@ -11,17 +12,36 @@ export type GlobalSettings = {
   SERPER_API_KEY: string;
 };
 
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
 function readSettings(): GlobalSettings {
   try {
+    ensureDataDir();
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      const defaults = { GOOGLE_GENERATIVE_AI_API_KEY: "", DEEPTHINK_TOKEN: "", SERPER_API_KEY: "" };
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaults, null, 2));
+      return defaults;
+    }
     const raw = fs.readFileSync(SETTINGS_FILE, "utf-8");
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.error("readSettings error:", err);
     return { GOOGLE_GENERATIVE_AI_API_KEY: "", DEEPTHINK_TOKEN: "", SERPER_API_KEY: "" };
   }
 }
 
 function writeSettings(settings: GlobalSettings) {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  try {
+    ensureDataDir();
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  } catch (err) {
+    console.error("writeSettings error:", err);
+    throw err;
+  }
 }
 
 function isAuthorized(req: Request) {
@@ -43,7 +63,9 @@ export async function PUT(req: Request) {
   }
 
   try {
-    const { GOOGLE_GENERATIVE_AI_API_KEY, DEEPTHINK_TOKEN, SERPER_API_KEY } = await req.json();
+    const body = await req.json();
+    const { GOOGLE_GENERATIVE_AI_API_KEY, DEEPTHINK_TOKEN, SERPER_API_KEY } = body;
+    
     const settings = readSettings();
 
     if (GOOGLE_GENERATIVE_AI_API_KEY !== undefined) settings.GOOGLE_GENERATIVE_AI_API_KEY = GOOGLE_GENERATIVE_AI_API_KEY;
@@ -52,7 +74,8 @@ export async function PUT(req: Request) {
 
     writeSettings(settings);
     return NextResponse.json({ success: true, settings });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (err) {
+    console.error("PUT /api/admin/global-settings error:", err);
+    return NextResponse.json({ error: `Invalid request: ${err instanceof Error ? err.message : "Unknown error"}` }, { status: 400 });
   }
 }
