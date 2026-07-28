@@ -20,12 +20,7 @@ export type PaidCode = {
 };
 
 async function readCodes(): Promise<PaidCode[]> {
-  try {
-    return await readData<PaidCode[]>(STORAGE_KEYS.PAID_CODES, []);
-  } catch (err) {
-    console.error("readCodes error:", err);
-    return [];
-  }
+  return readData<PaidCode[]>(STORAGE_KEYS.PAID_CODES, []);
 }
 
 async function writeCodes(codes: PaidCode[]): Promise<void> {
@@ -46,11 +41,16 @@ export async function GET(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const codes = await readCodes();
-  return NextResponse.json(
-    { codes },
-    { headers: { "Cache-Control": "no-store, max-age=0" } },
-  );
+  try {
+    const codes = await readCodes();
+    return NextResponse.json(
+      { codes },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
+  } catch (err) {
+    console.error("GET /api/admin/codes error:", err);
+    return NextResponse.json({ error: "Unable to load codes from persistent storage" }, { status: 503 });
+  }
 }
 
 export async function POST(req: Request) {

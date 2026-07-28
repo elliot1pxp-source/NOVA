@@ -97,6 +97,10 @@ export default function AdminPage() {
       const codesData = await codesRes.json();
       const settingsData = await settingsRes.json();
 
+      if (!codesRes.ok || !settingsRes.ok) {
+        throw new Error(codesData.error || settingsData.error || "Failed to load data");
+      }
+
       if (codesData.codes) setCodes(codesData.codes);
       if (settingsData.settings) setSettings(settingsData.settings);
     } catch {
@@ -114,12 +118,7 @@ export default function AdminPage() {
     if (!authenticated) return;
 
     void loadData();
-    const intervalId = window.setInterval(() => {
-      void loadCodes();
-    }, 15_000);
-
-    return () => window.clearInterval(intervalId);
-  }, [authenticated, loadData, loadCodes]);
+  }, [authenticated, loadData]);
 
   const handleLogin = async () => {
     if (loginKey === ADMIN_KEY) {
@@ -188,12 +187,12 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success) {
         setMessage({ type: "success", text: "Code created successfully!" });
+        setCodes((currentCodes) => [...currentCodes, data.code]);
         setNewCode("");
         setNewExpiry("");
         setNewGoogleKey("");
         setNewDeepThink("");
         setNewSerper("");
-        loadData();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to create code" });
       }
@@ -219,7 +218,9 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success) {
         setMessage({ type: "success", text: "Code deleted" });
-        loadData();
+        setCodes((currentCodes) => currentCodes.filter((item) => item.code !== code));
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to delete code" });
       }
     } catch {
       setMessage({ type: "error", text: "Failed to delete code" });
@@ -248,7 +249,9 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success) {
         setMessage({ type: "success", text: `Code "${code}" has been reset!` });
-        loadData();
+        setCodes((currentCodes) => currentCodes.map((item) => (
+          item.code === code ? data.code : item
+        )));
       } else {
         setMessage({ type: "error", text: data.error || "Failed to reset code" });
       }
@@ -279,10 +282,14 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success) {
         setMessage({ type: "success", text: "Code updated!" });
+        setCodes((currentCodes) => currentCodes.map((item) => (
+          item.code === code ? data.code : item
+        )));
         setEditingCode(null);
         setEditTokens(null);
         setEditExpiry("");
-        loadData();
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to update code" });
       }
     } catch {
       setMessage({ type: "error", text: "Failed to update code" });

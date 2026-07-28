@@ -27,15 +27,13 @@ async function getKv() {
   if (kv) return kv;
 
   const config = getKvConfig();
-  if (!config) return null;
-
-  try {
-    const { createClient } = await import("@vercel/kv");
-    kv = createClient({ ...config, cache: "no-store" });
-    return kv;
-  } catch {
-    return null;
+  if (!config) {
+    throw new Error("Redis is not configured");
   }
+
+  const { createClient } = await import("@vercel/kv");
+  kv = createClient({ ...config, cache: "no-store" });
+  return kv;
 }
 
 function isVercelProduction(): boolean {
@@ -51,22 +49,21 @@ function hasKvConfig(): boolean {
 const memoryStore: Record<string, string> = {};
 
 export async function readData<T = any>(key: string, defaultValue: T): Promise<T> {
-  const kvClient = hasKvConfig() ? await getKv() : null;
-  
-  if (kvClient) {
-    // Use Vercel KV (Redis)
+  if (hasKvConfig()) {
+    const kvClient = await getKv();
+
     try {
       const data = await kvClient.get(key);
       if (data === null || data === undefined) return defaultValue;
       return data as T;
     } catch (err) {
       console.error(`KV read error for ${key}:`, err);
-      return defaultValue;
+      throw new Error(`Unable to read persistent data for "${key}"`);
     }
   }
   
-  if (isVercelProduction() && !hasKvConfig()) {
-    console.warn("Redis is not configured. Set KV_REST_API_URL/KV_REST_API_TOKEN or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN for persistent storage. Using in-memory store (data will be lost on cold start).");
+  if (isVercelProduction()) {
+    throw new Error("Redis is not configured. Set KV_REST_API_URL/KV_REST_API_TOKEN or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN for persistent storage.");
   }
   
   // Fallback: in-memory store (works in dev, but on Vercel data resets between cold starts)
@@ -81,16 +78,15 @@ export async function readData<T = any>(key: string, defaultValue: T): Promise<T
 }
 
 export async function writeData<T = any>(key: string, data: T): Promise<void> {
-  const kvClient = hasKvConfig() ? await getKv() : null;
-  
-  if (kvClient) {
-    // Use Vercel KV (Redis)
+  if (hasKvConfig()) {
+    const kvClient = await getKv();
+
     await kvClient.set(key, data);
     return;
   }
   
-  if (isVercelProduction() && !hasKvConfig()) {
-    console.warn(`Redis is not configured. Data for "${key}" will not persist between cold starts.`);
+  if (isVercelProduction()) {
+    throw new Error("Redis is not configured. Set KV_REST_API_URL/KV_REST_API_TOKEN or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN for persistent storage.");
   }
   
   // Fallback: in-memory store
