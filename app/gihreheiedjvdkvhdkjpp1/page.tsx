@@ -37,6 +37,7 @@ export default function AdminPage() {
     SERPER_API_KEY: "",
   });
   const [loading, setLoading] = useState(false);
+  const [refreshingCodes, setRefreshingCodes] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // New code form
@@ -58,15 +59,28 @@ export default function AdminPage() {
     return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
   };
 
-  useEffect(() => {
-    const auth = isAdminAuthenticated();
-    setAuthenticated(auth);
-    if (auth) {
-      loadData();
+  const loadCodes = useCallback(async () => {
+    setRefreshingCodes(true);
+    try {
+      const response = await fetch("/api/admin/codes", {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.codes) {
+        throw new Error(data.error || "Failed to load codes");
+      }
+
+      setCodes(data.codes);
+    } catch {
+      setMessage({ type: "error", text: "Failed to refresh codes" });
+    } finally {
+      setRefreshingCodes(false);
     }
   }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [codesRes, settingsRes] = await Promise.all([
@@ -90,13 +104,27 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    setAuthenticated(isAdminAuthenticated());
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+
+    void loadData();
+    const intervalId = window.setInterval(() => {
+      void loadCodes();
+    }, 15_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [authenticated, loadData, loadCodes]);
 
   const handleLogin = async () => {
     if (loginKey === ADMIN_KEY) {
       setAdminAuthenticated(true);
       setAuthenticated(true);
-      loadData();
     } else {
       setLoginError("Invalid key");
     }
@@ -327,11 +355,13 @@ export default function AdminPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={loadData}
-              className="p-2 rounded-lg text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors"
-              title="Refresh"
+              onClick={loadCodes}
+              disabled={refreshingCodes}
+              className="p-2 rounded-lg text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+              title="Refresh code list"
+              aria-label="Refresh code list"
             >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              <RefreshCw className={cn("w-4 h-4", refreshingCodes && "animate-spin")} />
             </button>
             <button
               type="button"
@@ -421,6 +451,16 @@ export default function AdminPage() {
             </div>
             <h2 className="text-sm font-semibold">Paid Tier Codes</h2>
             <span className="text-[10px] text-[#5e616e] bg-white/[0.04] px-2 py-0.5 rounded-md">{codes.length} codes</span>
+            <button
+              type="button"
+              onClick={loadCodes}
+              disabled={refreshingCodes}
+              className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+              title="Refresh code list"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", refreshingCodes && "animate-spin")} />
+              Refresh
+            </button>
           </div>
 
           {/* Add new code form */}
