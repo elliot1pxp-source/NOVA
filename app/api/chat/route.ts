@@ -21,10 +21,10 @@ import {
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
-  instant: "gemini-flash-lite-latest",
+  instant: "gemini-3-flash-preview",
   expert: "gemini-3.1-flash-lite",
-  deepthink: "gemini-robotics-er-1.6-preview",
-  websearch: "gemini-robotics-er-1.6-preview",
+  deepthink: "gemini-3-flash-preview",
+  websearch: "gemini-robotics-er-1.6-preview,
 };
 
 function readSystemPrompt(): string {
