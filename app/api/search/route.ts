@@ -77,8 +77,8 @@ async function fetchPageContent(url: string): Promise<string | undefined> {
 }
 
 // --- NEW: Serper.dev search function ---
-async function searchSerper(query: string): Promise<SearchResult[]> {
-  const apiKey = process.env.SERPER_API_KEY;
+async function searchSerper(query: string, customApiKey?: string): Promise<SearchResult[]> {
+  const apiKey = customApiKey || process.env.SERPER_API_KEY;
   
   if (!apiKey) {
     console.error("SERPER_API_KEY is not set in environment variables");
@@ -119,16 +119,16 @@ async function searchSerper(query: string): Promise<SearchResult[]> {
 }
 
 // --- Replace search function ---
-export async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
+export async function searchDuckDuckGo(query: string, serperApiKey?: string): Promise<SearchResult[]> {
   // This function name is kept for backward compatibility; it now uses Serper.
-  return searchSerper(query);
+  return searchSerper(query, serperApiKey);
 }
 
 /**
  * Finds the five best search results and retrieves their readable page text.
  */
-export async function searchWithPageContent(query: string): Promise<SearchResult[]> {
-  const results = await searchDuckDuckGo(query);
+export async function searchWithPageContent(query: string, serperApiKey?: string): Promise<SearchResult[]> {
+  const results = await searchDuckDuckGo(query, serperApiKey);
   const content = await Promise.all(
     results.map((result) =>
       result.url ? fetchPageContent(result.url) : Promise.resolve(undefined)

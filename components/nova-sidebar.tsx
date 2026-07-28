@@ -19,9 +19,11 @@ import {
   Upload,
   FileText,
   ChevronDown,
+  Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { PaidTierDialog } from "@/components/paid-tier-dialog";
 import { ModelSettings, ChatFile, loadChatFiles, saveChatFiles, deleteChatFile, clearAllChatFiles } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, validateFileSize, SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
 
@@ -481,6 +483,7 @@ export function NovaSidebar({
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paidTierOpen, setPaidTierOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deletePendingChatId, setDeletePendingChatId] = useState<string | null>(null);
   const [uploadFilesOpen, setUploadFilesOpen] = useState(false);
@@ -780,11 +783,20 @@ export function NovaSidebar({
             )}
           </nav>
 
-          {/* Footer (Settings) */}
-          <div className="p-3 flex-shrink-0 flex items-center justify-between">
+          {/* Footer (Paid Tier & Settings) */}
+          <div className="p-3 flex-shrink-0 space-y-0.5">
+            <button
+              onClick={() => setPaidTierOpen(true)}
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#8c8f9c] hover:text-amber-400 hover:bg-amber-500/10 transition-colors text-xs font-medium"
+              aria-label="Paid Tier"
+              title="Paid Tier"
+            >
+              <Crown className="w-4 h-4" />
+              <span>Paid Tier</span>
+            </button>
             <button
               onClick={() => setSettingsOpen(true)}
-              className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors text-xs font-medium"
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#8c8f9c] hover:text-white hover:bg-white/10 transition-colors text-xs font-medium"
               aria-label="Settings"
               title="Settings"
             >
@@ -800,6 +812,12 @@ export function NovaSidebar({
         chats={chats}
         isOpen={uploadFilesOpen}
         onClose={() => setUploadFilesOpen(false)}
+      />
+
+      {/* Paid Tier Dialog Modal */}
+      <PaidTierDialog
+        isOpen={paidTierOpen}
+        onClose={() => setPaidTierOpen(false)}
       />
 
       {/* Settings Dialog Modal */}

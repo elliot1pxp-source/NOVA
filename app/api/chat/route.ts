@@ -80,6 +80,27 @@ You are now acting as a search query generator. Given the conversation history, 
   }
 }
 
+function readGlobalSettings() {
+  try {
+    const filePath = path.join(process.cwd(), "data", "global-settings.json");
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function readPaidCodeByRedeemedCode(code: string) {
+  try {
+    const filePath = path.join(process.cwd(), "data", "paid-codes.json");
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const codes = JSON.parse(raw);
+    return codes.find((c: any) => c.code === code && c.redeemed) || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   const {
     messages,
@@ -87,6 +108,7 @@ export async function POST(req: Request) {
     deepThink = false,
     webSearch = false,
     modelSettings,
+    paidTierCode,
   }: {
     messages: UIMessage[];
     model?: string;
@@ -97,6 +119,7 @@ export async function POST(req: Request) {
       topK?: number;
       maxTokens?: number;
     };
+    paidTierCode?: string;
   } = await req.json();
 
   const hasUnsupportedAttachment = messages.some((message) =>
@@ -123,14 +146,39 @@ export async function POST(req: Request) {
   const modelId = MODELS[modelKey] ?? MODELS.instant;
   const baseSystemPrompt = readSystemPrompt();
 
+  // Determine which API keys to use:
+  // 1. If a paid tier code is provided, try to use its tokens
+  // 2. Fall back to global settings (admin-controlled)
+  // 3. Fall back to environment variables
+  let googleApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  let deepThinkApiKey = process.env.DEEPTHINK_TOKEN || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  let serperApiKey = process.env.SERPER_API_KEY;
+
+  if (paidTierCode) {
+    const paidCode = readPaidCodeByRedeemedCode(paidTierCode);
+    if (paidCode) {
+      const expiresAt = new Date(paidCode.expiresAt);
+      if (expiresAt > new Date()) {
+        if (paidCode.tokens.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = paidCode.tokens.GOOGLE_GENERATIVE_AI_API_KEY;
+        if (paidCode.tokens.DEEPTHINK_TOKEN) deepThinkApiKey = paidCode.tokens.DEEPTHINK_TOKEN;
+        if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
+      }
+    }
+  } else {
+    // Use global settings for free users / expired users
+    const globalSettings = readGlobalSettings();
+    if (globalSettings.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = globalSettings.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (globalSettings.DEEPTHINK_TOKEN) deepThinkApiKey = globalSettings.DEEPTHINK_TOKEN;
+    if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
+  }
+
   // Two separate Google clients: one for deepThink, one for the final response
   const googleGeneral = createGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    apiKey: googleApiKey,
   });
 
   const googleDeepThink = createGoogleGenerativeAI({
-    // Fallback to the general key if DEEPTHINK_TOKEN is not set
-    apiKey: process.env.DEEPTHINK_TOKEN || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    apiKey: deepThinkApiKey,
   });
 
   // Normalize any file attachment MIME types before sending them to Gemini so
@@ -178,7 +226,7 @@ export async function POST(req: Request) {
         writer.write({ type: "data-search", id: "search", data: { status: "searching", query } });
 
         try {
-          const results = query ? await searchWithPageContent(query) : [];
+          const results = query ? await searchWithPageContent(query, serperApiKey) : [];
           writer.write({ type: "data-search", id: "search", data: { status: "done", query, results } });
 
           if (results.length > 0) {

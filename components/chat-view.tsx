@@ -11,6 +11,7 @@ import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, normalizeDataUrl, validateFileSize, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
+import { getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
 type Model = "instant" | "expert";
 
@@ -90,7 +91,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     messages: initialMessages as never,
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      body: () => ({ model, deepThink, webSearch, modelSettings }),
+      body: () => {
+        const paidData = getPaidTierData();
+        const serverMode = getServerMode();
+        const paidTierCode = serverMode === "paid" && paidData ? paidData.code : null;
+        return { model, deepThink, webSearch, modelSettings, paidTierCode };
+      },
     }),
   });
 
