@@ -21,7 +21,7 @@ import {
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
-  instant: "gemini-3.1-flash-lite",
+  instant: "gemini-robotics-er-1.6-preview",
   expert: "gemini-3.1-pro-preview",
   deepthink: "gemini-3.1-flash-lite",
   websearch: "gemini-robotics-er-1.6-preview",
