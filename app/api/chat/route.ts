@@ -22,9 +22,9 @@ export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
   instant: "gemini-3.1-flash-lite",
-  expert: "gemini-3.1-flash-lite",
+  expert: "gemini-3.5-flash",
   deepthink: "gemini-3.1-flash-lite",
-  websearch: "gemini-robotics-er-1.6-preview",
+  websearch: "gemini-3.1-flash-lite",
 };
 
 function readSystemPrompt(): string {
