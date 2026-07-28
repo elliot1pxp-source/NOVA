@@ -64,6 +64,8 @@ async function generateSearchQuery(
 YOUR ROLE:
 You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
 - The query should be between 5 and 10 words.
+- Don't repeat the excet user input.
+- Genereate only the search query based on the user request.
 - Use keywords likely to appear in authoritative sources.
 - Output ONLY the query, with no extra commentary, punctuation, or formatting.`;
 
