@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type GlobalSettings = {
@@ -43,7 +46,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const settings = await readSettings();
-  return NextResponse.json({ settings });
+  return NextResponse.json(
+    { settings },
+    { headers: { "Cache-Control": "no-store, max-age=0" } },
+  );
 }
 
 export async function PUT(req: Request) {

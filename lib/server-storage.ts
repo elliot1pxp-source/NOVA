@@ -8,11 +8,30 @@
 
 let kv: any = null;
 
+function getKvConfig() {
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    return { url: process.env.KV_REST_API_URL, token: process.env.KV_REST_API_TOKEN };
+  }
+
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return {
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    };
+  }
+
+  return null;
+}
+
 async function getKv() {
   if (kv) return kv;
+
+  const config = getKvConfig();
+  if (!config) return null;
+
   try {
-    const { kv: kvClient } = await import("@vercel/kv");
-    kv = kvClient;
+    const { createClient } = await import("@vercel/kv");
+    kv = createClient({ ...config, cache: "no-store" });
     return kv;
   } catch {
     return null;
@@ -24,7 +43,7 @@ function isVercelProduction(): boolean {
 }
 
 function hasKvConfig(): boolean {
-  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  return getKvConfig() !== null;
 }
 
 // Fallback for local development: in-memory store (since file system doesn't work on Vercel)
@@ -47,7 +66,7 @@ export async function readData<T = any>(key: string, defaultValue: T): Promise<T
   }
   
   if (isVercelProduction() && !hasKvConfig()) {
-    console.warn(`Vercel KV not configured. Set up a KV store in Vercel dashboard for persistent storage. Using in-memory store (data will be lost on cold start).`);
+    console.warn("Redis is not configured. Set KV_REST_API_URL/KV_REST_API_TOKEN or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN for persistent storage. Using in-memory store (data will be lost on cold start).");
   }
   
   // Fallback: in-memory store (works in dev, but on Vercel data resets between cold starts)
@@ -71,7 +90,7 @@ export async function writeData<T = any>(key: string, data: T): Promise<void> {
   }
   
   if (isVercelProduction() && !hasKvConfig()) {
-    console.warn(`Vercel KV not configured. Data for "${key}" will not persist between cold starts.`);
+    console.warn(`Redis is not configured. Data for "${key}" will not persist between cold starts.`);
   }
   
   // Fallback: in-memory store

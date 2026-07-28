@@ -71,9 +71,11 @@ export default function AdminPage() {
     try {
       const [codesRes, settingsRes] = await Promise.all([
         fetch("/api/admin/codes", {
+          cache: "no-store",
           headers: { Authorization: `Bearer ${ADMIN_KEY}` },
         }),
         fetch("/api/admin/global-settings", {
+          cache: "no-store",
           headers: { Authorization: `Bearer ${ADMIN_KEY}` },
         }),
       ]);
