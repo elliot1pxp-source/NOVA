@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
+import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const SETTINGS_FILE = path.join(DATA_DIR, "global-settings.json");
 const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type GlobalSettings = {
@@ -12,32 +9,24 @@ export type GlobalSettings = {
   SERPER_API_KEY: string;
 };
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
+const DEFAULT_SETTINGS: GlobalSettings = {
+  GOOGLE_GENERATIVE_AI_API_KEY: "",
+  DEEPTHINK_TOKEN: "",
+  SERPER_API_KEY: "",
+};
 
-function readSettings(): GlobalSettings {
+async function readSettings(): Promise<GlobalSettings> {
   try {
-    ensureDataDir();
-    if (!fs.existsSync(SETTINGS_FILE)) {
-      const defaults = { GOOGLE_GENERATIVE_AI_API_KEY: "", DEEPTHINK_TOKEN: "", SERPER_API_KEY: "" };
-      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaults, null, 2));
-      return defaults;
-    }
-    const raw = fs.readFileSync(SETTINGS_FILE, "utf-8");
-    return JSON.parse(raw);
+    return await readData<GlobalSettings>(STORAGE_KEYS.GLOBAL_SETTINGS, DEFAULT_SETTINGS);
   } catch (err) {
     console.error("readSettings error:", err);
-    return { GOOGLE_GENERATIVE_AI_API_KEY: "", DEEPTHINK_TOKEN: "", SERPER_API_KEY: "" };
+    return { ...DEFAULT_SETTINGS };
   }
 }
 
-function writeSettings(settings: GlobalSettings) {
+async function writeSettings(settings: GlobalSettings): Promise<void> {
   try {
-    ensureDataDir();
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    await writeData(STORAGE_KEYS.GLOBAL_SETTINGS, settings);
   } catch (err) {
     console.error("writeSettings error:", err);
     throw err;
@@ -53,7 +42,7 @@ export async function GET(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const settings = readSettings();
+  const settings = await readSettings();
   return NextResponse.json({ settings });
 }
 
@@ -66,13 +55,13 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { GOOGLE_GENERATIVE_AI_API_KEY, DEEPTHINK_TOKEN, SERPER_API_KEY } = body;
     
-    const settings = readSettings();
+    const settings = await readSettings();
 
     if (GOOGLE_GENERATIVE_AI_API_KEY !== undefined) settings.GOOGLE_GENERATIVE_AI_API_KEY = GOOGLE_GENERATIVE_AI_API_KEY;
     if (DEEPTHINK_TOKEN !== undefined) settings.DEEPTHINK_TOKEN = DEEPTHINK_TOKEN;
     if (SERPER_API_KEY !== undefined) settings.SERPER_API_KEY = SERPER_API_KEY;
 
-    writeSettings(settings);
+    await writeSettings(settings);
     return NextResponse.json({ success: true, settings });
   } catch (err) {
     console.error("PUT /api/admin/global-settings error:", err);

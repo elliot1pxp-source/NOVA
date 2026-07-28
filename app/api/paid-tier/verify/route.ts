@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const CODES_FILE = path.join(DATA_DIR, "paid-codes.json");
+import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
 
 type PaidCode = {
   code: string;
@@ -18,31 +14,18 @@ type PaidCode = {
   redeemedAt?: string | null;
 };
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-function readCodes(): PaidCode[] {
+async function readCodes(): Promise<PaidCode[]> {
   try {
-    ensureDataDir();
-    if (!fs.existsSync(CODES_FILE)) {
-      fs.writeFileSync(CODES_FILE, "[]");
-      return [];
-    }
-    const raw = fs.readFileSync(CODES_FILE, "utf-8");
-    return JSON.parse(raw);
+    return await readData<PaidCode[]>(STORAGE_KEYS.PAID_CODES, []);
   } catch (err) {
     console.error("readCodes error:", err);
     return [];
   }
 }
 
-function writeCodes(codes: PaidCode[]) {
+async function writeCodes(codes: PaidCode[]): Promise<void> {
   try {
-    ensureDataDir();
-    fs.writeFileSync(CODES_FILE, JSON.stringify(codes, null, 2));
+    await writeData(STORAGE_KEYS.PAID_CODES, codes);
   } catch (err) {
     console.error("writeCodes error:", err);
     throw err;
@@ -58,7 +41,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Code is required" }, { status: 400 });
     }
 
-    const codes = readCodes();
+    const codes = await readCodes();
     const found = codes.find((c) => c.code === code);
 
     if (!found) {
@@ -78,7 +61,7 @@ export async function POST(req: Request) {
     // Mark as redeemed
     found.redeemed = true;
     found.redeemedAt = new Date().toISOString();
-    writeCodes(codes);
+    await writeCodes(codes);
 
     return NextResponse.json({
       valid: true,
