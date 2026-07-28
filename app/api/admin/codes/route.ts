@@ -95,7 +95,7 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json();
-    const { code, expiresAt, tokens } = body;
+    const { code, expiresAt, tokens, redeemed, redeemedBy, redeemedAt } = body;
     
     if (!code) {
       return NextResponse.json({ error: "Missing required field: code" }, { status: 400 });
@@ -114,6 +114,9 @@ export async function PUT(req: Request) {
       if (tokens.DEEPTHINK_TOKEN !== undefined) codes[index].tokens.DEEPTHINK_TOKEN = tokens.DEEPTHINK_TOKEN;
       if (tokens.SERPER_API_KEY !== undefined) codes[index].tokens.SERPER_API_KEY = tokens.SERPER_API_KEY;
     }
+    if (redeemed !== undefined) codes[index].redeemed = Boolean(redeemed);
+    if (redeemedBy !== undefined) codes[index].redeemedBy = redeemedBy;
+    if (redeemedAt !== undefined) codes[index].redeemedAt = redeemedAt;
 
     await writeCodes(codes);
     return NextResponse.json({ success: true, code: codes[index] });

@@ -49,6 +49,14 @@ export default function AdminPage() {
   // Editing
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [editTokens, setEditTokens] = useState<{ GOOGLE_GENERATIVE_AI_API_KEY: string; DEEPTHINK_TOKEN: string; SERPER_API_KEY: string } | null>(null);
+  const [editExpiry, setEditExpiry] = useState("");
+
+  const toDateTimeLocalValue = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const timezoneOffsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+  };
 
   useEffect(() => {
     const auth = isAdminAuthenticated();
@@ -194,32 +202,25 @@ export default function AdminPage() {
   const handleResetCode = async (code: string) => {
     setLoading(true);
     try {
-      // Reset by deleting and recreating as unredeemed
-      await fetch("/api/admin/codes", {
-        method: "DELETE",
+      const res = await fetch("/api/admin/codes", {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${ADMIN_KEY}`,
         },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({
+          code,
+          redeemed: false,
+          redeemedBy: null,
+          redeemedAt: null,
+        }),
       });
-
-      const codeData = codes.find((c) => c.code === code);
-      if (codeData) {
-        await fetch("/api/admin/codes", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${ADMIN_KEY}`,
-          },
-          body: JSON.stringify({
-            code: codeData.code,
-            expiresAt: codeData.expiresAt,
-            tokens: codeData.tokens,
-          }),
-        });
+      const data = await res.json();
+      if (data.success) {
         setMessage({ type: "success", text: `Code "${code}" has been reset!` });
         loadData();
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to reset code" });
       }
     } catch {
       setMessage({ type: "error", text: "Failed to reset code" });
@@ -229,8 +230,8 @@ export default function AdminPage() {
     }
   };
 
-  const handleEditTokens = async (code: string) => {
-    if (!editTokens) return;
+  const handleEditCode = async (code: string) => {
+    if (!editTokens || !editExpiry) return;
     setLoading(true);
     try {
       const res = await fetch("/api/admin/codes", {
@@ -241,18 +242,20 @@ export default function AdminPage() {
         },
         body: JSON.stringify({
           code,
+          expiresAt: new Date(editExpiry).toISOString(),
           tokens: editTokens,
         }),
       });
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: "success", text: "Tokens updated!" });
+        setMessage({ type: "success", text: "Code updated!" });
         setEditingCode(null);
         setEditTokens(null);
+        setEditExpiry("");
         loadData();
       }
     } catch {
-      setMessage({ type: "error", text: "Failed to update tokens" });
+      setMessage({ type: "error", text: "Failed to update code" });
     } finally {
       setLoading(false);
       setTimeout(() => setMessage(null), 3000);
@@ -556,9 +559,18 @@ export default function AdminPage() {
                       {isExpired && !code.redeemed && <span className="text-rose-400"> (Expired)</span>}
                     </div>
 
-                    {/* Edit tokens button */}
+                    {/* Edit code button */}
                     {editingCode === code.code ? (
                       <div className="space-y-2 mt-2 p-3 rounded-xl bg-white/[0.03] border border-white/10">
+                        <div>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">Expiry Date</label>
+                          <input
+                            type="datetime-local"
+                            value={editExpiry}
+                            onChange={(e) => setEditExpiry(e.target.value)}
+                            className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white/20 transition-all"
+                          />
+                        </div>
                         <div>
                           <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">GOOGLE_GENERATIVE_AI_API_KEY</label>
                           <input
@@ -589,19 +601,19 @@ export default function AdminPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => { setEditingCode(null); setEditTokens(null); }}
+                            onClick={() => { setEditingCode(null); setEditTokens(null); setEditExpiry(""); }}
                             className="px-3 py-1.5 rounded-lg text-[10px] font-medium text-[#ccc] hover:bg-white/10 transition-colors"
                           >
                             Cancel
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleEditTokens(code.code)}
-                            disabled={loading}
+                            onClick={() => handleEditCode(code.code)}
+                            disabled={loading || !editExpiry}
                             className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 text-white text-[10px] font-semibold hover:bg-white/15 transition-all active:scale-95"
                           >
                             <Save className="w-3 h-3" />
-                            Save Tokens
+                            Save Code
                           </button>
                         </div>
                       </div>
@@ -611,11 +623,12 @@ export default function AdminPage() {
                         onClick={() => {
                           setEditingCode(code.code);
                           setEditTokens({ ...code.tokens });
+                          setEditExpiry(toDateTimeLocalValue(code.expiresAt));
                         }}
                         className="text-[11px] text-[#8c8f9c] hover:text-white transition-colors flex items-center gap-1"
                       >
                         <Key className="w-3 h-3" />
-                        Edit tokens
+                        Edit code
                       </button>
                     )}
                   </div>
