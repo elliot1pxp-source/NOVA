@@ -21,8 +21,8 @@ import {
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
-  instant: "gemini-robotics-er-1.6-preview",
-  expert: "gemini-3.1-pro-preview",
+  instant: "gemini-3.1-flash-lite",
+  expert: "gemini-3.1-flash-lite",
   deepthink: "gemini-3.1-flash-lite",
   websearch: "gemini-robotics-er-1.6-preview",
 };
@@ -61,8 +61,7 @@ async function generateSearchQuery(
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
   const searchQueryPrompt = `${systemPrompt}
-YOUR ROLE:
-You are now acting as a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
+YOUR ROLE: As a search query generator. Given the conversation history, produce a concise, effective web search query that would help answer the user's most recent request.
 - The query should be between 5 and 10 words.
 - Don't repeat the excet user input.
 - Genereate only the search query based on the user request.
