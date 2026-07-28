@@ -18,6 +18,7 @@ import {
   SUPPORTED_ATTACHMENT_DESCRIPTION,
 } from "@/lib/attachments";
 import { readData, STORAGE_KEYS } from "@/lib/server-storage";
+import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 
 export const maxDuration = 60;
 
@@ -95,19 +96,6 @@ type GlobalSettings = {
   SERPER_API_KEY?: string;
 };
 
-type PaidCode = {
-  code: string;
-  expiresAt: string;
-  tokens: {
-    GOOGLE_GENERATIVE_AI_API_KEY?: string;
-    DEEPTHINK_TOKEN?: string;
-    SERPER_API_KEY?: string;
-  };
-  redeemed: boolean;
-};
-
-type PaidTierTokens = PaidCode["tokens"];
-
 async function readGlobalSettings(): Promise<GlobalSettings> {
   try {
     return await readData<GlobalSettings>(STORAGE_KEYS.GLOBAL_SETTINGS, {});
@@ -116,10 +104,10 @@ async function readGlobalSettings(): Promise<GlobalSettings> {
   }
 }
 
-async function readPaidCodeByRedeemedCode(code: string): Promise<PaidCode | null> {
+async function readPaidCodeByRedeemedCode(code: string, clientId: string): Promise<PaidCode | null> {
   try {
     const codes = await readData<PaidCode[]>(STORAGE_KEYS.PAID_CODES, []);
-    return codes.find((c) => c.code === code && c.redeemed) || null;
+    return codes.find((c) => c.code === code && hasRedeemedCode(c, clientId)) || null;
   } catch {
     return null;
   }
@@ -133,7 +121,7 @@ export async function POST(req: Request) {
     webSearch = false,
     modelSettings,
     paidTierCode,
-    paidTierTokens,
+    paidTierClientId,
   }: {
     messages: UIMessage[];
     model?: string;
@@ -145,7 +133,7 @@ export async function POST(req: Request) {
       maxTokens?: number;
     };
     paidTierCode?: string;
-    paidTierTokens?: PaidTierTokens | null;
+    paidTierClientId?: string | null;
   } = await req.json();
 
   const hasUnsupportedAttachment = messages.some((message) =>
@@ -173,26 +161,22 @@ export async function POST(req: Request) {
   const baseSystemPrompt = readSystemPrompt();
 
   // Determine which API keys to use:
-  // 1. If a paid tier code is provided, try to use its tokens
-  // 2. Fall back to global settings (admin-controlled)
-  // 3. Fall back to environment variables
+  // 1. If a redeemed paid tier code is provided, use its server-stored tokens.
+  // 2. Fall back to global settings (admin-controlled).
+  // 3. Fall back to environment variables.
   let googleApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   let deepThinkApiKey = process.env.DEEPTHINK_TOKEN || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   let serperApiKey = process.env.SERPER_API_KEY;
 
-  if (paidTierCode) {
-    const paidCode = await readPaidCodeByRedeemedCode(paidTierCode);
-    if (paidCode) {
+  if (paidTierCode && paidTierClientId) {
+    const paidCode = await readPaidCodeByRedeemedCode(paidTierCode, paidTierClientId);
+    if (paidCode?.expiresAt) {
       const expiresAt = new Date(paidCode.expiresAt);
       if (expiresAt > new Date()) {
         if (paidCode.tokens.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = paidCode.tokens.GOOGLE_GENERATIVE_AI_API_KEY;
         if (paidCode.tokens.DEEPTHINK_TOKEN) deepThinkApiKey = paidCode.tokens.DEEPTHINK_TOKEN;
         if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
       }
-    } else if (paidTierTokens) {
-      if (paidTierTokens.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = paidTierTokens.GOOGLE_GENERATIVE_AI_API_KEY;
-      if (paidTierTokens.DEEPTHINK_TOKEN) deepThinkApiKey = paidTierTokens.DEEPTHINK_TOKEN;
-      if (paidTierTokens.SERPER_API_KEY) serperApiKey = paidTierTokens.SERPER_API_KEY;
     }
   } else {
     // Use global settings for free users / expired users

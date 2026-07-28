@@ -9,7 +9,12 @@ const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 type PaidCode = {
   code: string;
-  expiresAt: string;
+  expiresAt?: string | null;
+  durationMinutes?: number;
+  maxRedemptions?: number;
+  redemptionCount?: number;
+  redeemedUserIds?: string[];
+  activatedAt?: string | null;
   tokens: {
     GOOGLE_GENERATIVE_AI_API_KEY: string;
     DEEPTHINK_TOKEN: string;
@@ -42,7 +47,8 @@ export default function AdminPage() {
 
   // New code form
   const [newCode, setNewCode] = useState("");
-  const [newExpiry, setNewExpiry] = useState("");
+  const [newDurationHours, setNewDurationHours] = useState("24");
+  const [newMaxRedemptions, setNewMaxRedemptions] = useState("1");
   const [newGoogleKey, setNewGoogleKey] = useState("");
   const [newDeepThink, setNewDeepThink] = useState("");
   const [newSerper, setNewSerper] = useState("");
@@ -51,6 +57,8 @@ export default function AdminPage() {
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [editTokens, setEditTokens] = useState<{ GOOGLE_GENERATIVE_AI_API_KEY: string; DEEPTHINK_TOKEN: string; SERPER_API_KEY: string } | null>(null);
   const [editExpiry, setEditExpiry] = useState("");
+  const [editDurationHours, setEditDurationHours] = useState("");
+  const [editMaxRedemptions, setEditMaxRedemptions] = useState("");
 
   const toDateTimeLocalValue = (value: string) => {
     const date = new Date(value);
@@ -160,8 +168,10 @@ export default function AdminPage() {
   };
 
   const handleAddCode = async () => {
-    if (!newCode.trim() || !newExpiry) {
-      setMessage({ type: "error", text: "Code and expiry date are required" });
+    const durationHours = Number(newDurationHours);
+    const maxRedemptions = Number(newMaxRedemptions);
+    if (!newCode.trim() || !Number.isFinite(durationHours) || durationHours <= 0 || !Number.isInteger(maxRedemptions) || maxRedemptions <= 0) {
+      setMessage({ type: "error", text: "Code, duration, and maximum redemptions are required" });
       return;
     }
 
@@ -175,7 +185,8 @@ export default function AdminPage() {
         },
         body: JSON.stringify({
           code: newCode.trim(),
-          expiresAt: new Date(newExpiry).toISOString(),
+          durationMinutes: Math.round(durationHours * 60),
+          maxRedemptions,
           tokens: {
             GOOGLE_GENERATIVE_AI_API_KEY: newGoogleKey,
             DEEPTHINK_TOKEN: newDeepThink,
@@ -189,7 +200,8 @@ export default function AdminPage() {
         setMessage({ type: "success", text: "Code created successfully!" });
         setCodes((currentCodes) => [...currentCodes, data.code]);
         setNewCode("");
-        setNewExpiry("");
+        setNewDurationHours("24");
+        setNewMaxRedemptions("1");
         setNewGoogleKey("");
         setNewDeepThink("");
         setNewSerper("");
@@ -242,8 +254,6 @@ export default function AdminPage() {
         body: JSON.stringify({
           code,
           redeemed: false,
-          redeemedBy: null,
-          redeemedAt: null,
         }),
       });
       const data = await res.json();
@@ -264,7 +274,9 @@ export default function AdminPage() {
   };
 
   const handleEditCode = async (code: string) => {
-    if (!editTokens || !editExpiry) return;
+    const durationHours = Number(editDurationHours);
+    const maxRedemptions = Number(editMaxRedemptions);
+    if (!editTokens || !Number.isFinite(durationHours) || durationHours <= 0 || !Number.isInteger(maxRedemptions) || maxRedemptions <= 0) return;
     setLoading(true);
     try {
       const res = await fetch("/api/admin/codes", {
@@ -275,7 +287,9 @@ export default function AdminPage() {
         },
         body: JSON.stringify({
           code,
-          expiresAt: new Date(editExpiry).toISOString(),
+          durationMinutes: Math.round(durationHours * 60),
+          maxRedemptions,
+          ...(editExpiry ? { expiresAt: new Date(editExpiry).toISOString() } : {}),
           tokens: editTokens,
         }),
       });
@@ -288,6 +302,8 @@ export default function AdminPage() {
         setEditingCode(null);
         setEditTokens(null);
         setEditExpiry("");
+        setEditDurationHours("");
+        setEditMaxRedemptions("");
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update code" });
       }
@@ -476,7 +492,7 @@ export default function AdminPage() {
               <Plus className="w-3.5 h-3.5" />
               Create New Code
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Code</label>
                 <input
@@ -488,11 +504,24 @@ export default function AdminPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Expiry Date</label>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Access Duration (Hours)</label>
                 <input
-                  type="datetime-local"
-                  value={newExpiry}
-                  onChange={(e) => setNewExpiry(e.target.value)}
+                  type="number"
+                  min="0.02"
+                  step="0.01"
+                  value={newDurationHours}
+                  onChange={(e) => setNewDurationHours(e.target.value)}
+                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Maximum Redemptions</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={newMaxRedemptions}
+                  onChange={(e) => setNewMaxRedemptions(e.target.value)}
                   className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-all"
                 />
               </div>
@@ -533,7 +562,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={handleAddCode}
-                disabled={loading || !newCode.trim() || !newExpiry}
+                disabled={loading || !newCode.trim() || Number(newDurationHours) <= 0 || Number(newMaxRedemptions) < 1}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-500/30 transition-all active:scale-95 disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -550,33 +579,41 @@ export default function AdminPage() {
           ) : (
             <div className="space-y-2">
               {codes.map((code) => {
-                const isExpired = new Date(code.expiresAt) <= new Date();
+                const redemptionCount = code.redemptionCount ?? code.redeemedUserIds?.length ?? Number(code.redeemed);
+                const maxRedemptions = code.maxRedemptions ?? 1;
+                const hasStarted = Boolean(code.activatedAt);
+                const isExpired = Boolean(code.expiresAt && new Date(code.expiresAt) <= new Date());
+                const isAtCapacity = redemptionCount >= maxRedemptions;
                 return (
                   <div
                     key={code.code}
                     className={cn(
                       "rounded-2xl border p-4 transition-colors",
-                      code.redeemed
-                        ? "bg-emerald-500/5 border-emerald-500/20"
-                        : isExpired
+                      isExpired
                         ? "bg-rose-500/5 border-rose-500/20"
+                        : redemptionCount > 0
+                        ? "bg-emerald-500/5 border-emerald-500/20"
                         : "bg-white/[0.03] border-white/10"
                     )}
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2.5">
                         <span className="text-sm font-mono font-semibold text-white">{code.code}</span>
-                        {code.redeemed ? (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            Redeemed
-                          </span>
-                        ) : isExpired ? (
+                        {isExpired ? (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
                             Expired
                           </span>
+                        ) : isAtCapacity ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Fully Redeemed
+                          </span>
+                        ) : redemptionCount > 0 ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Active
+                          </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                            Active
+                            Ready
                           </span>
                         )}
                       </div>
@@ -604,13 +641,40 @@ export default function AdminPage() {
 
                     <div className="text-[11px] text-[#8c8f9c] mb-2 flex items-center gap-1.5">
                       <Clock className="w-3 h-3" />
-                      Expires: {new Date(code.expiresAt).toLocaleString()}
-                      {isExpired && !code.redeemed && <span className="text-rose-400"> (Expired)</span>}
+                      {hasStarted && code.expiresAt
+                        ? `Expires: ${new Date(code.expiresAt).toLocaleString()}`
+                        : `Duration: ${(code.durationMinutes ?? 0) / 60} hours`}
+                    </div>
+                    <div className="text-[11px] text-[#8c8f9c] mb-2">
+                      Redemptions: {redemptionCount} / {maxRedemptions}
                     </div>
 
                     {/* Edit code button */}
                     {editingCode === code.code ? (
                       <div className="space-y-2 mt-2 p-3 rounded-xl bg-white/[0.03] border border-white/10">
+                        <div>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">Access Duration (Hours)</label>
+                          <input
+                            type="number"
+                            min="0.02"
+                            step="0.01"
+                            value={editDurationHours}
+                            onChange={(e) => setEditDurationHours(e.target.value)}
+                            className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white/20 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">Maximum Redemptions</label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={editMaxRedemptions}
+                            onChange={(e) => setEditMaxRedemptions(e.target.value)}
+                            className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white/20 transition-all"
+                          />
+                        </div>
+                        {hasStarted && (
                         <div>
                           <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">Expiry Date</label>
                           <input
@@ -620,6 +684,7 @@ export default function AdminPage() {
                             className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white/20 transition-all"
                           />
                         </div>
+                        )}
                         <div>
                           <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">GOOGLE_GENERATIVE_AI_API_KEY</label>
                           <input
@@ -650,7 +715,7 @@ export default function AdminPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => { setEditingCode(null); setEditTokens(null); setEditExpiry(""); }}
+                            onClick={() => { setEditingCode(null); setEditTokens(null); setEditExpiry(""); setEditDurationHours(""); setEditMaxRedemptions(""); }}
                             className="px-3 py-1.5 rounded-lg text-[10px] font-medium text-[#ccc] hover:bg-white/10 transition-colors"
                           >
                             Cancel
@@ -658,7 +723,7 @@ export default function AdminPage() {
                           <button
                             type="button"
                             onClick={() => handleEditCode(code.code)}
-                            disabled={loading || !editExpiry}
+                            disabled={loading || Number(editDurationHours) <= 0 || Number(editMaxRedemptions) < redemptionCount}
                             className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 text-white text-[10px] font-semibold hover:bg-white/15 transition-all active:scale-95"
                           >
                             <Save className="w-3 h-3" />
@@ -672,7 +737,9 @@ export default function AdminPage() {
                         onClick={() => {
                           setEditingCode(code.code);
                           setEditTokens({ ...code.tokens });
-                          setEditExpiry(toDateTimeLocalValue(code.expiresAt));
+                          setEditExpiry(code.expiresAt ? toDateTimeLocalValue(code.expiresAt) : "");
+                          setEditDurationHours(String((code.durationMinutes ?? 0) / 60));
+                          setEditMaxRedemptions(String(maxRedemptions));
                         }}
                         className="text-[11px] text-[#8c8f9c] hover:text-white transition-colors flex items-center gap-1"
                       >

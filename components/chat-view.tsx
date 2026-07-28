@@ -11,7 +11,7 @@ import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, normalizeDataUrl, validateFileSize, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
-import { getPaidTierData, getServerMode } from "@/lib/paid-tier";
+import { getPaidTierClientId, getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
 type Model = "instant" | "expert";
 
@@ -99,8 +99,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           paidData &&
           new Date(paidData.expiresAt) > new Date();
         const paidTierCode = hasActivePaidTier ? paidData.code : null;
-        const paidTierTokens = hasActivePaidTier ? paidData.tokens : null;
-        return { model, deepThink, webSearch, modelSettings, paidTierCode, paidTierTokens };
+        const paidTierClientId = hasActivePaidTier ? getPaidTierClientId() : null;
+        return { model, deepThink, webSearch, modelSettings, paidTierCode, paidTierClientId };
       },
     }),
   });

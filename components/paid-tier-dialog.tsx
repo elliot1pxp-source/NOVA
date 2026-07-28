@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Crown, CheckCircle, Clock, AlertTriangle, ArrowLeft, Globe, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getPaidTierData, setPaidTierData, clearPaidTierData, isPaidUser, getServerMode, setServerMode, ServerMode } from "@/lib/paid-tier";
+import { getPaidTierClientId, getPaidTierData, setPaidTierData, clearPaidTierData, isPaidUser, getServerMode, setServerMode, ServerMode } from "@/lib/paid-tier";
 
 type DialogState = "enter-code" | "paid-user" | "expired";
 
@@ -36,7 +36,7 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
       fetch("/api/paid-tier/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: paidData.code }),
+        body: JSON.stringify({ code: paidData.code, clientId: getPaidTierClientId() }),
       })
         .then((res) => res.json())
         .then((data) => {
@@ -125,7 +125,7 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
       const response = await fetch("/api/paid-tier/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: code.trim() }),
+        body: JSON.stringify({ code: code.trim(), clientId: getPaidTierClientId() }),
       });
 
       const data = await response.json();

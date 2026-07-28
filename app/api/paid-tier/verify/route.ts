@@ -1,18 +1,6 @@
 import { NextResponse } from "next/server";
+import { getMaxRedemptions, getRedemptionCount, getRedeemedUserIds, hasRedeemedCode, isCodeExpired, PaidCode } from "@/lib/paid-codes";
 import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
-
-type PaidCode = {
-  code: string;
-  expiresAt: string;
-  tokens: {
-    GOOGLE_GENERATIVE_AI_API_KEY: string;
-    DEEPTHINK_TOKEN: string;
-    SERPER_API_KEY: string;
-  };
-  redeemed: boolean;
-  redeemedBy?: string | null;
-  redeemedAt?: string | null;
-};
 
 async function readCodes(): Promise<PaidCode[]> {
   try {
@@ -35,10 +23,10 @@ async function writeCodes(codes: PaidCode[]): Promise<void> {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { code } = body;
+    const { code, clientId } = body;
 
-    if (!code || typeof code !== "string") {
-      return NextResponse.json({ error: "Code is required" }, { status: 400 });
+    if (!code || typeof code !== "string" || !clientId || typeof clientId !== "string") {
+      return NextResponse.json({ error: "Code and client ID are required" }, { status: 400 });
     }
 
     const codes = await readCodes();
@@ -48,19 +36,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ valid: false, error: "Invalid code" }, { status: 200 });
     }
 
-    if (found.redeemed) {
-      return NextResponse.json({ valid: false, error: "Code has already been redeemed" }, { status: 200 });
-    }
-
     // Check expiry
-    const expiresAt = new Date(found.expiresAt);
-    if (expiresAt <= new Date()) {
+    if (isCodeExpired(found)) {
       return NextResponse.json({ valid: false, error: "Code has expired" }, { status: 200 });
     }
 
-    // Mark as redeemed
+    const redeemedUserIds = getRedeemedUserIds(found);
+    if (hasRedeemedCode(found, clientId)) {
+      if (redeemedUserIds.length === 0) {
+        return NextResponse.json({ valid: false, error: "Code has already been redeemed" }, { status: 200 });
+      }
+
+      return NextResponse.json({
+        valid: true,
+        data: {
+          code: found.code,
+          expiresAt: found.expiresAt,
+          tokens: found.tokens,
+        },
+      });
+    }
+
+    if (getRedemptionCount(found) >= getMaxRedemptions(found)) {
+      return NextResponse.json({ valid: false, error: "Code has reached its redemption limit" }, { status: 200 });
+    }
+
+    const now = new Date();
+    if (!found.activatedAt && found.durationMinutes) {
+      found.activatedAt = now.toISOString();
+      found.expiresAt = new Date(now.getTime() + found.durationMinutes * 60_000).toISOString();
+    }
+
+    // Add this user without restarting the shared activation timer.
+    found.redeemedUserIds = [...redeemedUserIds, clientId];
+    found.redemptionCount = found.redeemedUserIds.length;
     found.redeemed = true;
-    found.redeemedAt = new Date().toISOString();
+    found.redeemedAt = found.activatedAt || now.toISOString();
     await writeCodes(codes);
 
     return NextResponse.json({

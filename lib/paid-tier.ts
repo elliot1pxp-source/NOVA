@@ -2,6 +2,7 @@
 
 // Keys for localStorage
 const PAID_TIER_KEY = "nova_paid_tier_v1";
+const PAID_TIER_CLIENT_ID_KEY = "nova_paid_tier_client_id_v1";
 const ADMIN_AUTH_KEY = "nova_admin_auth_v1";
 const SERVER_MODE_KEY = "nova_server_mode_v1";
 
@@ -72,6 +73,17 @@ export function clearPaidTierData() {
   } catch {
     // fail silently
   }
+}
+
+export function getPaidTierClientId(): string {
+  if (typeof window === "undefined") return "";
+
+  const existingId = window.localStorage.getItem(PAID_TIER_CLIENT_ID_KEY);
+  if (existingId) return existingId;
+
+  const clientId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  window.localStorage.setItem(PAID_TIER_CLIENT_ID_KEY, clientId);
+  return clientId;
 }
 
 export function getPaidTierExpiryDate(): Date | null {
