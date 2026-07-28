@@ -21,9 +21,9 @@ import {
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
-  instant: "gemini-3-flash-preview",
-  expert: "gemini-3.1-flash-lite",
-  deepthink: "gemini-3-flash-preview",
+  instant: "gemini-3.1-flash-lite",
+  expert: "gemini-3.1-pro-preview",
+  deepthink: "gemini-3.1-flash-lite",
   websearch: "gemini-robotics-er-1.6-preview",
 };
 
