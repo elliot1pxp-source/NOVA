@@ -24,10 +24,10 @@ export const maxDuration = 60;
 const POLLINATIONS_BASE_URL = "https://gen.pollinations.ai/v1";
 
 const MODELS: Record<string, string> = {
-  instant: "",
-  expert: "",
-  deepthink: "",
-  websearch: "",
+  instant: "TESTING",
+  expert: "TESTING",
+  deepthink: "TESTING",
+  websearch: "TESTING",
 };
 
 function getServerEnvValue(...names: string[]): string | undefined {
