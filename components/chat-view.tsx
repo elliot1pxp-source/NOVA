@@ -91,6 +91,25 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     messages: initialMessages as never,
     transport: new DefaultChatTransport({
       api: "/api/chat",
+      fetch: async (url, options) => {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          let message = "Something went wrong while contacting the AI service.";
+          try {
+            const text = await response.text();
+            if (text) {
+              const payload = JSON.parse(text);
+              if (typeof payload?.error === "string") {
+                message = payload.error;
+              }
+            }
+          } catch {
+            // fall back to the default message
+          }
+          throw new Error(message);
+        }
+        return response;
+      },
       body: () => {
         const paidData = getPaidTierData();
         const serverMode = getServerMode();

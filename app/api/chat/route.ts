@@ -126,6 +126,7 @@ async function readPaidCodeByRedeemedCode(code: string, clientId: string): Promi
 }
 
 export async function POST(req: Request) {
+  try {
   const {
     messages,
     model: modelKey = "instant",
@@ -199,8 +200,11 @@ export async function POST(req: Request) {
   }
 
   if (!apiKey) {
-    throw new Error(
-      "The AI provider is not configured. Add POLLINATIONS_API_KEY (or POLLINATIONS_TOKEN) in your Vercel environment variables and redeploy."
+    return Response.json(
+      {
+        error: "The AI provider is not configured. Add POLLINATIONS_API_KEY (or POLLINATIONS_TOKEN) in your Vercel environment variables and redeploy.",
+      },
+      { status: 500 }
     );
   }
 
@@ -380,4 +384,9 @@ STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to
   });
 
   return createUIMessageStreamResponse({ stream });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+    console.error("[chat] POST failed", error);
+    return Response.json({ error: message }, { status: 500 });
+  }
 }
