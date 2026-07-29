@@ -30,6 +30,17 @@ const MODELS: Record<string, string> = {
   websearch: "JustScriptzz/kimi-k2.6",
 };
 
+function getServerEnvValue(...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return undefined;
+}
+
 function readSystemPrompt(): string {
   try {
     const filePath = path.join(process.cwd(), "systemprompt.txt");
@@ -165,9 +176,9 @@ export async function POST(req: Request) {
   // 1. If a redeemed paid tier code is provided, use its server-stored tokens.
   // 2. Fall back to global settings (admin-controlled).
   // 3. Fall back to environment variables.
-  let apiKey = process.env.POLLINATIONS_API_KEY;
-  let deepThinkApiKey = process.env.DEEPTHINK_TOKEN || process.env.POLLINATIONS_API_KEY;
-  let serperApiKey = process.env.SERPER_API_KEY;
+  let apiKey = getServerEnvValue("POLLINATIONS_API_KEY", "POLLINATIONS_TOKEN", "OPENAI_API_KEY");
+  let deepThinkApiKey = getServerEnvValue("DEEPTHINK_TOKEN", "DEEPTHINK_API_KEY", "POLLINATIONS_API_KEY", "POLLINATIONS_TOKEN");
+  let serperApiKey = getServerEnvValue("SERPER_API_KEY");
 
   if (paidTierCode && paidTierClientId) {
     const paidCode = await readPaidCodeByRedeemedCode(paidTierCode, paidTierClientId);
@@ -185,6 +196,12 @@ export async function POST(req: Request) {
     if (globalSettings.POLLINATIONS_API_KEY) apiKey = globalSettings.POLLINATIONS_API_KEY;
     if (globalSettings.DEEPTHINK_TOKEN) deepThinkApiKey = globalSettings.DEEPTHINK_TOKEN;
     if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
+  }
+
+  if (!apiKey) {
+    throw new Error(
+      "The AI provider is not configured. Add POLLINATIONS_API_KEY (or POLLINATIONS_TOKEN) in your Vercel environment variables and redeploy."
+    );
   }
 
   const pollinationsClient = createOpenAI({
@@ -329,14 +346,21 @@ STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to
       }
 
       // --- Final streaming response (uses Pollinations API key) ---
-      const result = streamText({
-        model: pollinationsClient.chat(modelId),
-        system: finalSystemPrompt,
-        messages: modelMessages,
-        ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
-        ...(modelSettings?.topK !== undefined && { topK: modelSettings.topK }),
-        ...(modelSettings?.maxTokens !== undefined && { maxOutputTokens: modelSettings.maxTokens }),
-      });
+      let result;
+      try {
+        result = streamText({
+          model: pollinationsClient.chat(modelId),
+          system: finalSystemPrompt,
+          messages: modelMessages,
+          ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
+          ...(modelSettings?.topK !== undefined && { topK: modelSettings.topK }),
+          ...(modelSettings?.maxTokens !== undefined && { maxOutputTokens: modelSettings.maxTokens }),
+        });
+      } catch (error) {
+        console.error("[chat] streamText failed", error);
+        const message = error instanceof Error ? error.message : "Unknown provider error";
+        throw new Error(`AI request failed: ${message}`);
+      }
       
       writer.merge(
         toUIMessageStream({
