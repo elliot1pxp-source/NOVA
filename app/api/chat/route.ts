@@ -378,12 +378,25 @@ STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to
           stream: result.stream,
           sendStart: false,
           sendFinish: false,
+          onError: (error) => {
+            console.error("[chat] ui stream error", error);
+            if (error instanceof Error) {
+              return error.message;
+            }
+            return typeof error === "string" ? error : "An error occurred while processing your request.";
+          },
         })
       );
     },
   });
 
-  return createUIMessageStreamResponse({ stream });
+  try {
+    return createUIMessageStreamResponse({ stream });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+    console.error("[chat] stream response failed", error);
+    return Response.json({ error: message }, { status: 500 });
+  }
   } catch (error) {
     const message = error instanceof Error ? error.message : "An unexpected error occurred.";
     console.error("[chat] POST failed", error);
