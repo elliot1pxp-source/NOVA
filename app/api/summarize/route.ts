@@ -4,8 +4,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
-  instant: "JustScriptzz/kimi-k2.6",
-  expert: "JustScriptzz/kimi-k2.6-thinking",
+  instant: "JustScriptzz/qwen3.6-max-preview",
+  expert: "JustScriptzz/qwen3.6-max-preview",
 };
 
 export async function POST(req: Request) {
