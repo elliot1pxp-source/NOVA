@@ -124,6 +124,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }),
   });
 
+  const displayError = useMemo(() => {
+    if (!error) return "";
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    if (typeof (error as { message?: string }).message === "string") return (error as { message?: string }).message;
+    return "An error occurred while processing your request.";
+  }, [error]);
+
   const isLoading = status === "submitted" || status === "streaming";
   const lastAssistantMessage = [...messages]
     .reverse()
@@ -487,13 +495,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 );
               })}
               {showTypingIndicator && <TypingIndicator />}
-              {error && (
+              {displayError && (
                 <div className="flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-3 sm:py-4">
                   <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1">
                     <img src="/nova-logo.png" alt="NOVA" width={18} height={18} className="sm:w-[20px] sm:h-[20px]" />
                   </div>
                   <div className="flex-1 text-xs sm:text-sm leading-relaxed text-[#e87070] bg-[#1e1010] border border-[#3a1a1a] rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3">
-                    {error instanceof Error ? error.message : "Something went wrong. Please check your internet connection or try again in a moment."}
+                    {displayError}
                   </div>
                 </div>
               )}
