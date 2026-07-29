@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       activatedAt: null,
       expiresAt: null,
       tokens: {
-        GOOGLE_GENERATIVE_AI_API_KEY: tokens.GOOGLE_GENERATIVE_AI_API_KEY || "",
+        POLLINATIONS_API_KEY: tokens.POLLINATIONS_API_KEY || "",
         DEEPTHINK_TOKEN: tokens.DEEPTHINK_TOKEN || "",
         SERPER_API_KEY: tokens.SERPER_API_KEY || "",
       },
@@ -141,7 +141,7 @@ export async function PUT(req: Request) {
       codes[index].maxRedemptions = maxUses;
     }
     if (tokens) {
-      if (tokens.GOOGLE_GENERATIVE_AI_API_KEY !== undefined) codes[index].tokens.GOOGLE_GENERATIVE_AI_API_KEY = tokens.GOOGLE_GENERATIVE_AI_API_KEY;
+      if (tokens.POLLINATIONS_API_KEY !== undefined) codes[index].tokens.POLLINATIONS_API_KEY = tokens.POLLINATIONS_API_KEY;
       if (tokens.DEEPTHINK_TOKEN !== undefined) codes[index].tokens.DEEPTHINK_TOKEN = tokens.DEEPTHINK_TOKEN;
       if (tokens.SERPER_API_KEY !== undefined) codes[index].tokens.SERPER_API_KEY = tokens.SERPER_API_KEY;
     }

@@ -13,7 +13,7 @@ export type PaidTierData = {
   code: string;
   expiresAt: string; // ISO string - server-controlled expiry
   tokens: {
-    GOOGLE_GENERATIVE_AI_API_KEY: string;
+    POLLINATIONS_API_KEY: string;
     DEEPTHINK_TOKEN: string;
     SERPER_API_KEY: string;
   };

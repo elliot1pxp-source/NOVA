@@ -1,5 +1,5 @@
 /**
- * MIME types accepted by the Gemini API's current file-input guidance.
+ * MIME types accepted by the Pollinations/OpenAI API's current file-input guidance.
  * Video is deliberately not supported in NOVA (including video/mp4).
  * Extended to support common programming language source files.
  */

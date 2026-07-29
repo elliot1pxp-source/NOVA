@@ -16,7 +16,7 @@ type PaidCode = {
   redeemedUserIds?: string[];
   activatedAt?: string | null;
   tokens: {
-    GOOGLE_GENERATIVE_AI_API_KEY: string;
+    POLLINATIONS_API_KEY: string;
     DEEPTHINK_TOKEN: string;
     SERPER_API_KEY: string;
   };
@@ -26,7 +26,7 @@ type PaidCode = {
 };
 
 type GlobalSettings = {
-  GOOGLE_GENERATIVE_AI_API_KEY: string;
+  POLLINATIONS_API_KEY: string;
   DEEPTHINK_TOKEN: string;
   SERPER_API_KEY: string;
 };
@@ -37,7 +37,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [codes, setCodes] = useState<PaidCode[]>([]);
   const [settings, setSettings] = useState<GlobalSettings>({
-    GOOGLE_GENERATIVE_AI_API_KEY: "",
+    POLLINATIONS_API_KEY: "",
     DEEPTHINK_TOKEN: "",
     SERPER_API_KEY: "",
   });
@@ -49,13 +49,13 @@ export default function AdminPage() {
   const [newCode, setNewCode] = useState("");
   const [newDurationHours, setNewDurationHours] = useState("24");
   const [newMaxRedemptions, setNewMaxRedemptions] = useState("1");
-  const [newGoogleKey, setNewGoogleKey] = useState("");
+  const [newPollinationsKey, setNewPollinationsKey] = useState("");
   const [newDeepThink, setNewDeepThink] = useState("");
   const [newSerper, setNewSerper] = useState("");
 
   // Editing
   const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editTokens, setEditTokens] = useState<{ GOOGLE_GENERATIVE_AI_API_KEY: string; DEEPTHINK_TOKEN: string; SERPER_API_KEY: string } | null>(null);
+  const [editTokens, setEditTokens] = useState<{ POLLINATIONS_API_KEY: string; DEEPTHINK_TOKEN: string; SERPER_API_KEY: string } | null>(null);
   const [editExpiry, setEditExpiry] = useState("");
   const [editDurationHours, setEditDurationHours] = useState("");
   const [editMaxRedemptions, setEditMaxRedemptions] = useState("");
@@ -188,7 +188,7 @@ export default function AdminPage() {
           durationMinutes: Math.round(durationHours * 60),
           maxRedemptions,
           tokens: {
-            GOOGLE_GENERATIVE_AI_API_KEY: newGoogleKey,
+            POLLINATIONS_API_KEY: newPollinationsKey,
             DEEPTHINK_TOKEN: newDeepThink,
             SERPER_API_KEY: newSerper,
           },
@@ -202,7 +202,7 @@ export default function AdminPage() {
         setNewCode("");
         setNewDurationHours("24");
         setNewMaxRedemptions("1");
-        setNewGoogleKey("");
+        setNewPollinationsKey("");
         setNewDeepThink("");
         setNewSerper("");
       } else {
@@ -423,13 +423,13 @@ export default function AdminPage() {
 
           <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[#8c8f9c] mb-1.5">GOOGLE_GENERATIVE_AI_API_KEY</label>
+              <label className="block text-xs font-medium text-[#8c8f9c] mb-1.5">POLLINATIONS_API_KEY</label>
               <input
                 type="text"
-                value={settings.GOOGLE_GENERATIVE_AI_API_KEY}
-                onChange={(e) => setSettings({ ...settings, GOOGLE_GENERATIVE_AI_API_KEY: e.target.value })}
+                value={settings.POLLINATIONS_API_KEY}
+                onChange={(e) => setSettings({ ...settings, POLLINATIONS_API_KEY: e.target.value })}
                 className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                placeholder="Enter Google API key..."
+                placeholder="Enter Pollinations API key..."
               />
             </div>
             <div>
@@ -528,13 +528,13 @@ export default function AdminPage() {
             </div>
             <div className="space-y-3 mb-3">
               <div>
-                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">GOOGLE_GENERATIVE_AI_API_KEY (for this code)</label>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">POLLINATIONS_API_KEY (for this code)</label>
                 <input
                   type="text"
-                  value={newGoogleKey}
-                  onChange={(e) => setNewGoogleKey(e.target.value)}
+                  value={newPollinationsKey}
+                  onChange={(e) => setNewPollinationsKey(e.target.value)}
                   className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                  placeholder="Enter Google API key for this code..."
+                  placeholder="Enter Pollinations API key for this code..."
                 />
               </div>
               <div>
@@ -686,11 +686,11 @@ export default function AdminPage() {
                         </div>
                         )}
                         <div>
-                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">GOOGLE_GENERATIVE_AI_API_KEY</label>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">POLLINATIONS_API_KEY</label>
                           <input
                             type="text"
-                            value={editTokens?.GOOGLE_GENERATIVE_AI_API_KEY || ""}
-                            onChange={(e) => setEditTokens({ ...editTokens!, GOOGLE_GENERATIVE_AI_API_KEY: e.target.value })}
+                            value={editTokens?.POLLINATIONS_API_KEY || ""}
+                            onChange={(e) => setEditTokens({ ...editTokens!, POLLINATIONS_API_KEY: e.target.value })}
                             className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-white/20 transition-all"
                           />
                         </div>

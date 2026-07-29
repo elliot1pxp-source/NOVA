@@ -1,5 +1,5 @@
 export type PaidCodeTokens = {
-  GOOGLE_GENERATIVE_AI_API_KEY: string;
+  POLLINATIONS_API_KEY: string;
   DEEPTHINK_TOKEN: string;
   SERPER_API_KEY: string;
 };

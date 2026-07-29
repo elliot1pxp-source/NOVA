@@ -7,13 +7,13 @@ export const revalidate = 0;
 const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type GlobalSettings = {
-  GOOGLE_GENERATIVE_AI_API_KEY: string;
+  POLLINATIONS_API_KEY: string;
   DEEPTHINK_TOKEN: string;
   SERPER_API_KEY: string;
 };
 
 const DEFAULT_SETTINGS: GlobalSettings = {
-  GOOGLE_GENERATIVE_AI_API_KEY: "",
+  POLLINATIONS_API_KEY: "",
   DEEPTHINK_TOKEN: "",
   SERPER_API_KEY: "",
 };
@@ -59,11 +59,11 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json();
-    const { GOOGLE_GENERATIVE_AI_API_KEY, DEEPTHINK_TOKEN, SERPER_API_KEY } = body;
+    const { POLLINATIONS_API_KEY, DEEPTHINK_TOKEN, SERPER_API_KEY } = body;
     
     const settings = await readSettings();
 
-    if (GOOGLE_GENERATIVE_AI_API_KEY !== undefined) settings.GOOGLE_GENERATIVE_AI_API_KEY = GOOGLE_GENERATIVE_AI_API_KEY;
+    if (POLLINATIONS_API_KEY !== undefined) settings.POLLINATIONS_API_KEY = POLLINATIONS_API_KEY;
     if (DEEPTHINK_TOKEN !== undefined) settings.DEEPTHINK_TOKEN = DEEPTHINK_TOKEN;
     if (SERPER_API_KEY !== undefined) settings.SERPER_API_KEY = SERPER_API_KEY;
 

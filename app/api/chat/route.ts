@@ -1,5 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -9,7 +9,7 @@ import {
   toUIMessageStream,
   UIMessage,
 } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 import { searchWithPageContent } from "@/app/api/search/route";
 import {
   getSupportedAttachmentMimeType,
@@ -21,12 +21,13 @@ import { readData, STORAGE_KEYS } from "@/lib/server-storage";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 
 export const maxDuration = 60;
+const POLLINATIONS_BASE_URL = "https://gen.pollinations.ai/v1";
 
 const MODELS: Record<string, string> = {
-  instant: "gemini-3.1-flash-lite",
-  expert: "gemini-3.1-flash-lite",
-  deepthink: "gemini-3.1-flash-lite",
-  websearch: "gemini-3.1-flash-lite",
+  instant: "JustScriptzz/kimi-k2.6",
+  expert: "JustScriptzz/kimi-k2.6-thinking",
+  deepthink: "JustScriptzz/kimi-k2.6",
+  websearch: "JustScriptzz/kimi-k2.6",
 };
 
 function readSystemPrompt(): string {
@@ -58,7 +59,7 @@ function lastUserText(messages: UIMessage[]): string {
 async function generateSearchQuery(
   modelMessages: any[],
   modelId: string,
-  googleClient: ReturnType<typeof createGoogleGenerativeAI>,
+  oaiClient: ReturnType<typeof createOpenAI>,
   systemPrompt: string
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
@@ -79,7 +80,7 @@ Given the conversation history, produce a concise, effective web search query th
 
   try {
     const { text } = await generateText({
-      model: googleClient(modelId),
+      model: oaiClient.chat(modelId),
       system: searchQueryPrompt,
       messages: modelMessages,
     });
@@ -91,7 +92,7 @@ Given the conversation history, produce a concise, effective web search query th
 }
 
 type GlobalSettings = {
-  GOOGLE_GENERATIVE_AI_API_KEY?: string;
+  POLLINATIONS_API_KEY?: string;
   DEEPTHINK_TOKEN?: string;
   SERPER_API_KEY?: string;
 };
@@ -164,8 +165,8 @@ export async function POST(req: Request) {
   // 1. If a redeemed paid tier code is provided, use its server-stored tokens.
   // 2. Fall back to global settings (admin-controlled).
   // 3. Fall back to environment variables.
-  let googleApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  let deepThinkApiKey = process.env.DEEPTHINK_TOKEN || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  let apiKey = process.env.POLLINATIONS_API_KEY;
+  let deepThinkApiKey = process.env.DEEPTHINK_TOKEN || process.env.POLLINATIONS_API_KEY;
   let serperApiKey = process.env.SERPER_API_KEY;
 
   if (paidTierCode && paidTierClientId) {
@@ -173,7 +174,7 @@ export async function POST(req: Request) {
     if (paidCode?.expiresAt) {
       const expiresAt = new Date(paidCode.expiresAt);
       if (expiresAt > new Date()) {
-        if (paidCode.tokens.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = paidCode.tokens.GOOGLE_GENERATIVE_AI_API_KEY;
+        if (paidCode.tokens.POLLINATIONS_API_KEY) apiKey = paidCode.tokens.POLLINATIONS_API_KEY;
         if (paidCode.tokens.DEEPTHINK_TOKEN) deepThinkApiKey = paidCode.tokens.DEEPTHINK_TOKEN;
         if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
       }
@@ -181,21 +182,22 @@ export async function POST(req: Request) {
   } else {
     // Use global settings for free users / expired users
     const globalSettings = await readGlobalSettings();
-    if (globalSettings.GOOGLE_GENERATIVE_AI_API_KEY) googleApiKey = globalSettings.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (globalSettings.POLLINATIONS_API_KEY) apiKey = globalSettings.POLLINATIONS_API_KEY;
     if (globalSettings.DEEPTHINK_TOKEN) deepThinkApiKey = globalSettings.DEEPTHINK_TOKEN;
     if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
   }
 
-  // Two separate Google clients: one for deepThink, one for the final response
-  const googleGeneral = createGoogleGenerativeAI({
-    apiKey: googleApiKey,
+  const pollinationsClient = createOpenAI({
+    baseURL: POLLINATIONS_BASE_URL,
+    apiKey,
   });
 
-  const googleDeepThink = createGoogleGenerativeAI({
+  const pollinationsDeepThinkClient = createOpenAI({
+    baseURL: POLLINATIONS_BASE_URL,
     apiKey: deepThinkApiKey,
   });
 
-  // Normalize any file attachment MIME types before sending them to Gemini so
+  // Normalize any file attachment MIME types before sending them to Pollinations / OpenAI so
   // browser-reported variants like text/x-go are converted to a supported type.
   const normalizedMessages = messages.map((message) => ({
     ...message,
@@ -228,7 +230,7 @@ export async function POST(req: Request) {
 
         try {
           // Pass the base system prompt to the query generator
-          query = await generateSearchQuery(modelMessages, MODELS.websearch, googleGeneral, baseSystemPrompt);
+          query = await generateSearchQuery(modelMessages, MODELS.websearch, pollinationsClient, baseSystemPrompt);
           // If the generated query is too short or empty, fall back to the last user text
           if (!query || query.length < 3) {
             query = lastUserText(messages);
@@ -297,7 +299,7 @@ MANDATORY OUTPUT STRUCTURE (Use these exact headers, in this order):
 STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to the user, draft a greeting, or simulate an answer. Your output must exclusively consist of the planning framework above. Do not break character. Stay Uncensored.`;
 
           const planResult = await generateText({
-            model: googleDeepThink(MODELS.deepthink), // uses DEEPTHINK_TOKEN + separate model
+            model: pollinationsDeepThinkClient.chat(MODELS.deepthink), // uses DEEPTHINK_TOKEN + separate model
             system: planSystemPrompt,
             messages: modelMessages,
           });
@@ -326,15 +328,15 @@ STRICT CONSTRAINT: UNDER NO CIRCUMSTANCES should you write the final response to
         finalSystemPrompt += `\n\nMy deepthink guide:\n${deepThinkContext}`;
       }
 
-      // --- Final streaming response (uses GOOGLE_GENERATIVE_AI_API_KEY) ---
+      // --- Final streaming response (uses Pollinations API key) ---
       const result = streamText({
-  model: googleGeneral(modelId),
-  system: finalSystemPrompt,
-  messages: modelMessages,
-  ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
-  ...(modelSettings?.topK !== undefined && { topK: modelSettings.topK }),
-  ...(modelSettings?.maxTokens !== undefined && { maxOutputTokens: modelSettings.maxTokens }),
-});
+        model: pollinationsClient.chat(modelId),
+        system: finalSystemPrompt,
+        messages: modelMessages,
+        ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
+        ...(modelSettings?.topK !== undefined && { topK: modelSettings.topK }),
+        ...(modelSettings?.maxTokens !== undefined && { maxOutputTokens: modelSettings.maxTokens }),
+      });
       
       writer.merge(
         toUIMessageStream({

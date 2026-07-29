@@ -1,11 +1,11 @@
 import { convertToModelMessages, generateText, UIMessage } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
-  instant: "gemini-flash-lite-latest",
-  expert: "gemini-flash-lite-latest",
+  instant: "JustScriptzz/kimi-k2.6",
+  expert: "JustScriptzz/kimi-k2.6-thinking",
 };
 
 export async function POST(req: Request) {
@@ -16,11 +16,12 @@ export async function POST(req: Request) {
     return Response.json({ error: "Messages are required." }, { status: 400 });
   }
 
-  const google = createGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  const client = createOpenAI({
+    baseURL: "https://gen.pollinations.ai/v1",
+    apiKey: process.env.POLLINATIONS_API_KEY,
   });
   const result = await generateText({
-    model: google(MODELS[modelKey] ?? MODELS.instant),
+    model: client.chat(MODELS[modelKey] ?? MODELS.instant),
     system: "You maintain long-running conversation memory for NOVA. Summarize the supplied conversation so it can replace older messages as private context. Preserve the user's goals, relevant background, decisions, constraints, unresolved questions, and important facts. Do not address the user, add new information, or mention that a summary was made. Be concise but specific.",
     messages: await convertToModelMessages(messages),
   });
