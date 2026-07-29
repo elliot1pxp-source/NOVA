@@ -21,7 +21,7 @@ import { readData, STORAGE_KEYS } from "@/lib/server-storage";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 
 export const maxDuration = 60;
-const POLLINATIONS_BASE_URL = "https://gen.pollinations.ai/v1";
+const POLLINATIONS_BASE_URL = "https://";
 
 const MODELS: Record<string, string> = {
   instant: "TESTING",
