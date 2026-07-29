@@ -234,6 +234,13 @@ export async function POST(req: Request) {
   const modelMessages = await convertToModelMessages(normalizedMessages);
 
   const stream = createUIMessageStream({
+    onError: (error) => {
+      console.error("[chat] stream error", error);
+      if (error instanceof Error) {
+        return error.message;
+      }
+      return typeof error === "string" ? error : "An error occurred while processing your request.";
+    },
     execute: async ({ writer }) => {
       let systemPrompt = baseSystemPrompt;
       let searchContext = "";
