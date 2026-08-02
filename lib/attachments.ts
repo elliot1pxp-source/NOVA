@@ -266,6 +266,16 @@ export function isImageMimeType(mimeType?: string): boolean {
   return normalized.startsWith("image/");
 }
 
+export function isTextMimeType(mimeType?: string): boolean {
+  if (!mimeType) return false;
+  const normalized = normalizedMimeType(mimeType);
+  return (
+    normalized.startsWith("text/") ||
+    normalized === "application/json" ||
+    normalized === "application/xml"
+  );
+}
+
 export function validateFileSize(file: { size: number; type?: string; name?: string }): {
   valid: boolean;
   error?: string;

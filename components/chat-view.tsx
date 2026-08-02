@@ -10,7 +10,7 @@ import { ChatMessage, TypingIndicator } from "./chat-message";
 import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
-import { getSupportedAttachmentMimeType, normalizeDataUrl, validateFileSize, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
+import { getSupportedAttachmentMimeType, isImageMimeType, normalizeDataUrl, validateFileSize, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
 import { getPaidTierClientId, getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
 type Model = "instant" | "expert";
@@ -317,10 +317,22 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
   const handleAddFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
+
     const acceptedFiles: File[] = [];
     let errorMsg = "";
 
     for (const file of Array.from(files)) {
+      const mimeType = getSupportedAttachmentMimeType({ mimeType: file.type, filename: file.name });
+      if (!mimeType) {
+        errorMsg = `Unsupported file type. ${SUPPORTED_ATTACHMENT_DESCRIPTION}`;
+        continue;
+      }
+
+      if (isImageMimeType(mimeType)) {
+        errorMsg = "Image uploads are not supported.";
+        continue;
+      }
+
       const validation = validateFileSize(file);
       if (!validation.valid) {
         errorMsg = validation.error || `Unsupported file type. ${SUPPORTED_ATTACHMENT_DESCRIPTION}`;
@@ -338,7 +350,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       previewUrl: URL.createObjectURL(file),
     }));
     setAttachments((prev) => [...prev, ...next]);
-  }, []);
+  }, [model]);
 
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachments((prev) => {
@@ -349,6 +361,17 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, []);
 
   const handleAttachExistingFile = useCallback((file: ChatFile) => {
+    const mimeType = getSupportedAttachmentMimeType({ mimeType: file.mimeType, filename: file.name });
+    if (!mimeType) {
+      setAttachmentError(`Unsupported file type. ${SUPPORTED_ATTACHMENT_DESCRIPTION}`);
+      return;
+    }
+
+    if (isImageMimeType(mimeType)) {
+      setAttachmentError("Image uploads are not supported.");
+      return;
+    }
+
     setAttachments((prev) => {
       if (prev.some((a) => a.source === "existing" && a.existingFile.id === file.id)) {
         return prev;
@@ -363,7 +386,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         },
       ];
     });
-  }, []);
+  }, [model]);
 
   const handleSubmit = async () => {
     if ((!input.trim() && attachments.length === 0) || isLoading) return;

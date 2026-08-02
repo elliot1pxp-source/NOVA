@@ -14,6 +14,8 @@ import { searchWithPageContent } from "@/app/api/search/route";
 import {
   getSupportedAttachmentMimeType,
   isSupportedAttachment,
+  isImageMimeType,
+  isTextMimeType,
   normalizeAttachmentForModel,
   SUPPORTED_ATTACHMENT_DESCRIPTION,
 } from "@/lib/attachments";
@@ -170,23 +172,24 @@ export async function POST(req: Request) {
     paidTierClientId?: string | null;
   } = await req.json();
 
-  const hasUnsupportedAttachment = messages.some((message) =>
-    message.parts.some(
-      (part) =>
-        part.type === "file" &&
-        !isSupportedAttachment({
-          mimeType: getSupportedAttachmentMimeType({
-            mimeType: (part as { mediaType?: string; mimeType?: string }).mediaType ?? (part as { mediaType?: string; mimeType?: string }).mimeType,
-            filename: (part as { filename?: string }).filename,
-          }),
-          filename: (part as { filename?: string }).filename,
-        })
-    )
+  const invalidAttachment = messages.some((message) =>
+    message.parts.some((part) => {
+      if (part.type !== "file") return false;
+
+      const mimeType = getSupportedAttachmentMimeType({
+        mimeType:
+          (part as { mediaType?: string; mimeType?: string }).mediaType ??
+          (part as { mediaType?: string; mimeType?: string }).mimeType,
+        filename: (part as { filename?: string }).filename,
+      });
+
+      return !mimeType || isImageMimeType(mimeType);
+    })
   );
 
-  if (hasUnsupportedAttachment) {
+  if (invalidAttachment) {
     return Response.json(
-      { error: `Unsupported attachment type. ${SUPPORTED_ATTACHMENT_DESCRIPTION}` },
+      { error: "Image uploads are not supported." },
       { status: 400 }
     );
   }
@@ -229,17 +232,38 @@ export async function POST(req: Request) {
 
   // Normalize any file attachment MIME types before sending them to the model provider so
   // browser-reported variants like text/x-go are converted to a supported type.
+  function decodeDataUrlToText(dataUrl: string) {
+    const match = dataUrl.match(/^data:[^;]+;base64,(.*)$/);
+    if (!match) return dataUrl;
+    return Buffer.from(match[1], "base64").toString("utf-8");
+  }
+
   const normalizedMessages = messages.map((message) => ({
     ...message,
-    parts: message.parts.map((part) => {
+    parts: message.parts.flatMap((part) => {
       if (part.type !== "file") {
-        return part;
+        return [part];
       }
 
-      // Cast to any to work around type narrowing issues with FileUIPart.
-      // normalizeAttachmentForModel preserves all original properties (type,
-      // url, filename) and only overwrites mediaType / mimeType.
-      return normalizeAttachmentForModel(part as any) as any;
+      const mimeType = getSupportedAttachmentMimeType({
+        mimeType:
+          (part as { mediaType?: string; mimeType?: string }).mediaType ??
+          (part as { mediaType?: string; mimeType?: string }).mimeType,
+        filename: (part as { filename?: string }).filename,
+      });
+
+      if (mimeType && isTextMimeType(mimeType)) {
+        const textContent = decodeDataUrlToText((part as { url: string }).url);
+        const filename = (part as { filename?: string }).filename || "attachment";
+        return [
+          {
+            type: "text" as const,
+            text: `File: ${filename}\nMime-Type: ${mimeType}\n\n${textContent}`,
+          },
+        ];
+      }
+
+      return [normalizeAttachmentForModel(part as any) as any];
     }),
   }));
 

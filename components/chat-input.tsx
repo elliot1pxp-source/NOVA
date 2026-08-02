@@ -189,7 +189,7 @@ export function ChatInput({
               />
 
               {/* Reuse Storage Files Dropdown/Pill */}
-              {existingFiles.length > 0 && onAttachExistingFile && (
+              {existingFiles.length > 0 && onAttachExistingFile && model === "instant" && (
                 <div className="relative group/files">
                   <button
                     type="button"
