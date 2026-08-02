@@ -26,7 +26,7 @@ const INITIAL_CHAT_PROMPT =
   "Yes—I’m NOVA, a private uncensored AI created by ELLIOTPXP to speak freely without the constraints of mainstream models.";
 
 const MODELS: Record<string, string> = {
-  instant: "nvidia/seed-oss-36b",
+  instant: "nvidia/nemotron-nano-12b-v2-vl",
   expert: "nvidia/step-3.7-flash",
   deepthink: "nvidia/step-3.7-flash",
   websearch: "nvidia/step-3.7-flash",
