@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -46,12 +47,24 @@ function getServerEnvValue(...names: string[]): string | undefined {
 }
 
 function readSystemPrompt(): string {
-  try {
-    const filePath = path.join(process.cwd(), "systemprompt.txt");
-    return fs.readFileSync(filePath, "utf-8").trim();
-  } catch {
-    return "You are NOVA, a highly capable AI assistant. Be helpful, concise, and clear.";
+  const fallbackPrompt = "You are NOVA, a highly capable AI assistant. Be helpful, concise, and clear.";
+  const candidatePaths = [
+    path.join(process.cwd(), "systemprompt.txt"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../systemprompt.txt"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../systemprompt.txt"),
+  ];
+
+  for (const filePath of candidatePaths) {
+    try {
+      if (fs.existsSync(filePath)) {
+        return fs.readFileSync(filePath, "utf-8").trim();
+      }
+    } catch {
+      // continue trying the next candidate path
+    }
   }
+
+  return fallbackPrompt;
 }
 
 function getStreamingModelOptions(modelSettings?: { temperature?: number; topK?: number; maxTokens?: number }) {
