@@ -71,6 +71,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const notifiedRef = useRef(false);
   const summarizingHistoryRef = useRef(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const [activeNavId, setActiveNavId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
@@ -86,42 +87,53 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     setExistingFiles(loadChatFiles(chatId));
   }, [chatId]);
 
+  const fetchTransport = useCallback(async (url: string, options?: RequestInit) => {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      let message = "Something went wrong while contacting the AI service.";
+      try {
+        const text = await response.text();
+        if (text) {
+          const payload = JSON.parse(text);
+          if (typeof payload?.error === "string") {
+            message = payload.error;
+          }
+        }
+      } catch {
+        // fall back to the default message
+      }
+      throw new Error(message);
+    }
+    return response;
+  }, []);
+
+  const bodyTransport = useCallback(() => {
+    const paidData = getPaidTierData();
+    const serverMode = getServerMode();
+    const hasActivePaidTier =
+      serverMode === "paid" &&
+      paidData &&
+      new Date(paidData.expiresAt) > new Date();
+    const paidTierCode = hasActivePaidTier ? paidData.code : null;
+    const paidTierClientId = hasActivePaidTier ? getPaidTierClientId() : null;
+    return { model, deepThink, webSearch, modelSettings, paidTierCode, paidTierClientId };
+  }, [model, deepThink, webSearch, modelSettings]);
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        fetch: fetchTransport,
+        body: bodyTransport,
+      }),
+    [fetchTransport, bodyTransport]
+  );
+
   const { messages, sendMessage, status, error, regenerate, setMessages } = useChat({
     id: chatId,
     messages: initialMessages as never,
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      fetch: async (url, options) => {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-          let message = "Something went wrong while contacting the AI service.";
-          try {
-            const text = await response.text();
-            if (text) {
-              const payload = JSON.parse(text);
-              if (typeof payload?.error === "string") {
-                message = payload.error;
-              }
-            }
-          } catch {
-            // fall back to the default message
-          }
-          throw new Error(message);
-        }
-        return response;
-      },
-      body: () => {
-        const paidData = getPaidTierData();
-        const serverMode = getServerMode();
-        const hasActivePaidTier =
-          serverMode === "paid" &&
-          paidData &&
-          new Date(paidData.expiresAt) > new Date();
-        const paidTierCode = hasActivePaidTier ? paidData.code : null;
-        const paidTierClientId = hasActivePaidTier ? getPaidTierClientId() : null;
-        return { model, deepThink, webSearch, modelSettings, paidTierCode, paidTierClientId };
-      },
-    }),
+    transport,
+    throttle: 200,
   });
 
   const displayError = useMemo(() => {
@@ -168,7 +180,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container || userMessages.length === 0) return;
+    if (!container || userMessages.length === 0 || isLoading) return;
 
     const handleScroll = () => {
       const messageElements = container.querySelectorAll("[data-message-id]");
@@ -195,7 +207,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     container.addEventListener("scroll", handleScroll, { passive: true });
     setTimeout(handleScroll, 100);
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [userMessages]);
+  }, [userMessages, isLoading]);
 
   const handleNavSelect = useCallback((id: string) => {
     const container = messagesContainerRef.current;
@@ -207,14 +219,22 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, []);
 
   useEffect(() => {
+    if (isLoading) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, status]);
+  }, [messages, status, isLoading]);
 
   useEffect(() => {
+    if (isLoading) {
+      // Don't save during streaming; clear any pending save
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      return;
+    }
+
+    // After streaming stops, save immediately
     if (messages.length > 0) {
       saveMessages(chatId, messages as unknown[]);
     }
-  }, [messages, chatId]);
+  }, [messages, chatId, isLoading]);
 
   useEffect(() => {
     const conversationMessages = messages.filter((message) => message.role !== "system");
@@ -224,7 +244,20 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       conversationMessages.length < MESSAGE_LIMIT
     ) return;
 
+    // Check if the first message is already a summary (from a previous batch)
+    const firstIsSystemSummary =
+      messages.length > 0 &&
+      messages[0].role === "system" &&
+      messages[0].parts.some(
+        (p): p is { type: "text"; text: string } =>
+          p.type === "text" && p.text.includes("Private summary")
+      );
+
     const numberToSummarize = conversationMessages.length - RECENT_MESSAGES_TO_KEEP;
+    if (numberToSummarize <= 0) {
+      return;
+    }
+
     const messagesToSummarize = conversationMessages.slice(0, numberToSummarize);
     const firstRetained = conversationMessages[numberToSummarize];
     const firstRetainedIndex = messages.findIndex((message) => message.id === firstRetained?.id);

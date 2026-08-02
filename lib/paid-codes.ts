@@ -1,6 +1,5 @@
 export type PaidCodeTokens = {
-  POLLINATIONS_API_KEY: string;
-  DEEPTHINK_TOKEN: string;
+  BLOCKRUN_API_KEY?: string;
   SERPER_API_KEY: string;
 };
 

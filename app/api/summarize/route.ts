@@ -4,8 +4,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 export const maxDuration = 60;
 
 const MODELS: Record<string, string> = {
-  instant: "JustScriptzz/qwen3.6-max-preview",
-  expert: "JustScriptzz/qwen3.6-max-preview",
+  instant: "deepseek/deepseek-chat",
+  expert: "deepseek/deepseek-chat",
 };
 
 export async function POST(req: Request) {
@@ -17,8 +17,8 @@ export async function POST(req: Request) {
   }
 
   const client = createOpenAI({
-    baseURL: "https://gen.pollinations.ai/v1",
-    apiKey: process.env.POLLINATIONS_API_KEY,
+    baseURL: "https://blockrun.ai/api/v1",
+    apiKey: process.env.BLOCKRUN_API_KEY ?? process.env.OPENAI_API_KEY ?? "blockrun",
   });
   const result = await generateText({
     model: client.chat(MODELS[modelKey] ?? MODELS.instant),

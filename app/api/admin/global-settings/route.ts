@@ -7,14 +7,12 @@ export const revalidate = 0;
 const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type GlobalSettings = {
-  POLLINATIONS_API_KEY: string;
-  DEEPTHINK_TOKEN: string;
+  BLOCKRUN_API_KEY: string;
   SERPER_API_KEY: string;
 };
 
 const DEFAULT_SETTINGS: GlobalSettings = {
-  POLLINATIONS_API_KEY: "",
-  DEEPTHINK_TOKEN: "",
+  BLOCKRUN_API_KEY: "",
   SERPER_API_KEY: "",
 };
 
@@ -59,12 +57,11 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json();
-    const { POLLINATIONS_API_KEY, DEEPTHINK_TOKEN, SERPER_API_KEY } = body;
+    const { BLOCKRUN_API_KEY, SERPER_API_KEY } = body;
     
     const settings = await readSettings();
 
-    if (POLLINATIONS_API_KEY !== undefined) settings.POLLINATIONS_API_KEY = POLLINATIONS_API_KEY;
-    if (DEEPTHINK_TOKEN !== undefined) settings.DEEPTHINK_TOKEN = DEEPTHINK_TOKEN;
+    if (BLOCKRUN_API_KEY !== undefined) settings.BLOCKRUN_API_KEY = BLOCKRUN_API_KEY;
     if (SERPER_API_KEY !== undefined) settings.SERPER_API_KEY = SERPER_API_KEY;
 
     await writeSettings(settings);
