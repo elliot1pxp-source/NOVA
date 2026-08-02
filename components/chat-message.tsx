@@ -226,12 +226,13 @@ function ThoughtBlock({ data }: { data: any }) {
 function SearchBlock({ data }: { data: any }) {
   const status = data?.status;
   const results = data?.results ?? [];
+  const isGenerating = status === "generating_query";
   const isSearching = status === "searching";
-  const [open, setOpen] = useState(isSearching);
+  const [open, setOpen] = useState(isGenerating || isSearching);
 
   useEffect(() => {
-    if (isSearching) setOpen(true);
-  }, [isSearching]);
+    if (isGenerating || isSearching) setOpen(true);
+  }, [isGenerating, isSearching]);
 
   return (
     <div className="mb-2.5 sm:mb-3">
@@ -242,12 +243,18 @@ function SearchBlock({ data }: { data: any }) {
       >
         <Search
           className={cn(
-            "w-3 h-3 sm:w-3.5 sm:h-3.5 transition-colors",
-            isSearching ? "text-[#4a6cf7] animate-spin" : "text-[#888]"
+            "w-3 h-3 sm:w-3.5 sm:h-3.5 transition-all duration-300",
+            isGenerating
+              ? "text-[#4a6cf7] animate-pulse"
+              : isSearching
+              ? "text-[#4a6cf7] animate-spin"
+              : "text-[#888]"
           )}
         />
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
-          {isSearching
+          {isGenerating
+            ? "Generating search query…"
+            : isSearching
             ? `Searching web for "${data?.query || "information"}"…`
             : status === "error"
             ? "Web search unavailable"
