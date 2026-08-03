@@ -32,8 +32,8 @@ const INITIAL_CHAT_PROMPT =
 const MODELS: Record<string, string> = {
   instant: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   expert: "nvidia/step-3.7-flash",
-  deepthink: "nvidia/step-3.7-flash",
-  websearch: "nvidia/step-3.7-flash",
+  deepthink: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  websearch: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
 };
 
 function getServerEnvValue(...names: string[]): string | undefined {
