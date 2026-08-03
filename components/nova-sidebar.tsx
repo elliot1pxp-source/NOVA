@@ -26,6 +26,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { PaidTierDialog } from "@/components/paid-tier-dialog";
 import { ModelSettings, ChatFile, loadChatFiles, saveChatFiles, deleteChatFile, clearAllChatFiles } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, validateFileSize, SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
+import { getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
 export type Chat = {
   id: string;
@@ -489,6 +490,8 @@ export function NovaSidebar({
   const [uploadFilesOpen, setUploadFilesOpen] = useState(false);
 
   const groups = groupChats(chats);
+  const isPaidTierActive = getServerMode() === "paid" && getPaidTierData() !== null;
+  const tierLabel = isPaidTierActive ? "Paid Tier" : "Free Tier";
 
   const openHistoryWithSearch = () => {
     setHistoryOpen(true);
@@ -642,8 +645,15 @@ export function NovaSidebar({
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-white font-semibold text-sm tracking-wide">NOVA</span>
-                <span className="text-[9px] font-bold text-white/90 bg-white/15 px-1.5 py-0.5 rounded-md tracking-wider">
-                  V1
+                <span
+                  className={cn(
+                    "text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider",
+                    isPaidTierActive
+                      ? "text-amber-300 bg-amber-500/15"
+                      : "text-white/90 bg-white/15"
+                  )}
+                >
+                  {tierLabel}
                 </span>
               </div>
             </div>
