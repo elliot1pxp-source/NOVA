@@ -13,6 +13,7 @@ import {
   loadModelSettings,
   saveModelSettings,
 } from "@/lib/storage";
+import { refreshPaidTierStatus } from "@/lib/paid-tier";
 
 type Model = "instant" | "expert";
 
@@ -42,6 +43,10 @@ export default function Home() {
       setChats(stored.map(toChat));
     }
     hydratedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    void refreshPaidTierStatus();
   }, []);
 
   useEffect(() => {

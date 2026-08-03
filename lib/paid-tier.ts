@@ -101,6 +101,54 @@ export function isPaidUser(): boolean {
   return getPaidTierData() !== null;
 }
 
+export async function refreshPaidTierStatus(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+
+  const paidData = getPaidTierData();
+  if (!paidData) {
+    setServerMode("global");
+    return false;
+  }
+
+  try {
+    const response = await fetch("/api/paid-tier/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: paidData.code, clientId: getPaidTierClientId() }),
+    });
+
+    const data = await response.json();
+
+    if (data.valid && data.data) {
+      const expiry = new Date(data.data.expiresAt);
+      if (expiry > new Date()) {
+        setPaidTierData({
+          code: data.data.code,
+          expiresAt: data.data.expiresAt,
+          tokens: data.data.tokens,
+          verified: true,
+        });
+        setServerMode("paid");
+        return true;
+      }
+    }
+
+    clearPaidTierData();
+    setServerMode("global");
+    return false;
+  } catch {
+    const expiry = new Date(paidData.expiresAt);
+    if (expiry > new Date()) {
+      setServerMode("paid");
+      return true;
+    }
+
+    clearPaidTierData();
+    setServerMode("global");
+    return false;
+  }
+}
+
 // Server mode (global vs paid)
 export function getServerMode(): ServerMode {
   if (typeof window === "undefined") return "global";

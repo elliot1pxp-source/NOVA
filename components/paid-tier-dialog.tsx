@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Crown, CheckCircle, Clock, AlertTriangle, ArrowLeft, Globe, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getPaidTierClientId, getPaidTierData, setPaidTierData, clearPaidTierData, isPaidUser, getServerMode, setServerMode, ServerMode } from "@/lib/paid-tier";
+import { getPaidTierClientId, getPaidTierData, setPaidTierData, clearPaidTierData, getServerMode, setServerMode, ServerMode, refreshPaidTierStatus } from "@/lib/paid-tier";
 
 type DialogState = "enter-code" | "paid-user" | "expired";
 
@@ -25,52 +25,26 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
   // Initialize state based on paid tier data - re-verify with server
   useEffect(() => {
     if (!isOpen) return;
-    
+
     const mode = getServerMode();
     setLocalServerMode(mode);
-    
+
     const paidData = getPaidTierData();
     if (paidData) {
-      // Re-verify with server to check if still valid
       setVerifyingServer(true);
-      fetch("/api/paid-tier/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: paidData.code, clientId: getPaidTierClientId() }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.valid && data.data) {
-            const expiry = new Date(data.data.expiresAt);
-            if (expiry > new Date()) {
-              // Update stored data with latest server info
-              setPaidTierData({
-                code: data.data.code,
-                expiresAt: data.data.expiresAt,
-                tokens: data.data.tokens,
-                verified: true,
-              });
-              setDialogState("paid-user");
-              setExpiresAt(expiry);
-            } else {
-              setDialogState("expired");
-              clearPaidTierData();
-            }
-          } else {
-            setDialogState("expired");
-            clearPaidTierData();
-          }
-        })
-        .catch(() => {
-          // If server unreachable, use local data as fallback
-          const expiry = new Date(paidData.expiresAt);
-          if (expiry > new Date()) {
+      void refreshPaidTierStatus()
+        .then((isValid) => {
+          const refreshedData = getPaidTierData();
+          if (isValid && refreshedData) {
+            const expiry = new Date(refreshedData.expiresAt);
             setDialogState("paid-user");
             setExpiresAt(expiry);
           } else {
             setDialogState("expired");
-            clearPaidTierData();
           }
+        })
+        .catch(() => {
+          setDialogState("expired");
         })
         .finally(() => setVerifyingServer(false));
     } else {
