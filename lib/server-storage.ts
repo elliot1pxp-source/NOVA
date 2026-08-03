@@ -97,4 +97,5 @@ export async function writeData<T = any>(key: string, data: T): Promise<void> {
 export const STORAGE_KEYS = {
   PAID_CODES: "nova:paid-codes",
   GLOBAL_SETTINGS: "nova:global-settings",
+  FREE_TIER_USAGE: "nova:free-tier-usage",
 } as const;

@@ -16,7 +16,6 @@ type PaidCode = {
   redeemedUserIds?: string[];
   activatedAt?: string | null;
   tokens: {
-    BLOCKRUN_API_KEY?: string;
     SERPER_API_KEY: string;
   };
   redeemed: boolean;
@@ -25,7 +24,6 @@ type PaidCode = {
 };
 
 type GlobalSettings = {
-  BLOCKRUN_API_KEY: string;
   SERPER_API_KEY: string;
 };
 
@@ -35,7 +33,6 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [codes, setCodes] = useState<PaidCode[]>([]);
   const [settings, setSettings] = useState<GlobalSettings>({
-    BLOCKRUN_API_KEY: "",
     SERPER_API_KEY: "",
   });
   const [loading, setLoading] = useState(false);
@@ -46,12 +43,11 @@ export default function AdminPage() {
   const [newCode, setNewCode] = useState("");
   const [newDurationHours, setNewDurationHours] = useState("24");
   const [newMaxRedemptions, setNewMaxRedemptions] = useState("1");
-  const [newBlockrunKey, setNewBlockrunKey] = useState("");
   const [newSerper, setNewSerper] = useState("");
 
   // Editing
   const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editTokens, setEditTokens] = useState<{ BLOCKRUN_API_KEY?: string; SERPER_API_KEY: string } | null>(null);
+  const [editTokens, setEditTokens] = useState<{ SERPER_API_KEY: string } | null>(null);
   const [editExpiry, setEditExpiry] = useState("");
   const [editDurationHours, setEditDurationHours] = useState("");
   const [editMaxRedemptions, setEditMaxRedemptions] = useState("");
@@ -184,7 +180,6 @@ export default function AdminPage() {
           durationMinutes: Math.round(durationHours * 60),
           maxRedemptions,
           tokens: {
-            BLOCKRUN_API_KEY: newBlockrunKey,
             SERPER_API_KEY: newSerper,
           },
         }),
@@ -197,7 +192,6 @@ export default function AdminPage() {
         setNewCode("");
         setNewDurationHours("24");
         setNewMaxRedemptions("1");
-        setNewBlockrunKey("");
         setNewSerper("");
       } else {
         setMessage({ type: "error", text: data.error || "Failed to create code" });
@@ -417,16 +411,6 @@ export default function AdminPage() {
 
           <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[#8c8f9c] mb-1.5">BLOCKRUN_API_KEY</label>
-              <input
-                type="text"
-                value={settings.BLOCKRUN_API_KEY}
-                onChange={(e) => setSettings({ ...settings, BLOCKRUN_API_KEY: e.target.value })}
-                className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                placeholder="Enter BlockRun API key..."
-              />
-            </div>
-              <div>
               <label className="block text-xs font-medium text-[#8c8f9c] mb-1.5">SERPER_API_KEY</label>
               <input
                 type="text"
@@ -511,16 +495,6 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="space-y-3 mb-3">
-              <div>
-                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">BLOCKRUN_API_KEY (for this code)</label>
-                <input
-                  type="text"
-                  value={newBlockrunKey}
-                  onChange={(e) => setNewBlockrunKey(e.target.value)}
-                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                  placeholder="Enter BlockRun API key for this code..."
-                />
-              </div>
               <div>
                 <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">SERPER_API_KEY (for this code)</label>
                 <input
@@ -659,15 +633,6 @@ export default function AdminPage() {
                           />
                         </div>
                         )}
-                        <div>
-                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">BLOCKRUN_API_KEY</label>
-                          <input
-                            type="text"
-                            value={editTokens?.BLOCKRUN_API_KEY || ""}
-                            onChange={(e) => setEditTokens({ ...editTokens!, BLOCKRUN_API_KEY: e.target.value })}
-                            className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-white/20 transition-all"
-                          />
-                        </div>
                         <div>
                           <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">SERPER_API_KEY</label>
                           <input

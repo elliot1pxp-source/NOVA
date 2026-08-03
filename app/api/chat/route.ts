@@ -20,8 +20,9 @@ import {
   normalizeAttachmentForModel,
   SUPPORTED_ATTACHMENT_DESCRIPTION,
 } from "@/lib/attachments";
-import { readData, STORAGE_KEYS } from "@/lib/server-storage";
+import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
+import { enforceFreeTierLimit } from "@/lib/free-tier";
 
 export const maxDuration = 60;
 const BLOCKRUN_BASE_URL = "https://blockrun.ai/api/v1";
@@ -171,6 +172,8 @@ export async function POST(req: Request) {
     modelSettings,
     paidTierCode,
     paidTierClientId,
+    clientId = "",
+    chatId = "",
   }: {
     messages: UIMessage[];
     model?: string;
@@ -183,7 +186,22 @@ export async function POST(req: Request) {
     };
     paidTierCode?: string;
     paidTierClientId?: string | null;
+    clientId?: string;
+    chatId?: string;
   } = await req.json();
+
+  const normalizedClientId = clientId || paidTierClientId || "";
+  const normalizedChatId = chatId || "default";
+
+  const hasPaidAccess = Boolean(
+    paidTierCode &&
+      paidTierClientId &&
+      (await readPaidCodeByRedeemedCode(paidTierCode, paidTierClientId))
+  );
+
+  if (!hasPaidAccess) {
+    await enforceFreeTierLimit(normalizedClientId, normalizedChatId);
+  }
 
   const invalidAttachment = messages.some((message) =>
     message.parts.some((part) => {

@@ -243,7 +243,7 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
               </button>
             </div>
             <p className="text-[10px] text-[#5e616e] text-center mt-1.5">
-              {serverMode === "global" ? "Using global free server tokens" : "Using your private paid server tokens"}
+              {serverMode === "global" ? "Using Free Tier Mode" : "Using your Paid Tier Mode"}
             </p>
           </div>
         )}
@@ -260,13 +260,14 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
           <div className="space-y-4">
             <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
               <p className="text-xs leading-relaxed text-[#ccc]">
-                You can buy a private dedicated server that keeps you separated from the public free server, avoiding high demand and performance issues.
+                Unlock unlimited chatting with Paid Tier. No more limitations.
+                Telegram: <a href="https://t.me/elliotpxp" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">t.me/elliotpxp</a>
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-[#8c8f9c] mb-2">
-                Enter the code that you bought to unlock a private server
+                Enter the code below to unlock Paid Tier.
               </label>
               <div className="flex gap-2">
                 <input
@@ -312,7 +313,7 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
               </div>
               <h3 className="text-lg font-bold text-emerald-400 mb-1">YOU ARE A PAID USER!</h3>
               <p className="text-xs text-[#8c8f9c] mb-3">
-                You have access to a private dedicated server
+                You have access to Paid Tier. Enjoy your unlimited chatting experience!
               </p>
               
               {/* Timer */}
@@ -325,7 +326,7 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
             </div>
 
             <p className="text-[11px] text-center text-[#5e616e]">
-              Your private server tokens are active. When the timer expires, you will be returned to the free tier.
+              Access to the Paid Tier is active. When the timer expires, you will be returned to the Free Tier.
             </p>
           </div>
         )}

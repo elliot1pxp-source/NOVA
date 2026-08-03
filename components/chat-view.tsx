@@ -71,7 +71,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const notifiedRef = useRef(false);
   const summarizingHistoryRef = useRef(false);
-  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [activeNavId, setActiveNavId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
@@ -80,6 +80,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const [attachmentError, setAttachmentError] = useState("");
   const [pendingRegenerateAfterEdit, setPendingRegenerateAfterEdit] = useState(false);
   const [existingFiles, setExistingFiles] = useState<ChatFile[]>([]);
+  const [freeTierStatus, setFreeTierStatus] = useState<{
+    count: number;
+    remaining: number;
+    blocked: boolean;
+    blockedUntil?: string;
+  } | null>(null);
+  const [showFreeTierUsage, setShowFreeTierUsage] = useState(false);
 
   const initialMessages = useRef(loadMessages(chatId)).current;
 
@@ -87,8 +94,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     setExistingFiles(loadChatFiles(chatId));
   }, [chatId]);
 
-  const fetchTransport = useCallback(async (url: string, options?: RequestInit) => {
-    const response = await fetch(url, options);
+  const fetchTransport = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
     if (!response.ok) {
       let message = "Something went wrong while contacting the AI service.";
       try {
@@ -116,8 +123,29 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       new Date(paidData.expiresAt) > new Date();
     const paidTierCode = hasActivePaidTier ? paidData.code : null;
     const paidTierClientId = hasActivePaidTier ? getPaidTierClientId() : null;
-    return { model, deepThink, webSearch, modelSettings, paidTierCode, paidTierClientId };
-  }, [model, deepThink, webSearch, modelSettings]);
+    const clientId = getPaidTierClientId();
+    return {
+      model,
+      deepThink,
+      webSearch,
+      modelSettings,
+      paidTierCode,
+      paidTierClientId,
+      clientId,
+      chatId,
+    };
+  }, [model, deepThink, webSearch, modelSettings, chatId]);
+
+  const clientId = getPaidTierClientId();
+  const hasPaidAccess = (() => {
+    const paidData = getPaidTierData();
+    const serverMode = getServerMode();
+    return (
+      serverMode === "paid" &&
+      paidData &&
+      new Date(paidData.expiresAt) > new Date()
+    );
+  })();
 
   const transport = useMemo(
     () =>
@@ -135,6 +163,31 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     transport,
     throttle: 200,
   });
+
+  useEffect(() => {
+    if (hasPaidAccess) {
+      setShowFreeTierUsage(false);
+      return;
+    }
+
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch(
+          `/api/free-tier?clientId=${encodeURIComponent(clientId)}&chatId=${encodeURIComponent(chatId)}`
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data && typeof data.remaining === "number") {
+          setFreeTierStatus(data);
+          setShowFreeTierUsage(true);
+        }
+      } catch {
+        // ignore fetch failures; free tier monitor is optional
+      }
+    };
+
+    void fetchStatus();
+  }, [clientId, chatId, hasPaidAccess, messages.length]);
 
   const displayError = useMemo(() => {
     if (!error) return "";
@@ -504,6 +557,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               onRemoveAttachment={handleRemoveAttachment}
               existingFiles={existingFiles}
               onAttachExistingFile={handleAttachExistingFile}
+              freeTierStatus={freeTierStatus}
+              showFreeTierUsage={showFreeTierUsage}
             />
           </div>
         </div>
@@ -593,6 +648,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 onRemoveAttachment={handleRemoveAttachment}
                 existingFiles={existingFiles}
                 onAttachExistingFile={handleAttachExistingFile}
+                freeTierStatus={freeTierStatus}
+                showFreeTierUsage={showFreeTierUsage}
               />
             </div>
           </div>

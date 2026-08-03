@@ -18,6 +18,13 @@ export type PendingAttachment =
   | { id: string; source: "file"; file: File; previewUrl: string }
   | { id: string; source: "existing"; existingFile: ChatFile; previewUrl: string };
 
+type FreeTierStatus = {
+  count: number;
+  remaining: number;
+  blocked: boolean;
+  blockedUntil?: string;
+};
+
 type ChatInputProps = {
   input: string;
   onInputChange: (value: string) => void;
@@ -34,6 +41,8 @@ type ChatInputProps = {
   onRemoveAttachment: (id: string) => void;
   existingFiles?: ChatFile[];
   onAttachExistingFile?: (file: ChatFile) => void;
+  freeTierStatus?: FreeTierStatus | null;
+  showFreeTierUsage?: boolean;
 };
 
 export function ChatInput({
@@ -52,6 +61,8 @@ export function ChatInput({
   onRemoveAttachment,
   existingFiles = [],
   onAttachExistingFile,
+  freeTierStatus = null,
+  showFreeTierUsage = false,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,7 +82,8 @@ export function ChatInput({
     }
   };
 
-  const canSubmit = (input.trim().length > 0 || attachments.length > 0) && !isLoading;
+  const isBlocked = showFreeTierUsage && freeTierStatus?.blocked;
+  const canSubmit = (input.trim().length > 0 || attachments.length > 0) && !isLoading && !isBlocked;
 
   return (
     <div className="w-full max-w-3xl mx-auto flex flex-col gap-1.5 sm:gap-2">
@@ -217,27 +229,41 @@ export function ChatInput({
               )}
             </div>
 
-            {/* Right Controls: Send Button */}
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={!canSubmit}
-              className={cn(
-                "p-1.5 sm:p-2 rounded-full transition-all duration-300 flex items-center justify-center",
-                canSubmit
-                  ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
-                  : "bg-white/10 text-white/30 cursor-not-allowed"
+            {/* Right Controls: Usage monitor + Send Button */}
+            <div className="flex items-center gap-2">
+              {showFreeTierUsage && freeTierStatus && (
+                <span
+                  className={cn(
+                    "text-[10px] sm:text-[11px] font-semibold whitespace-nowrap",
+                    freeTierStatus.blocked ? "text-rose-300" : "text-[#8c8f9c]"
+                  )}
+                >
+                  {freeTierStatus.blocked
+                    ? "20/20 blocked — wait 3 hours"
+                    : `${freeTierStatus.count}/20`}
+                </span>
               )}
-            >
-              <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-            </button>
+              <button
+                type="button"
+                onClick={onSubmit}
+                disabled={!canSubmit}
+                className={cn(
+                  "p-1.5 sm:p-2 rounded-full transition-all duration-300 flex items-center justify-center",
+                  canSubmit
+                    ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                    : "bg-white/10 text-white/30 cursor-not-allowed"
+                )}
+              >
+                <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Footer Disclaimer */}
       <p className="text-[9px] sm:text-[11px] text-center text-[#6e717c] font-medium tracking-wide">
-        NOVA can make mistakes. Consider checking important information.
+         NOVA can make mistakes. Consider checking important information. By chatting with NOVA, you agree that everything you do here is responsible for your own actions and decisions. NOVA is not responsible for any consequences resulting from your use of the service.
       </p>
     </div>
   );
