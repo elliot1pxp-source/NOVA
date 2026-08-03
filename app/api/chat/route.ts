@@ -32,7 +32,7 @@ const INITIAL_CHAT_PROMPT =
 const MODELS: Record<string, string> = {
   instant: "nvidia/nemotron-nano-9b-v2",
   expert: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-  deepthink: "nvidia/nemotron-nano-9b-v2",
+  deepthink: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   websearch: "nvidia/nemotron-nano-9b-v2",
 };
 
