@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type TouchEvent, type WheelEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type TouchEvent, type WheelEvent } from "react";
 import Image from "next/image";
 import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
@@ -221,6 +221,68 @@ function createMarkdownComponents(isStreaming = false) {
 
 const markdownComponents = createMarkdownComponents();
 
+function StreamingMarkdown({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [cursorPosition, setCursorPosition] = useState<{ left: number; top: number } | null>(null);
+  const streamingMarkdownComponents = useMemo(
+    () => createMarkdownComponents(isStreaming),
+    [isStreaming]
+  );
+
+  useLayoutEffect(() => {
+    const container = contentRef.current;
+    if (!isStreaming || !container) {
+      setCursorPosition(null);
+      return;
+    }
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let lastTextNode: Text | null = null;
+    let currentNode = walker.nextNode();
+    while (currentNode) {
+      if (currentNode.textContent?.trim()) lastTextNode = currentNode as Text;
+      currentNode = walker.nextNode();
+    }
+
+    if (!lastTextNode) {
+      setCursorPosition(null);
+      return;
+    }
+
+    const lastCharacterIndex = lastTextNode.textContent?.trimEnd().length ?? 0;
+    if (lastCharacterIndex === 0) {
+      setCursorPosition(null);
+      return;
+    }
+
+    const range = document.createRange();
+    range.setStart(lastTextNode, lastCharacterIndex - 1);
+    range.setEnd(lastTextNode, lastCharacterIndex);
+    const characterRect = range.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+
+    setCursorPosition({
+      left: characterRect.right - containerRect.left + 3,
+      top: characterRect.top - containerRect.top + characterRect.height / 2 - 3,
+    });
+  }, [isStreaming, text]);
+
+  return (
+    <div ref={contentRef} className="relative">
+      <ReactMarkdown components={streamingMarkdownComponents}>
+        {text}
+      </ReactMarkdown>
+      {isStreaming && cursorPosition && (
+        <span
+          aria-hidden="true"
+          className="absolute w-1.5 h-1.5 rounded-full bg-white animate-pulse pointer-events-none"
+          style={{ left: cursorPosition.left, top: cursorPosition.top }}
+        />
+      )}
+    </div>
+  );
+}
+
 function ThoughtBlock({ data }: { data: any }) {
   const status = data?.status;
   const seconds = data?.seconds;
@@ -388,10 +450,6 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(() => messageText(message));
-  const streamingMarkdownComponents = useMemo(
-    () => createMarkdownComponents(Boolean(isStreaming)),
-    [isStreaming]
-  );
 
   useEffect(() => {
     if (!isEditing) {
@@ -506,9 +564,11 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
                   );
                 }
                 return (
-                  <ReactMarkdown key={index} components={streamingMarkdownComponents}>
-                    {part.text}
-                  </ReactMarkdown>
+                  <StreamingMarkdown
+                    key={index}
+                    text={part.text}
+                    isStreaming={Boolean(isStreaming)}
+                  />
                 );
               }
               return null;
@@ -557,11 +617,11 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
 
 export function TypingIndicator() {
   return (
-    <div className="flex gap-4 w-full max-w-3xl mx-auto py-3 sm:py-4 animate-in fade-in duration-300">
-      <div className="flex items-center gap-0.5 pt-2 sm:pt-3">
-        <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:0ms]" />
-        <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:150ms]" />
-        <span className="w-1 h-1 bg-[#4a6cf7] rounded-full animate-bounce [animation-delay:300ms]" />
+    <div className="flex w-full max-w-3xl mx-auto mt-1 sm:mt-2 py-1 animate-in fade-in duration-300">
+      <div className="flex items-center gap-1 py-1">
+        <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:0ms]" />
+        <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:150ms]" />
+        <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:300ms]" />
       </div>
     </div>
   );

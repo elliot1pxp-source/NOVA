@@ -715,7 +715,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             onWheel={handleMessagesWheel}
             onTouchStart={handleMessagesTouchStart}
             onTouchMove={handleMessagesTouchMove}
-            className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-28 sm:pb-36"
+            className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-40 sm:pb-48"
           >
             <div className="max-w-3xl mx-auto">
               {visibleMessages.map((message, i) => {
