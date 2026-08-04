@@ -212,7 +212,7 @@ export function ChatInput({
                   </button>
 
                   {/* Context menu for existing files */}
-                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover/files:flex flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 shadow-2xl z-50 min-w-[180px] sm:min-w-[200px] max-h-[180px] overflow-y-auto">
+                  <div className="absolute left-0 bottom-full hidden group-hover/files:flex flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 shadow-2xl z-50 min-w-[180px] sm:min-w-[200px] max-h-[180px] overflow-y-auto">
                     <span className="text-[9px] sm:text-[10px] font-semibold text-white/50 uppercase px-2 py-1">Recent Chat Files</span>
                     {existingFiles.map((file) => (
                       <button
