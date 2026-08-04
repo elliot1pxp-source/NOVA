@@ -212,22 +212,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }
     return true;
   });
-  const hasActiveDeepThink = visibleMessages.some((message) =>
-    message.parts.some(
-      (part) => part.type === "data-thought" && part.data?.status === "thinking"
-    )
-  );
-  const hasActiveSearch = visibleMessages.some((message) =>
-    message.parts.some(
-      (part) =>
-        part.type === "data-search" &&
-        (part.data?.status === "generating_query" || part.data?.status === "searching")
-    )
-  );
-  const showTypingIndicator =
-    status === "streaming" &&
-    !hasActiveDeepThink &&
-    !hasActiveSearch;
+  const showTypingIndicator = status !== "ready" && status !== "error";
 
   const userMessages = useMemo(() => {
     return visibleMessages.filter((m) => m.role === "user");
