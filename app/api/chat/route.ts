@@ -450,7 +450,7 @@ Remember: You are a planner, not a responder. Your output is a specification, no
         finalSystemPrompt += `\n\n${INITIAL_CHAT_PROMPT}`;
       }
       if (userInput) {
-        finalSystemPrompt += `\n\n---USER---\n\n${userInput}`;
+        finalSystemPrompt += `\n\n---USER---\n\nUSER: ${userInput}`;
       }
       if (searchContext) {
         finalSystemPrompt += `---NOVA---\n\nWeb Search results:\n${searchContext}`;
