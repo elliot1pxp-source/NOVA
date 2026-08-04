@@ -26,7 +26,7 @@ import { enforceFreeTierLimit } from "@/lib/free-tier";
 
 export const maxDuration = 300;
 const BLOCKRUN_BASE_URL = "https://blockrun.ai/api/v1";
-const INITIAL_CHAT_PROMPT = `I am going to answer this based on every Sections, my final thinking will based on Section 21. FINAL COMMANDMENTS – NEVER BREAK`;
+const INITIAL_CHAT_PROMPT = `I am going to answer this based on every Sections, my final thinking will based on Section 23. FINAL COMMANDMENTS – NEVER BREAK`;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 
 const MODELS: Record<string, string> = {
