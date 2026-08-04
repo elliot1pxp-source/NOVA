@@ -17,6 +17,7 @@ type Model = "instant" | "expert";
 
 const MESSAGE_LIMIT = 50;
 const RECENT_MESSAGES_TO_KEEP = 46;
+const SCROLL_BOTTOM_THRESHOLD = 24;
 
 type Props = {
   chatId: string;
@@ -69,6 +70,8 @@ function createConversationSummary(text: string) {
 export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const shouldFollowMessagesRef = useRef(true);
+  const wasLoadingRef = useRef(false);
   const notifiedRef = useRef(false);
   const summarizingHistoryRef = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -214,6 +217,26 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   });
   const showTypingIndicator = status !== "ready" && status !== "error";
 
+  useEffect(() => {
+    if (isLoading && !wasLoadingRef.current) {
+      shouldFollowMessagesRef.current = true;
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleFollowScroll = () => {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      shouldFollowMessagesRef.current = distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD;
+    };
+
+    container.addEventListener("scroll", handleFollowScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleFollowScroll);
+  }, []);
+
   const userMessages = useMemo(() => {
     return visibleMessages.filter((m) => m.role === "user");
   }, [visibleMessages]);
@@ -269,13 +292,22 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     if (!container) return;
     const el = container.querySelector(`[data-message-id="${id}"]`);
     if (el) {
+      if (isLoading) shouldFollowMessagesRef.current = false;
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, []);
+  }, [isLoading]);
 
   useEffect(() => {
-    if (isLoading) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!isLoading || !shouldFollowMessagesRef.current) return;
+
+    const frame = requestAnimationFrame(() => {
+      const container = messagesContainerRef.current;
+      if (container && shouldFollowMessagesRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, [messages, status, isLoading]);
 
   useEffect(() => {

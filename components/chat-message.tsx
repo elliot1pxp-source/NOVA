@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
@@ -33,11 +33,48 @@ function messageText(message: UIMessage) {
     .join("");
 }
 
-function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+const SCROLL_BOTTOM_THRESHOLD = 24;
+
+function CodeBlock({
+  children,
+  className,
+  isStreaming = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  isStreaming?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
+  const codeContainerRef = useRef<HTMLDivElement>(null);
+  const shouldFollowCodeRef = useRef(true);
+  const wasStreamingRef = useRef(false);
   const match = /language-(\w+)/.exec(className || "");
   const language = match ? match[1] : "";
   const codeString = String(children).replace(/\n$/, "");
+
+  useEffect(() => {
+    if (isStreaming && !wasStreamingRef.current) {
+      shouldFollowCodeRef.current = true;
+    }
+    wasStreamingRef.current = isStreaming;
+  }, [isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming || !shouldFollowCodeRef.current) return;
+
+    const codeContainer = codeContainerRef.current;
+    if (codeContainer) {
+      codeContainer.scrollTop = codeContainer.scrollHeight;
+    }
+  }, [codeString, isStreaming]);
+
+  const handleCodeScroll = () => {
+    const codeContainer = codeContainerRef.current;
+    if (!codeContainer) return;
+    const distanceFromBottom =
+      codeContainer.scrollHeight - codeContainer.scrollTop - codeContainer.clientHeight;
+    shouldFollowCodeRef.current = distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD;
+  };
 
   const handleCopy = async () => {
     try {
@@ -80,7 +117,11 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
       </div>
 
       {/* Code Container */}
-      <div className="overflow-x-auto max-h-[360px] sm:max-h-[480px] overflow-y-auto p-2.5 sm:p-4 scrollbar-thin scrollbar-thumb-white/10">
+      <div
+        ref={codeContainerRef}
+        onScroll={handleCodeScroll}
+        className="overflow-x-auto max-h-[360px] sm:max-h-[480px] overflow-y-auto p-2.5 sm:p-4 scrollbar-thin scrollbar-thumb-white/10"
+      >
         <pre className="m-0 font-mono text-[11px] sm:text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
           <code className={className}>{codeString}</code>
         </pre>
@@ -89,7 +130,8 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
   );
 }
 
-const markdownComponents = {
+function createMarkdownComponents(isStreaming = false) {
+  return {
   pre({ children }: any) {
     return <div className="max-w-full overflow-hidden my-1.5 sm:my-2">{children}</div>;
   },
@@ -108,7 +150,7 @@ const markdownComponents = {
       );
     }
 
-    return <CodeBlock className={className}>{children}</CodeBlock>;
+    return <CodeBlock className={className} isStreaming={isStreaming}>{children}</CodeBlock>;
   },
   p({ children }: any) {
     return <p className="mb-2 sm:mb-3 last:mb-0 text-[#ccc] leading-relaxed">{children}</p>;
@@ -150,7 +192,10 @@ const markdownComponents = {
       </a>
     );
   },
-};
+  };
+}
+
+const markdownComponents = createMarkdownComponents();
 
 function ThoughtBlock({ data }: { data: any }) {
   const status = data?.status;
@@ -319,6 +364,10 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(() => messageText(message));
+  const streamingMarkdownComponents = useMemo(
+    () => createMarkdownComponents(Boolean(isStreaming)),
+    [isStreaming]
+  );
 
   useEffect(() => {
     if (!isEditing) {
@@ -433,7 +482,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
                   );
                 }
                 return (
-                  <ReactMarkdown key={index} components={markdownComponents}>
+                  <ReactMarkdown key={index} components={streamingMarkdownComponents}>
                     {part.text}
                   </ReactMarkdown>
                 );
