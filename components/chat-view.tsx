@@ -677,7 +677,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                   <div key={message.id} data-message-id={message.id}>
                     <ChatMessage
                       message={message}
-                      onRegenerate={isLastAssistant ? () => regenerate() : undefined}
+                      onRegenerate={
+                        message.role === "assistant"
+                          ? () => regenerate({ messageId: message.id })
+                          : undefined
+                      }
                       onEdit={message.role === "user" ? handleEditMessage : undefined}
                       isStreaming={isCurrentStreamingAssistant}
                       disableActions={isCurrentStreamingAssistant}
