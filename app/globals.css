@@ -26,13 +26,17 @@
   user-select: none;
 }
 
-/* Conversation content and editable fields intentionally remain copyable. */
-.app-shell [data-chat-message],
+/* Only conversation text is intentionally selectable and copyable. */
+.app-shell [data-chat-message] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .app-shell input,
 .app-shell textarea,
 .app-shell [contenteditable="true"] {
-  -webkit-user-select: text;
-  user-select: text;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 @layer utilities {

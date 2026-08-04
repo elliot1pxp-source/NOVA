@@ -31,9 +31,7 @@ function toStored(c: Chat): StoredChat {
 
 function isCopyableTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
-  return Boolean(
-    target.closest('[data-chat-message], input, textarea, [contenteditable="true"]')
-  );
+  return Boolean(target.closest("[data-chat-message]"));
 }
 
 export default function Home() {
