@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent, type WheelEvent } from "react";
 import Image from "next/image";
 import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,7 @@ function CodeBlock({
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const shouldFollowCodeRef = useRef(true);
   const wasStreamingRef = useRef(false);
+  const codeTouchStartYRef = useRef<number | null>(null);
   const match = /language-(\w+)/.exec(className || "");
   const language = match ? match[1] : "";
   const codeString = String(children).replace(/\n$/, "");
@@ -74,6 +75,25 @@ function CodeBlock({
     const distanceFromBottom =
       codeContainer.scrollHeight - codeContainer.scrollTop - codeContainer.clientHeight;
     shouldFollowCodeRef.current = distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD;
+  };
+
+  const handleCodeWheel = (event: WheelEvent<HTMLDivElement>) => {
+    // Pause before the next streamed update has a chance to scroll this pane.
+    if (event.deltaY < 0) {
+      shouldFollowCodeRef.current = false;
+    }
+  };
+
+  const handleCodeTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    codeTouchStartYRef.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleCodeTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    const currentY = event.touches[0]?.clientY;
+    const startY = codeTouchStartYRef.current;
+    if (currentY !== undefined && startY !== null && currentY > startY) {
+      shouldFollowCodeRef.current = false;
+    }
   };
 
   const handleCopy = async () => {
@@ -120,6 +140,10 @@ function CodeBlock({
       <div
         ref={codeContainerRef}
         onScroll={handleCodeScroll}
+        onWheel={handleCodeWheel}
+        onTouchStart={handleCodeTouchStart}
+        onTouchMove={handleCodeTouchMove}
+        data-code-scroll
         className="overflow-x-auto max-h-[360px] sm:max-h-[480px] overflow-y-auto p-2.5 sm:p-4 scrollbar-thin scrollbar-thumb-white/10"
       >
         <pre className="m-0 font-mono text-[11px] sm:text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">

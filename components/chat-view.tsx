@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo, type TouchEvent, type WheelEvent } from "react";
 import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -71,6 +71,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const shouldFollowMessagesRef = useRef(true);
+  const lastMessageScrollTopRef = useRef(0);
+  const messageTouchStartYRef = useRef<number | null>(null);
   const wasLoadingRef = useRef(false);
   const notifiedRef = useRef(false);
   const summarizingHistoryRef = useRef(false);
@@ -230,11 +232,45 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
     const handleFollowScroll = () => {
       const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      const scrolledUp = container.scrollTop < lastMessageScrollTopRef.current - 1;
+      lastMessageScrollTopRef.current = container.scrollTop;
+
+      // Keep a deliberate upward scroll paused even if another stream chunk
+      // arrives before the browser finishes dispatching scroll events.
+      if (scrolledUp) {
+        shouldFollowMessagesRef.current = false;
+        return;
+      }
+
       shouldFollowMessagesRef.current = distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD;
     };
 
     container.addEventListener("scroll", handleFollowScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleFollowScroll);
+  }, []);
+
+  const handleMessagesWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    // A wheel event from a code pane belongs to that pane's independent follow state.
+    if (event.target instanceof Element && event.target.closest("[data-code-scroll]")) return;
+
+    if (event.deltaY < 0) {
+      shouldFollowMessagesRef.current = false;
+    }
+  }, []);
+
+  const handleMessagesTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest("[data-code-scroll]")) return;
+    messageTouchStartYRef.current = event.touches[0]?.clientY ?? null;
+  }, []);
+
+  const handleMessagesTouchMove = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest("[data-code-scroll]")) return;
+
+    const currentY = event.touches[0]?.clientY;
+    const startY = messageTouchStartYRef.current;
+    if (currentY !== undefined && startY !== null && currentY > startY) {
+      shouldFollowMessagesRef.current = false;
+    }
   }, []);
 
   const userMessages = useMemo(() => {
@@ -623,7 +659,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           </div>
 
           {/* Messages Container */}
-          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-28 sm:pb-36">
+          <div
+            ref={messagesContainerRef}
+            onWheel={handleMessagesWheel}
+            onTouchStart={handleMessagesTouchStart}
+            onTouchMove={handleMessagesTouchMove}
+            className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-28 sm:pb-36"
+          >
             <div className="max-w-3xl mx-auto">
               {visibleMessages.map((message, i) => {
                 const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
