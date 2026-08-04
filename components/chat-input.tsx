@@ -2,7 +2,8 @@
 
 import { useRef, useEffect, useState, KeyboardEvent, ChangeEvent } from "react";
 import { 
-  ArrowUp, 
+  ArrowUp,
+  Square,
   Paperclip, 
   X, 
   Brain, 
@@ -29,6 +30,7 @@ type ChatInputProps = {
   input: string;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
+  onStop: () => void | Promise<void>;
   isLoading: boolean;
   model: "instant" | "expert";
   deepThink: boolean;
@@ -49,6 +51,7 @@ export function ChatInput({
   input,
   onInputChange,
   onSubmit,
+  onStop,
   isLoading,
   model,
   deepThink,
@@ -261,19 +264,31 @@ export function ChatInput({
                     : `${freeTierStatus.count}/20`}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={onSubmit}
-                disabled={!canSubmit}
-                className={cn(
-                  "p-1.5 sm:p-2 rounded-full transition-all duration-300 flex items-center justify-center",
-                  canSubmit
-                    ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
-                    : "bg-white/10 text-white/30 cursor-not-allowed"
-                )}
-              >
-                <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-              </button>
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="p-1.5 sm:p-2 rounded-full bg-white/15 text-white border border-white/20 hover:bg-white/25 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center cursor-pointer"
+                  aria-label="Stop generating"
+                  title="Stop generating"
+                >
+                  <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={!canSubmit}
+                  className={cn(
+                    "p-1.5 sm:p-2 rounded-full transition-all duration-300 flex items-center justify-center",
+                    canSubmit
+                      ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                      : "bg-white/10 text-white/30 cursor-not-allowed"
+                  )}
+                >
+                  <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                </button>
+              )}
             </div>
           </div>
         </div>

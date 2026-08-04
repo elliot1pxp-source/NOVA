@@ -199,7 +199,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     [fetchTransport, bodyTransport]
   );
 
-  const { messages, sendMessage, status, error, regenerate, setMessages } = useChat({
+  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat({
     id: chatId,
     messages: initialMessages as never,
     transport,
@@ -666,6 +666,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               input={input}
               onInputChange={setInput}
               onSubmit={handleSubmit}
+              onStop={stop}
               isLoading={isLoading}
               model={model}
               deepThink={deepThink}
@@ -768,6 +769,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 input={input}
                 onInputChange={setInput}
                 onSubmit={handleSubmit}
+                onStop={stop}
                 isLoading={isLoading}
                 model={model}
                 deepThink={deepThink}
