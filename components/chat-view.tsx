@@ -212,23 +212,22 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }
     return true;
   });
-  const currentStreamingAssistantMessage = visibleMessages
-    .slice()
-    .reverse()
-    .find((message) => message.role === "assistant");
   const hasActiveDeepThink = visibleMessages.some((message) =>
     message.parts.some(
       (part) => part.type === "data-thought" && part.data?.status === "thinking"
     )
   );
-  const isCurrentAssistantResponseStreaming = currentStreamingAssistantMessage?.parts.some(
-    (part) => part.type === "text"
+  const hasActiveSearch = visibleMessages.some((message) =>
+    message.parts.some(
+      (part) =>
+        part.type === "data-search" &&
+        (part.data?.status === "generating_query" || part.data?.status === "searching")
+    )
   );
   const showTypingIndicator =
     status === "streaming" &&
-    Boolean(currentStreamingAssistantMessage) &&
-    Boolean(isCurrentAssistantResponseStreaming) &&
-    !hasActiveDeepThink;
+    !hasActiveDeepThink &&
+    !hasActiveSearch;
 
   const userMessages = useMemo(() => {
     return visibleMessages.filter((m) => m.role === "user");
