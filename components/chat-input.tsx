@@ -260,7 +260,7 @@ export function ChatInput({
                   )}
                 >
                   {freeTierStatus.blocked
-                    ? "20/20 blocked — wait 3 hours"
+                    ? "20/20 — wait 3 hours"
                     : `${freeTierStatus.count}/20`}
                 </span>
               )}
