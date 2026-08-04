@@ -184,6 +184,7 @@ export async function POST(req: Request) {
     clientId = "",
     chatId = "",
     browserDate,
+    browserTime,
   }: {
     messages: UIMessage[];
     model?: string;
@@ -199,6 +200,7 @@ export async function POST(req: Request) {
     clientId?: string;
     chatId?: string;
     browserDate?: string;
+    browserTime?: string;
   } = await req.json();
 
   const normalizedClientId = clientId || paidTierClientId || "";
@@ -237,13 +239,17 @@ export async function POST(req: Request) {
   }
 
   const modelId = MODELS[modelKey] ?? MODELS.instant;
-  // The browser supplies its local calendar date, avoiding a server-timezone mismatch.
+  // The browser supplies its local date and time, avoiding a server-timezone mismatch.
   const browserDateIsValid =
     typeof browserDate === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(browserDate);
-  const browserDateContext = browserDateIsValid
-    ? `Current date (user's local browser date): ${browserDate}`
+  const browserTimeIsValid =
+    typeof browserTime === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(browserTime);
+  const browserDateTimeContext = browserDateIsValid
+    ? browserTimeIsValid
+      ? `Current date and time (user's local browser time): ${browserDate} ${browserTime}`
+      : `Current date (user's local browser date): ${browserDate}`
     : "";
-  const baseSystemPrompt = [browserDateContext, readSystemPrompt()]
+  const baseSystemPrompt = [browserDateTimeContext, readSystemPrompt()]
     .filter(Boolean)
     .join("\n\n");
 
