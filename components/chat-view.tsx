@@ -203,12 +203,20 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     .find((message) => message.role === "assistant");
   const visibleMessages = messages.filter((message, index) => {
     if (message.role === "system") return false;
-    return !(
+    const nextMessage = messages[index + 1];
+    if (
       isProgressOnlyAssistantMessage(message) &&
-      messages[index + 1]?.role === "assistant"
-    );
+      nextMessage?.role === "assistant"
+    ) {
+      return false;
+    }
+    return true;
   });
-  const showTypingIndicator = status === "streaming";
+  const currentStreamingAssistantMessage = visibleMessages
+    .slice()
+    .reverse()
+    .find((message) => message.role === "assistant");
+  const showTypingIndicator = status === "streaming" && Boolean(currentStreamingAssistantMessage);
 
   const userMessages = useMemo(() => {
     return visibleMessages.filter((m) => m.role === "user");
