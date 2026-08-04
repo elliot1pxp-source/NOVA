@@ -35,12 +35,6 @@
   user-select: text;
 }
 
-.app-shell [data-chat-message] img {
-  -webkit-user-drag: auto;
-  -webkit-user-select: auto;
-  user-select: auto;
-}
-
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;

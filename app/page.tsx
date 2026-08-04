@@ -121,20 +121,12 @@ export default function Home() {
         if (!isCopyableTarget(event.target)) event.preventDefault();
       }}
       onDragStart={(event) => {
-        if (
-          event.target instanceof Element &&
-          event.target.closest("img") &&
-          !isCopyableTarget(event.target)
-        ) {
+        if (event.target instanceof Element && event.target.closest("img")) {
           event.preventDefault();
         }
       }}
       onContextMenu={(event) => {
-        if (
-          event.target instanceof Element &&
-          event.target.closest("img") &&
-          !isCopyableTarget(event.target)
-        ) {
+        if (event.target instanceof Element && event.target.closest("img")) {
           event.preventDefault();
         }
       }}
