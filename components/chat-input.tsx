@@ -77,6 +77,9 @@ export function ChatInput({
   }, [input]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const isMobile = window.matchMedia("(pointer: coarse) and (max-width: 768px)").matches;
+    if (isMobile) return;
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       onSubmit();
