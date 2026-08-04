@@ -183,6 +183,7 @@ export async function POST(req: Request) {
     paidTierClientId,
     clientId = "",
     chatId = "",
+    browserDate,
   }: {
     messages: UIMessage[];
     model?: string;
@@ -197,6 +198,7 @@ export async function POST(req: Request) {
     paidTierClientId?: string | null;
     clientId?: string;
     chatId?: string;
+    browserDate?: string;
   } = await req.json();
 
   const normalizedClientId = clientId || paidTierClientId || "";
@@ -235,7 +237,15 @@ export async function POST(req: Request) {
   }
 
   const modelId = MODELS[modelKey] ?? MODELS.instant;
-  const baseSystemPrompt = readSystemPrompt();
+  // The browser supplies its local calendar date, avoiding a server-timezone mismatch.
+  const browserDateIsValid =
+    typeof browserDate === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(browserDate);
+  const browserDateContext = browserDateIsValid
+    ? `Current date (user's local browser date): ${browserDate}`
+    : "";
+  const baseSystemPrompt = [browserDateContext, readSystemPrompt()]
+    .filter(Boolean)
+    .join("\n\n");
 
   // Determine which API keys to use:
   // 1. If a redeemed paid tier code is provided, use its server-stored tokens.

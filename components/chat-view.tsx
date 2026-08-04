@@ -129,10 +129,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     const paidTierCode = hasActivePaidTier ? paidData.code : null;
     const paidTierClientId = hasActivePaidTier ? getPaidTierClientId() : null;
     const clientId = getPaidTierClientId();
+    const currentDate = new Date();
+    const browserDate = `${String(currentDate.getMonth() + 1).padStart(2, "0")}/${String(currentDate.getDate()).padStart(2, "0")}/${currentDate.getFullYear()}`;
     return {
       model,
       deepThink,
       webSearch,
+      browserDate,
       modelSettings,
       paidTierCode,
       paidTierClientId,
