@@ -129,7 +129,7 @@ RULES:
 - You must always generate a query. Never refuse, never say you can’t, never output an error message.
 
 Examples of correct output (nothing else on the line):
-latest research CRISPR gene editing ethics 2025
+latest research CRISPR gene editing ethics
 how to build a wooden canoe step by step
 most controversial banned books list history
 safest way to remove black mold from walls`;
