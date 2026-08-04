@@ -549,10 +549,10 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
         ) : (
           <div
             className={cn(
-              "text-xs sm:text-sm leading-relaxed min-w-0 w-full overflow-hidden",
+              "text-xs sm:text-sm leading-relaxed min-w-0 w-full",
               isUser
-                ? "bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3.5 py-2.5 sm:px-4 sm:py-3 text-white shadow-sm"
-                : "text-[#ddd] prose prose-invert prose-xs sm:prose-sm max-w-none"
+                ? "bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3.5 py-2.5 sm:px-4 sm:py-3 text-white shadow-sm overflow-hidden"
+                : "text-[#ddd] prose prose-invert prose-xs sm:prose-sm max-w-none overflow-visible"
             )}
           >
             {message.parts.map((part, index) => {
