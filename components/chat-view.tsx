@@ -201,8 +201,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const lastAssistantMessage = [...messages]
     .reverse()
     .find((message) => message.role === "assistant");
-  const waitingForDeepThink =
-    isLoading && lastAssistantMessage && isProgressOnlyAssistantMessage(lastAssistantMessage);
   const visibleMessages = messages.filter((message, index) => {
     if (message.role === "system") return false;
     return !(
@@ -210,7 +208,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       messages[index + 1]?.role === "assistant"
     );
   });
-  const showTypingIndicator = isLoading && !waitingForDeepThink;
+  const showTypingIndicator = status === "streaming";
 
   const userMessages = useMemo(() => {
     return visibleMessages.filter((m) => m.role === "user");
@@ -593,14 +591,15 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             <div className="max-w-3xl mx-auto">
               {visibleMessages.map((message, i) => {
                 const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
+                const isCurrentStreamingAssistant = isLastAssistant && status === "streaming";
                 return (
                   <div key={message.id} data-message-id={message.id}>
                     <ChatMessage
                       message={message}
                       onRegenerate={isLastAssistant ? () => regenerate() : undefined}
                       onEdit={message.role === "user" ? handleEditMessage : undefined}
-                      isStreaming={isLastAssistant && isLoading}
-                      disableActions={isLoading}
+                      isStreaming={isCurrentStreamingAssistant}
+                      disableActions={isCurrentStreamingAssistant}
                     />
                   </div>
                 );
