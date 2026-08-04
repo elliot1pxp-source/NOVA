@@ -246,8 +246,8 @@ export async function POST(req: Request) {
     typeof browserTime === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(browserTime);
   const browserDateTimeContext = browserDateIsValid
     ? browserTimeIsValid
-      ? `Current date and time (user's local browser time): ${browserDate} ${browserTime}`
-      : `Current date (user's local browser date): ${browserDate}`
+      ? `Current time: ${browserTime}`
+      : `Current date: ${browserDate}`
     : "";
   const baseSystemPrompt = [browserDateTimeContext, readSystemPrompt()]
     .filter(Boolean)
