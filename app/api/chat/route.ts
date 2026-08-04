@@ -31,7 +31,7 @@ const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 
 const MODELS: Record<string, string> = {
   instant: "nvidia/mistral-nemotron",
-  expert: "nvidia/nemotron-nano-9b-v2",
+  expert: "nvidia/step-3.7-flash",
   deepthink: "nvidia/mistral-nemotron",
   websearch: "nvidia/mistral-nemotron",
 };
