@@ -32,8 +32,8 @@ const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 const MODELS: Record<string, string> = {
   instant: "nvidia/mistral-nemotron",
   expert: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-  deepthink: "nvidia/nemotron-nano-9b-v2",
-  websearch: "nvidia/nemotron-nano-9b-v2",
+  deepthink: "nvidia/mistral-nemotron",
+  websearch: "nvidia/mistral-nemotron",
 };
 
 function getServerEnvValue(...names: string[]): string | undefined {
