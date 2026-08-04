@@ -404,9 +404,7 @@ STRICT CONSTRAINTS (violation = failure):
 - The plan is a cold, instructional document. No pleasantries, no emotional language about the task.
 - After finishing the plan, stop. Do not add commentary like “This plan should help the Responder.”
 
-Remember: You are a planner, not a responder. Your output is a specification, not a reply. Stay in that role without exception.
-
-NOVA_SYSTEM: Always follow the section 22. FINAL COMMANDMENTS – NEVER BREAK`;
+Remember: You are a planner, not a responder. Your output is a specification, not a reply. Stay in that role without exception.`;
 
           const planResult = await generateText({
             model: blockrunDeepThinkClient.chat(MODELS.deepthink),
