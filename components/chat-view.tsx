@@ -221,7 +221,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       (part) => part.type === "data-thought" && part.data?.status === "thinking"
     )
   );
-  const showTypingIndicator = status === "streaming" && Boolean(currentStreamingAssistantMessage) && !hasActiveDeepThink;
+  const isCurrentAssistantResponseStreaming = currentStreamingAssistantMessage?.parts.some(
+    (part) => part.type === "text"
+  );
+  const showTypingIndicator =
+    status === "streaming" &&
+    Boolean(currentStreamingAssistantMessage) &&
+    Boolean(isCurrentAssistantResponseStreaming) &&
+    !hasActiveDeepThink;
 
   const userMessages = useMemo(() => {
     return visibleMessages.filter((m) => m.role === "user");

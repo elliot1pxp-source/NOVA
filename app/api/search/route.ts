@@ -79,7 +79,6 @@ async function fetchPageContent(url: string): Promise<string | undefined> {
 // --- NEW: Serper.dev search function ---
 async function searchSerper(query: string, customApiKey?: string): Promise<SearchResult[]> {
   const apiKey = customApiKey || process.env.SERPER_API_KEY;
-  
   if (!apiKey) {
     console.error("SERPER_API_KEY is not set in environment variables");
     return [];
@@ -104,13 +103,11 @@ async function searchSerper(query: string, customApiKey?: string): Promise<Searc
     }
 
     const data = await response.json();
-    
-    // Map Serper's response to our SearchResult format
-    const organicResults = data.organic || [];
+    const organicResults = data.organic || data.organic_results || [];
     return organicResults.slice(0, MAX_RESULTS).map((result: any) => ({
       title: result.title || "Untitled",
-      snippet: result.snippet || "",
-      url: result.link || undefined,
+      snippet: result.snippet || result.description || "",
+      url: result.link || result.url || undefined,
     }));
   } catch (error) {
     console.error("Serper API fetch failed:", error);
@@ -118,10 +115,63 @@ async function searchSerper(query: string, customApiKey?: string): Promise<Searc
   }
 }
 
+async function searchDuckDuckGoHtml(query: string): Promise<SearchResult[]> {
+  try {
+    const response = await fetch(
+      `https://html.duckduckgo.com/html/?${new URLSearchParams({ q: query }).toString()}`,
+      {
+        headers: {
+          ...DEFAULT_FETCH_HEADERS,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`DuckDuckGo HTML search returned ${response.status}`);
+      return [];
+    }
+
+    const html = await response.text();
+    const linkRegex = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    const snippetRegex = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+
+    const results: SearchResult[] = [];
+    const snippetMatches = Array.from(html.matchAll(snippetRegex));
+    let match: RegExpExecArray | null;
+    while ((match = linkRegex.exec(html)) && results.length < MAX_RESULTS) {
+      const url = decodeHtml(match[1]);
+      const title = stripHtml(match[2]);
+      const snippet = snippetMatches[results.length]?.[1]
+        ? stripHtml(snippetMatches[results.length][1])
+        : "";
+      results.push({ title: title || "Untitled", snippet, url });
+    }
+
+    return results;
+  } catch (error) {
+    console.error("DuckDuckGo HTML search failed:", error);
+    return [];
+  }
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'");
+}
+
 // --- Replace search function ---
 export async function searchDuckDuckGo(query: string, serperApiKey?: string): Promise<SearchResult[]> {
-  // This function name is kept for backward compatibility; it now uses Serper.
-  return searchSerper(query, serperApiKey);
+  const serperResults = await searchSerper(query, serperApiKey);
+  if (serperResults.length > 0) {
+    return serperResults;
+  }
+  return searchDuckDuckGoHtml(query);
 }
 
 /**
