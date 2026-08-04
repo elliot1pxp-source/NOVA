@@ -459,7 +459,7 @@ Remember: You are a planner, not a responder. Your output is a specification, no
         finalSystemPrompt += `\n\nWeb Search results:\n${searchContext}`;
       }
       if (deepThinkContext) {
-        finalSystemPrompt += `\n\nMy deepthink guide:\n${deepThinkContext}`;
+        finalSystemPrompt += `\n\nMy deepthink response guide:\n${deepThinkContext}`;
       }
 
       // --- Final streaming response ---
