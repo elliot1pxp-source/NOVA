@@ -62,7 +62,7 @@ export async function enforceFreeTierLimit(clientId: string, chatId: string) {
   if (usageRecord.count >= FREE_TIER_MESSAGE_LIMIT) {
     usageRecord.blockedUntil = new Date(now + FREE_TIER_BLOCK_DURATION_MS).toISOString();
     await saveFreeTierUsage(clientId, chatId, usageRecord);
-    throw new Error("Free tier message limit reached: 20 messages. Please wait 3 hours for the reset.");
+    throw new Error("Free tier message limit reached: 20 messages. Please wait 3 hours for the reset or start a new chat.");
   }
 
   usageRecord.count += 1;
