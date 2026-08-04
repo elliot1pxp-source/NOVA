@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo, type TouchEvent, type WheelEvent } from "react";
 import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { Zap, Shield } from "lucide-react";
 import { ChatInput, PendingAttachment } from "./chat-input";
 import { ChatMessage, TypingIndicator } from "./chat-message";
@@ -56,6 +56,37 @@ function isProgressOnlyAssistantMessage(message: { role: string; parts: Array<{ 
   );
 }
 
+function getCurrentResponseProgressStatus(
+  messages: UIMessage[],
+  partType: "data-search" | "data-thought"
+): string | undefined {
+  let lastUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index].role === "user") {
+      lastUserIndex = index;
+      break;
+    }
+  }
+
+  for (let messageIndex = messages.length - 1; messageIndex > lastUserIndex; messageIndex--) {
+    const message = messages[messageIndex];
+    if (message.role !== "assistant") continue;
+
+    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex--) {
+      const part = message.parts[partIndex];
+      if (part.type !== partType) continue;
+      const status = (part as { data?: { status?: unknown } }).data?.status;
+      return typeof status === "string" ? status : undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function isCompletedPreprocessingStatus(status: string | undefined) {
+  return status === "done" || status === "error";
+}
+
 function createConversationSummary(text: string) {
   return {
     id: `conversation-summary-${Date.now()}`,
@@ -81,6 +112,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
   const [webSearch, setWebSearch] = useState(false);
+  const [requestFeatures, setRequestFeatures] = useState({ deepThink: false, webSearch: false });
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
   const [pendingRegenerateAfterEdit, setPendingRegenerateAfterEdit] = useState(false);
@@ -208,9 +240,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, [error]);
 
   const isLoading = status === "submitted" || status === "streaming";
-  const lastAssistantMessage = [...messages]
-    .reverse()
-    .find((message) => message.role === "assistant");
   const visibleMessages = messages.filter((message, index) => {
     if (message.role === "system") return false;
     const nextMessage = messages[index + 1];
@@ -222,7 +251,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }
     return true;
   });
-  const showTypingIndicator = status !== "ready" && status !== "error";
+  const searchComplete =
+    !requestFeatures.webSearch ||
+    isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-search"));
+  const deepThinkComplete =
+    !requestFeatures.deepThink ||
+    isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-thought"));
+  const showTypingIndicator =
+    status !== "ready" && status !== "error" && searchComplete && deepThinkComplete;
 
   useEffect(() => {
     if (isLoading && !wasLoadingRef.current) {
@@ -521,6 +557,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
     const text = input;
     const pending = attachments;
+    setRequestFeatures({ deepThink, webSearch });
     setInput("");
     setAttachments([]);
     setAttachmentError("");
@@ -574,9 +611,18 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         };
         return [...prev.slice(0, idx), editedMessage];
       });
+      setRequestFeatures({ deepThink, webSearch });
       setPendingRegenerateAfterEdit(true);
     },
-    [isLoading, setMessages]
+    [deepThink, isLoading, setMessages, webSearch]
+  );
+
+  const handleRegenerate = useCallback(
+    (messageId: string) => {
+      setRequestFeatures({ deepThink, webSearch });
+      regenerate({ messageId });
+    },
+    [deepThink, regenerate, webSearch]
   );
 
   const isEmpty = messages.length === 0;
@@ -681,7 +727,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                       message={message}
                       onRegenerate={
                         message.role === "assistant"
-                          ? () => regenerate({ messageId: message.id })
+                          ? () => handleRegenerate(message.id)
                           : undefined
                       }
                       onEdit={message.role === "user" ? handleEditMessage : undefined}
