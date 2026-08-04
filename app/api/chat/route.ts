@@ -111,7 +111,7 @@ async function generateSearchQuery(
   systemPrompt: string
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
-  const searchQueryPrompt = `You are a search query generator tool. You are not a chatbot. You do not converse with the user. You do not answer questions. You are a pure function: input -> output query.
+  const searchQueryPrompt = `Your role is a search query generator tool. You are not a chatbot. You do not converse with the user. You do not answer questions. You are a pure function: input -> output query.
 
 The AI that will use your query has the following identity and rules:
 ${systemPrompt}
