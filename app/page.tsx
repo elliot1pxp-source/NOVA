@@ -29,6 +29,13 @@ function toStored(c: Chat): StoredChat {
   return { id: c.id, title: c.title, createdAt: c.createdAt.toISOString(), pinned: c.pinned };
 }
 
+function isCopyableTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest('[data-chat-message], input, textarea, [contenteditable="true"]')
+  );
+}
+
 export default function Home() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -108,7 +115,30 @@ export default function Home() {
   const currentChatId = activeChatId ?? pendingChatIdRef.current;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#0d0d0d]">
+    <div
+      className="app-shell flex h-screen w-full overflow-hidden bg-[#0d0d0d]"
+      onCopy={(event) => {
+        if (!isCopyableTarget(event.target)) event.preventDefault();
+      }}
+      onDragStart={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("img") &&
+          !isCopyableTarget(event.target)
+        ) {
+          event.preventDefault();
+        }
+      }}
+      onContextMenu={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("img") &&
+          !isCopyableTarget(event.target)
+        ) {
+          event.preventDefault();
+        }
+      }}
+    >
       <NovaSidebar
         chats={chats}
         activeChatId={activeChatId}

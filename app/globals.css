@@ -14,6 +14,33 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
+/* Keep application chrome from being selected, copied, or image-dragged. */
+.app-shell {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app-shell img {
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Conversation content and editable fields intentionally remain copyable. */
+.app-shell [data-chat-message],
+.app-shell input,
+.app-shell textarea,
+.app-shell [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.app-shell [data-chat-message] img {
+  -webkit-user-drag: auto;
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;

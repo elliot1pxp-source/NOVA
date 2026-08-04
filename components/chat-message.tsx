@@ -487,6 +487,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
 
   return (
     <div
+      data-chat-message
       className={cn(
         "flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-2.5 sm:py-4 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
         isUser ? "flex-row-reverse" : "flex-row"
