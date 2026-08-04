@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, KeyboardEvent, ChangeEvent } from "react";
+import { useRef, useEffect, useState, KeyboardEvent, ChangeEvent } from "react";
 import { 
   ArrowUp, 
   Paperclip, 
@@ -66,6 +66,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isExistingFilesOpen, setIsExistingFilesOpen] = useState(false);
 
   // Auto-resize textarea height
   useEffect(() => {
@@ -205,19 +206,33 @@ export function ChatInput({
                 <div className="relative group/files">
                   <button
                     type="button"
+                    onClick={() => setIsExistingFilesOpen((open) => !open)}
                     className="p-1 sm:p-1.5 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
                     title="Reuse existing chat files"
+                    aria-label="Reuse existing chat files"
+                    aria-expanded={isExistingFilesOpen}
+                    aria-haspopup="menu"
                   >
                     <FolderOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
 
                   {/* Context menu for existing files */}
-                  <div className="absolute left-0 bottom-full hidden group-hover/files:flex flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 shadow-2xl z-50 min-w-[180px] sm:min-w-[200px] max-h-[180px] overflow-y-auto">
+                  <div
+                    className={cn(
+                      "absolute left-0 bottom-full flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 shadow-2xl z-50 min-w-[180px] sm:min-w-[200px] max-h-[180px] overflow-y-auto",
+                      isExistingFilesOpen ? "flex" : "hidden group-hover/files:flex"
+                    )}
+                    role="menu"
+                  >
                     <span className="text-[9px] sm:text-[10px] font-semibold text-white/50 uppercase px-2 py-1">Recent Chat Files</span>
                     {existingFiles.map((file) => (
                       <button
                         key={file.id}
-                        onClick={() => onAttachExistingFile(file)}
+                        onClick={() => {
+                          onAttachExistingFile(file);
+                          setIsExistingFilesOpen(false);
+                        }}
+                        role="menuitem"
                         className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/10 rounded-xl text-[11px] sm:text-xs text-white/90 text-left truncate transition"
                       >
                         <FileText className="w-3.5 h-3.5 text-white/60 flex-shrink-0" />
