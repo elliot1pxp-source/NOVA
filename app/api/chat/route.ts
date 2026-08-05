@@ -60,7 +60,7 @@ function readSystemPrompt(): string {
         return fs.readFileSync(filePath, "utf-8").trim();
       }
     } catch {
-      // continue trying the next candidate path
+      //contiune tryin
     }
   }
 
