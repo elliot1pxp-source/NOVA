@@ -872,8 +872,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             />
           )}
 
-          {/* Floating Bottom Input Bar with Soft Gradient Mask */}
-          <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none bg-[#0d0d0d] pt-6 sm:pt-10 pb-3 sm:pb-5 px-2 sm:px-4">
+          {/* Floating Bottom Input Bar */}
+          <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none bg-[#0d0d0d] pb-3 sm:pb-5 px-2 sm:px-4">
             <div className="pointer-events-auto">
               <ChatInput
                 input={input}
