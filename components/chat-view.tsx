@@ -206,6 +206,120 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     throttle: 200,
   });
 
+  // Retry controller refs and helpers
+  const retryAttemptRef = useRef(0);
+  const lastOutgoingRef = useRef<null | { type: "send" | "regenerate"; payload: any }>(null);
+  const streamTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const firstTokenReceivedRef = useRef(false);
+  const lastAssistantTextLengthRef = useRef(0);
+
+  const clearStreamTimer = useCallback(() => {
+    if (streamTimerRef.current) {
+      clearTimeout(streamTimerRef.current);
+      streamTimerRef.current = null;
+    }
+  }, []);
+
+  const cleanupPartialAssistantMessages = useCallback(() => {
+    setMessages((current) => {
+      const lastUserIndex = (() => {
+        for (let i = current.length - 1; i >= 0; i--) {
+          if (current[i].role === "user") return i;
+        }
+        return -1;
+      })();
+      if (lastUserIndex === -1) return current;
+      // Keep messages up to last user message
+      return current.slice(0, lastUserIndex + 1);
+    });
+  }, [setMessages]);
+
+  const handleFirstTokenSeen = useCallback(() => {
+    firstTokenReceivedRef.current = true;
+    retryAttemptRef.current = 0;
+    clearStreamTimer();
+  }, [clearStreamTimer]);
+
+  // Monitor messages to detect first assistant token arrival
+  useEffect(() => {
+    // compute current assistant text length in the last assistant message
+    let currentLen = 0;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "assistant") {
+        for (const p of m.parts) {
+          if (p.type === "text") currentLen += String((p as any).text || "").length;
+        }
+        break;
+      }
+    }
+
+    if (currentLen > lastAssistantTextLengthRef.current) {
+      // first token (or more) arrived
+      lastAssistantTextLengthRef.current = currentLen;
+      handleFirstTokenSeen();
+    }
+  }, [messages, handleFirstTokenSeen]);
+
+  const startAttempt = useCallback(async (attemptTimeout: number) => {
+    const attempt = ++retryAttemptRef.current;
+    console.info(`NOVA: starting stream attempt ${attempt}`);
+
+    // schedule timeout to detect lack of tokens
+    clearStreamTimer();
+    firstTokenReceivedRef.current = false;
+    streamTimerRef.current = setTimeout(() => {
+      if (firstTokenReceivedRef.current) return;
+      console.info(`NOVA: stream attempt ${attempt} timed out after ${attemptTimeout}ms - aborting and retrying`);
+      try {
+        stop();
+      } catch (e) {
+        // ignore
+      }
+      cleanupPartialAssistantMessages();
+      // decide whether to retry
+      if (retryAttemptRef.current < 3 && lastOutgoingRef.current) {
+        // Next attempts use 10s
+        const nextTimeout = 10000;
+        // re-send the same payload
+        const saved = lastOutgoingRef.current;
+        if (saved.type === "send") {
+          // small delay to allow abort to settle, then re-send and start next attempt watcher
+          setTimeout(() => {
+            sendMessage(saved.payload);
+            startAttempt(nextTimeout);
+          }, 50);
+        } else if (saved.type === "regenerate") {
+          setTimeout(() => {
+            regenerate(saved.payload);
+            startAttempt(nextTimeout);
+          }, 50);
+        }
+      } else {
+        console.warn("NOVA: all retry attempts exhausted or no outgoing payload saved");
+        clearStreamTimer();
+      }
+    }, attemptTimeout);
+  }, [cleanupPartialAssistantMessages, clearStreamTimer, regenerate, sendMessage, stop]);
+
+  const startSendWithRetry = useCallback((payload: any) => {
+    lastOutgoingRef.current = { type: "send", payload };
+    retryAttemptRef.current = 0;
+    lastAssistantTextLengthRef.current = 0;
+    // initial attempt
+    sendMessage(payload);
+    // start watcher for initial 5s
+    startAttempt(5000);
+  }, [sendMessage, startAttempt]);
+
+  const startRegenerateWithRetry = useCallback((payload: any) => {
+    lastOutgoingRef.current = { type: "regenerate", payload };
+    retryAttemptRef.current = 0;
+    lastAssistantTextLengthRef.current = 0;
+    regenerate(payload);
+    startAttempt(5000);
+  }, [regenerate, startAttempt]);
+
   useEffect(() => {
     if (hasPaidAccess) {
       setShowFreeTierUsage(false);
@@ -475,7 +589,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   useEffect(() => {
     if (pendingRegenerateAfterEdit) {
       setPendingRegenerateAfterEdit(false);
-      regenerate();
+      startRegenerateWithRetry(undefined);
     }
   }, [pendingRegenerateAfterEdit]);
 
@@ -563,7 +677,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     setAttachmentError("");
 
     if (pending.length === 0) {
-      sendMessage({ text });
+      startSendWithRetry({ text });
       return;
     }
 
@@ -593,7 +707,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       })
     );
 
-    sendMessage({ text, files });
+    startSendWithRetry({ text, files });
   };
 
   const handleEditMessage = useCallback(
@@ -620,7 +734,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const handleRegenerate = useCallback(
     (messageId: string) => {
       setRequestFeatures({ deepThink, webSearch });
-      regenerate({ messageId });
+      startRegenerateWithRetry({ messageId });
     },
     [deepThink, regenerate, webSearch]
   );
