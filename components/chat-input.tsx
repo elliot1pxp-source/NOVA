@@ -96,19 +96,16 @@ export function ChatInput({
     <div className="w-full max-w-3xl mx-auto flex flex-col gap-1.5 sm:gap-2">
       {/* Attachment Error Banner */}
       {attachmentError && (
-        <div className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 rounded-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-1">
+        <div className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 rounded-xl">
           <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
           <span>{attachmentError}</span>
         </div>
       )}
 
       {/* Main Dynamic Input Container */}
-      <div className="relative group w-full">
-        {/* Soft Ambient White Glow Layer */}
-        <div className="absolute -inset-1 rounded-[20px] sm:rounded-[28px] bg-gradient-to-r from-white/10 via-white/20 to-white/10 blur-xl opacity-30 group-hover:opacity-60 group-focus-within:opacity-100 transition duration-500 pointer-events-none" />
-
+      <div className="relative w-full">
         {/* Floating Capsule Body */}
-        <div className="relative flex flex-col bg-[#0a0a0c]/85 backdrop-blur-2xl border border-white/20 focus-within:border-white/40 rounded-[20px] sm:rounded-[26px] p-2 sm:p-3 shadow-[0_12px_40px_rgba(0,0,0,0.85),0_0_20px_rgba(255,255,255,0.06)] transition-all duration-300">
+        <div className="relative flex flex-col bg-[#0a0a0c]/95 border border-white/10 focus-within:border-white/30 rounded-[20px] sm:rounded-[26px] p-2 sm:p-3 transition-all duration-300">
           
           {/* Pending Attachments List */}
           {attachments.length > 0 && (
@@ -120,7 +117,7 @@ export function ChatInput({
                 return (
                   <div
                     key={att.id}
-                    className="group/chip relative flex items-center gap-1.5 sm:gap-2 bg-white/10 border border-white/15 rounded-lg sm:rounded-xl p-1 pr-1.5 sm:p-1.5 sm:pr-2 text-[11px] sm:text-xs text-white shadow-sm transition hover:bg-white/15"
+                    className="group/chip relative flex items-center gap-1.5 sm:gap-2 bg-white/10 border border-white/15 rounded-lg sm:rounded-xl p-1 pr-1.5 sm:p-1.5 sm:pr-2 text-[11px] sm:text-xs text-white transition hover:bg-white/15"
                   >
                     {isImage ? (
                       <img src={att.previewUrl} alt={name} className="w-6 h-6 sm:w-7 sm:h-7 object-cover rounded-md sm:rounded-lg" />
@@ -164,7 +161,7 @@ export function ChatInput({
                 className={cn(
                   "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
                   deepThink
-                    ? "bg-white/20 border-white/40 text-white shadow-[0_0_12px_rgba(255,255,255,0.2)]"
+                    ? "bg-white/20 border-white/40 text-white"
                     : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
                 )}
               >
@@ -179,7 +176,7 @@ export function ChatInput({
                 className={cn(
                   "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
                   webSearch
-                    ? "bg-white/20 border-white/40 text-white shadow-[0_0_12px_rgba(255,255,255,0.2)]"
+                    ? "bg-white/20 border-white/40 text-white"
                     : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
                 )}
               >
@@ -225,7 +222,7 @@ export function ChatInput({
                   {/* Context menu for existing files */}
                   <div
                     className={cn(
-                      "absolute left-0 bottom-full flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 shadow-2xl z-50 min-w-[180px] sm:min-w-[200px] max-h-[180px] overflow-y-auto",
+                      "absolute left-0 bottom-full flex-col bg-[#141418] border border-white/15 rounded-2xl p-2 z-50 min-w-[180px] sm:min-w-[200px] max-h-[180px] overflow-y-auto",
                       isExistingFilesOpen ? "flex" : "hidden group-hover/files:flex"
                     )}
                     role="menu"
@@ -282,7 +279,7 @@ export function ChatInput({
                   className={cn(
                     "p-1.5 sm:p-2 rounded-full transition-all duration-300 flex items-center justify-center",
                     canSubmit
-                      ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                      ? "bg-white text-black hover:scale-105 active:scale-95 cursor-pointer"
                       : "bg-white/10 text-white/30 cursor-not-allowed"
                   )}
                 >

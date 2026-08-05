@@ -751,9 +751,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           </div>
 
           {/* Dynamic Island Model Switcher */}
-          <div className="relative group">
-            <div className="absolute -inset-1 rounded-full bg-white/20 blur-md opacity-50 group-hover:opacity-80 transition duration-500 pointer-events-none" />
-            <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/85 backdrop-blur-2xl border border-white/20 rounded-full p-1 sm:p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+          <div className="relative">
+            <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1 sm:p-1.5">
               {MODEL_TABS.map((tab) => (
                 <button
                   key={tab.id}
@@ -761,7 +760,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
                     model === tab.id
-                      ? "bg-white/15 text-white border border-white/25 shadow-[0_0_12px_rgba(255,255,255,0.15)]"
+                      ? "bg-white/15 text-white border border-white/25"
                       : "text-[#888c99] hover:text-white hover:bg-white/5"
                   )}
                 >
@@ -800,9 +799,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         <>
           {/* Top Floating Dynamic Island Header */}
           <div className="absolute top-2.5 sm:top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
-            <div className="relative group">
-              <div className="absolute -inset-1 rounded-full bg-white/20 blur-md opacity-60 group-hover:opacity-90 transition duration-500 pointer-events-none" />
-              <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/85 backdrop-blur-2xl border border-white/20 rounded-full p-1 shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+            <div className="relative">
+              <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1">
                 {MODEL_TABS.map((tab) => (
                   <button
                     key={tab.id}
@@ -810,7 +808,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                     className={cn(
                       "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
                       model === tab.id
-                        ? "bg-white/15 text-white border border-white/25 shadow-[0_0_10px_rgba(255,255,255,0.15)]"
+                        ? "bg-white/15 text-white border border-white/25"
                         : "text-[#888c99] hover:text-white hover:bg-white/5"
                     )}
                   >
@@ -875,7 +873,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           )}
 
           {/* Floating Bottom Input Bar with Soft Gradient Mask */}
-          <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none bg-gradient-to-t from-[#0d0d0d] via-[#0d0d0d]/85 to-transparent pt-6 sm:pt-10 pb-3 sm:pb-5 px-2 sm:px-4">
+          <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none bg-[#0d0d0d] pt-6 sm:pt-10 pb-3 sm:pb-5 px-2 sm:px-4">
             <div className="pointer-events-auto">
               <ChatInput
                 input={input}
