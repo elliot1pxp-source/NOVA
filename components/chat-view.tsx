@@ -32,8 +32,12 @@ const MODEL_TABS: { id: Model; label: string; icon: React.ReactNode }[] = [
   { id: "expert", label: "Expert", icon: <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> },
 ];
 
-function generateAttachmentId() {
+function generateUniqueId() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function generateAttachmentId() {
+  return generateUniqueId();
 }
 
 function fileToDataUrl(file: File, normalizedMimeType: string): Promise<string> {
@@ -279,12 +283,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       if (retryAttemptRef.current < 3 && lastOutgoingRef.current) {
         // Next attempts use 10s
         const nextTimeout = 10000;
-        // re-send the same payload
         const saved = lastOutgoingRef.current;
         if (saved.type === "send") {
-          // small delay to allow abort to settle, then re-send and start next attempt watcher
+          // Reuse the last user message by resubmitting without an explicit payload.
           setTimeout(() => {
-            sendMessage(saved.payload);
+            sendMessage();
             startAttempt(nextTimeout);
           }, 50);
         } else if (saved.type === "regenerate") {
@@ -705,6 +708,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       })
     );
 
+    lastOutgoingRef.current = { type: "send", payload: { text, files } };
     startSendWithRetry({ text, files });
   };
 

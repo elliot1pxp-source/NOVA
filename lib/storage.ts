@@ -58,6 +58,17 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function dedupeById<T extends { id?: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const id = item?.id;
+    if (typeof id !== "string" || id.length === 0) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 // --- CHATS ---
 export function loadChats(): StoredChat[] {
   if (!isBrowser()) return [];
@@ -65,7 +76,7 @@ export function loadChats(): StoredChat[] {
     const raw = window.localStorage.getItem(CHATS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? dedupeById(parsed) : [];
   } catch {
     return [];
   }
@@ -74,7 +85,7 @@ export function loadChats(): StoredChat[] {
 export function saveChats(chats: StoredChat[]) {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+    window.localStorage.setItem(CHATS_KEY, JSON.stringify(dedupeById(chats)));
   } catch {
     // storage full / disabled — fail silently
   }
@@ -86,8 +97,9 @@ export function loadMessages<T = unknown>(chatId: string): T[] {
   try {
     const raw = window.localStorage.getItem(messagesKey(chatId));
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return dedupeById(parsed as Array<{ id?: string }>) as T[];
   } catch {
     return [];
   }
@@ -96,7 +108,7 @@ export function loadMessages<T = unknown>(chatId: string): T[] {
 export function saveMessages(chatId: string, messages: unknown[]) {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(messagesKey(chatId), JSON.stringify(messages));
+    window.localStorage.setItem(messagesKey(chatId), JSON.stringify(dedupeById(messages as Array<{ id?: string }>)));
   } catch {
     // storage full — drop silently rather than crash the chat
   }

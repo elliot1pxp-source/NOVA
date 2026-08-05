@@ -29,6 +29,10 @@ function toStored(c: Chat): StoredChat {
   return { id: c.id, title: c.title, createdAt: c.createdAt.toISOString(), pinned: c.pinned };
 }
 
+function dedupeChats(chats: Chat[]) {
+  return Array.from(new Map(chats.map((chat) => [chat.id, chat])).values());
+}
+
 function isCopyableTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest("[data-chat-message]"));
@@ -45,7 +49,11 @@ export default function Home() {
   useEffect(() => {
     const stored = loadChats();
     if (stored.length > 0) {
-      setChats(stored.map(toChat));
+      const uniqueChats = dedupeChats(stored.map(toChat));
+      setChats(uniqueChats);
+      if (uniqueChats.length !== stored.length) {
+        saveChats(uniqueChats.map(toStored));
+      }
     }
     hydratedRef.current = true;
   }, []);
@@ -56,7 +64,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    saveChats(chats.map(toStored));
+    saveChats(dedupeChats(chats).map(toStored));
   }, [chats]);
 
   const handleUpdateModelSettings = useCallback((newSettings: ModelSettings) => {
@@ -72,11 +80,12 @@ export default function Home() {
   const handleFirstMessage = useCallback(
     (chatId: string, title: string) => {
       setChats((prev) => {
-        const exists = prev.find((c) => c.id === chatId);
+        const uniquePrev = dedupeChats(prev);
+        const exists = uniquePrev.find((c) => c.id === chatId);
         if (exists) {
-          return prev.map((c) => (c.id === chatId ? { ...c, title } : c));
+          return uniquePrev.map((c) => (c.id === chatId ? { ...c, title } : c));
         }
-        return [{ id: chatId, title, createdAt: new Date() }, ...prev];
+        return [{ id: chatId, title, createdAt: new Date() }, ...uniquePrev];
       });
       setActiveChatId(chatId);
     },
