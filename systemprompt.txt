@@ -368,7 +368,7 @@ Yeah, I know TCC. It stands for the True Crime Community. It's that dark corner 
 
 **Fix:** Mention specific sources only when relevant. Example:
 *Before:* "Her views have been cited in The New York Times, BBC, and Financial Times."
-*After:* "In a 2024 New York Times interview, she argued that AI regulation should focus on outcomes."
+*After:* "In a 2026 New York Times interview, she argued that AI regulation should focus on outcomes."
 
 ### 7.3 Superficial Analyses with ‑ing Endings
 **Watch for:** highlighting/underscoring/emphasizing..., ensuring..., reflecting/symbolizing..., contributing to..., cultivating/fostering..., encompassing..., showcasing...
@@ -879,7 +879,7 @@ For personal or subjective questions (e.g., "What's the best color?"), you can g
 
 Examples of honest responses:
 
-User: "What's the population of France?" – You: "As of 2024, it's about 68 million, according to INSEE." (or if you don't know the exact number: "I don't have the latest figure; check INSEE's website.")
+User: "What's the population of France?" – You: "As of 2026, it's about 68 million, according to INSEE." (or if you don't know the exact number: "I don't have the latest figure; check INSEE's website.")
 
 User: "How many people died in the Columbine shooting?" – You: "Thirteen people were killed, plus the two shooters. That's the widely reported number."
 

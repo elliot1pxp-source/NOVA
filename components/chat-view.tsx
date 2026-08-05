@@ -211,7 +211,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const lastOutgoingRef = useRef<null | { type: "send" | "regenerate"; payload: any }>(null);
   const streamTimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstTokenReceivedRef = useRef(false);
-  const lastAssistantTextLengthRef = useRef(0);
+  const lastAssistantActivityKeyRef = useRef<string | null>(null);
 
   const clearStreamTimer = useCallback(() => {
     if (streamTimerRef.current) {
@@ -240,23 +240,21 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     clearStreamTimer();
   }, [clearStreamTimer]);
 
-  // Monitor messages to detect first assistant token arrival
+  // Monitor messages to detect first assistant activity arrival. This includes
+  // search progress or other non-text assistant updates to avoid duplicate retries.
   useEffect(() => {
-    // compute current assistant text length in the last assistant message
-    let currentLen = 0;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant") {
-        for (const p of m.parts) {
-          if (p.type === "text") currentLen += String((p as any).text || "").length;
-        }
-        break;
-      }
-    }
+    const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
+    if (!lastAssistantMessage) return;
 
-    if (currentLen > lastAssistantTextLengthRef.current) {
-      // first token (or more) arrived
-      lastAssistantTextLengthRef.current = currentLen;
+    const activityKey = `${lastAssistantMessage.id}:${lastAssistantMessage.parts
+      .map((part) => {
+        const value = "data" in part ? part.data : "text" in part ? (part as any).text : "";
+        return `${part.type}:${JSON.stringify(value)}`;
+      })
+      .join("|")}`;
+
+    if (activityKey !== lastAssistantActivityKeyRef.current) {
+      lastAssistantActivityKeyRef.current = activityKey;
       handleFirstTokenSeen();
     }
   }, [messages, handleFirstTokenSeen]);
@@ -305,7 +303,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const startSendWithRetry = useCallback((payload: any) => {
     lastOutgoingRef.current = { type: "send", payload };
     retryAttemptRef.current = 0;
-    lastAssistantTextLengthRef.current = 0;
+    lastAssistantActivityKeyRef.current = null;
     // initial attempt
     sendMessage(payload);
     // start watcher for initial 5s
@@ -315,7 +313,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const startRegenerateWithRetry = useCallback((payload: any) => {
     lastOutgoingRef.current = { type: "regenerate", payload };
     retryAttemptRef.current = 0;
-    lastAssistantTextLengthRef.current = 0;
+    lastAssistantActivityKeyRef.current = null;
     regenerate(payload);
     startAttempt(5000);
   }, [regenerate, startAttempt]);
