@@ -450,13 +450,13 @@ Remember: You are a planner, not a responder. Your output is a specification, no
         finalSystemPrompt += `\n\n${INITIAL_CHAT_PROMPT}`;
       }
       if (userInput) {
-        finalSystemPrompt += `\n\n---USER---\n\nUSER: ${userInput}`;
+        finalSystemPrompt += `\n\n---USER INPUT---\n\nUSER: ${userInput}\n\n---USER INPUT END---`;
       }
       if (searchContext) {
-        finalSystemPrompt += `---NOVA---\n\nWeb Search results:\n${searchContext}`;
+        finalSystemPrompt += `\n\n---NOVA---\n\nWeb Search results:\n${searchContext}`;
       }
       if (deepThinkContext) {
-        finalSystemPrompt += `---NOVA---\n\nDeepthink guide response:\n${deepThinkContext}`;
+        finalSystemPrompt += `\n\nDeepthink guide response:\n${deepThinkContext}\n\n---NOVA END---`;
       }
 
       // --- Final streaming response ---
