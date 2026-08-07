@@ -15,8 +15,8 @@ import { getPaidTierClientId, getPaidTierData, getServerMode } from "@/lib/paid-
 
 type Model = "instant" | "expert";
 
-const MESSAGE_LIMIT = 50;
-const RECENT_MESSAGES_TO_KEEP = 46;
+const MESSAGE_LIMIT = 200;
+const RECENT_MESSAGES_TO_KEEP = 180;
 const SCROLL_BOTTOM_THRESHOLD = 24;
 
 type Props = {
@@ -32,12 +32,8 @@ const MODEL_TABS: { id: Model; label: string; icon: React.ReactNode }[] = [
   { id: "expert", label: "Expert", icon: <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> },
 ];
 
-function generateUniqueId() {
-  return Math.random().toString(36).slice(2, 10);
-}
-
 function generateAttachmentId() {
-  return generateUniqueId();
+  return Math.random().toString(36).slice(2, 10);
 }
 
 function fileToDataUrl(file: File, normalizedMimeType: string): Promise<string> {
@@ -283,25 +279,19 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       if (retryAttemptRef.current < 3 && lastOutgoingRef.current) {
         // Next attempts use 10s
         const nextTimeout = 10000;
-        const saved = lastOutgoingRef.current;
-        if (saved.type === "send") {
-          // Reuse the last user message by resubmitting without an explicit payload.
-          setTimeout(() => {
-            sendMessage();
-            startAttempt(nextTimeout);
-          }, 50);
-        } else if (saved.type === "regenerate") {
-          setTimeout(() => {
-            regenerate(saved.payload);
-            startAttempt(nextTimeout);
-          }, 50);
-        }
+        // Re-request the last outgoing message without appending a duplicate.
+        // `sendMessage()` with no payload re-sends the last user message, so we
+        // avoid the flicker caused by removing/re-adding messages on retry.
+        setTimeout(() => {
+          sendMessage();
+          startAttempt(nextTimeout);
+        }, 50);
       } else {
         console.warn("NOVA: all retry attempts exhausted or no outgoing payload saved");
         clearStreamTimer();
       }
     }, attemptTimeout);
-  }, [cleanupPartialAssistantMessages, clearStreamTimer, regenerate, sendMessage, stop]);
+  }, [cleanupPartialAssistantMessages, clearStreamTimer, sendMessage, stop]);
 
   const startSendWithRetry = useCallback((payload: any) => {
     lastOutgoingRef.current = { type: "send", payload };
@@ -708,7 +698,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       })
     );
 
-    lastOutgoingRef.current = { type: "send", payload: { text, files } };
     startSendWithRetry({ text, files });
   };
 

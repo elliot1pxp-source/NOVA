@@ -4,6 +4,9 @@ export type FreeTierUsage = {
   count: number;
   windowStart: string;
   blockedUntil?: string;
+  // Id of the last user message that consumed quota. Retries of the same
+  // message are detected by this and do not consume additional quota.
+  lastMessageId?: string;
 };
 
 export const FREE_TIER_MESSAGE_LIMIT = 20;
@@ -39,7 +42,7 @@ export function formatBlockedUntil(blockedUntil?: string): string | null {
   return Number.isNaN(blockedDate.getTime()) ? null : blockedDate.toISOString();
 }
 
-export async function enforceFreeTierLimit(clientId: string, chatId: string) {
+export async function enforceFreeTierLimit(clientId: string, chatId: string, lastUserMessageId?: string) {
   const now = Date.now();
   const usageRecord = await getFreeTierUsage(clientId, chatId);
   const currentWindowStart = new Date(usageRecord.windowStart).getTime();
@@ -49,13 +52,21 @@ export async function enforceFreeTierLimit(clientId: string, chatId: string) {
     throw new Error("Free tier message limit reached: 20 messages. Please wait 3 hours for the reset or start a new chat.");
   }
 
+  // Retrying the same user message (e.g. auto-retry or regenerate) must not
+  // consume additional quota.
+  if (lastUserMessageId && usageRecord.lastMessageId === lastUserMessageId) {
+    return;
+  }
+
   if (usageRecord.blockedUntil && blockedUntil <= now) {
     usageRecord.count = 0;
     usageRecord.blockedUntil = undefined;
+    usageRecord.lastMessageId = undefined;
     usageRecord.windowStart = new Date(now).toISOString();
   } else if (now - currentWindowStart >= FREE_TIER_USAGE_WINDOW_MS) {
     usageRecord.count = 0;
     usageRecord.blockedUntil = undefined;
+    usageRecord.lastMessageId = undefined;
     usageRecord.windowStart = new Date(now).toISOString();
   }
 
@@ -66,6 +77,7 @@ export async function enforceFreeTierLimit(clientId: string, chatId: string) {
   }
 
   usageRecord.count += 1;
+  usageRecord.lastMessageId = lastUserMessageId ?? usageRecord.lastMessageId;
   if (usageRecord.count >= FREE_TIER_MESSAGE_LIMIT) {
     usageRecord.blockedUntil = new Date(now + FREE_TIER_BLOCK_DURATION_MS).toISOString();
   }

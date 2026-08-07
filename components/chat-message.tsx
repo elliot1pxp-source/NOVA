@@ -5,6 +5,7 @@ import Image from "next/image";
 import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ChevronDown,
   Copy,
@@ -216,6 +217,34 @@ function createMarkdownComponents(isStreaming = false) {
       </a>
     );
   },
+  table({ children }: any) {
+    return (
+      <div className="overflow-x-auto my-2 sm:my-3 rounded-lg border border-[#2a2a2a]">
+        <table className="w-full text-left text-[11px] sm:text-xs text-[#ccc] border-collapse min-w-full">
+          {children}
+        </table>
+      </div>
+    );
+  },
+  thead({ children }: any) {
+    return <thead className="bg-[#1a1a1a] text-white">{children}</thead>;
+  },
+  tbody({ children }: any) {
+    return <tbody className="divide-y divide-[#2a2a2a]">{children}</tbody>;
+  },
+  tr({ children }: any) {
+    return <tr className="hover:bg-[#1a1a1a]/60 transition-colors">{children}</tr>;
+  },
+  th({ children }: any) {
+    return (
+      <th className="px-2.5 sm:px-3 py-2 font-semibold text-white whitespace-nowrap border-b border-[#2a2a2a]">
+        {children}
+      </th>
+    );
+  },
+  td({ children }: any) {
+    return <td className="px-2.5 sm:px-3 py-2 align-top border-b border-[#2a2a2a] last:border-b-0">{children}</td>;
+  },
   };
 }
 
@@ -269,7 +298,7 @@ function StreamingMarkdown({ text, isStreaming }: { text: string; isStreaming: b
 
   return (
     <div ref={contentRef} className="relative">
-      <ReactMarkdown components={streamingMarkdownComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={streamingMarkdownComponents}>
         {text}
       </ReactMarkdown>
       {isStreaming && cursorPosition && (
@@ -335,7 +364,7 @@ function ThoughtBlock({ data }: { data: any }) {
         <div className="mt-2 sm:mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-2.5 sm:pl-3 text-[11px] sm:text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
           {data?.text ? (
             <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
-              <ReactMarkdown components={markdownComponents}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {data.text}
               </ReactMarkdown>
               {isThinking && (

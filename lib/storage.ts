@@ -36,12 +36,12 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   instant: {
     temperature: 0.7,
     topK: 40,
-    maxTokens: 4096,
+    maxTokens: 32768,
   },
   expert: {
     temperature: 0.7,
     topK: 40,
-    maxTokens: 8192,
+    maxTokens: 32768,
   },
 };
 
@@ -50,6 +50,8 @@ const CHATS_KEY = "nova_chats_v1";
 const MESSAGES_PREFIX = "nova_messages_v1_";
 const FILES_PREFIX = "nova_files_v1_";
 const SETTINGS_KEY = "nova_model_settings_v1";
+const SETTINGS_MIGRATION_KEY = "nova_model_settings_migrated_v2";
+const LAST_CHAT_KEY = "nova_last_chat_v1";
 
 const messagesKey = (chatId: string) => `${MESSAGES_PREFIX}${chatId}`;
 const filesKey = (chatId: string) => `${FILES_PREFIX}${chatId}`;
@@ -89,6 +91,30 @@ export function saveChats(chats: StoredChat[]) {
   } catch {
     // storage full / disabled — fail silently
   }
+}
+
+export function loadLastChatId(): string | null {
+  if (!isBrowser()) return null;
+  try {
+    const raw = window.localStorage.getItem(LAST_CHAT_KEY);
+    return raw && typeof raw === "string" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastChatId(chatId: string) {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(LAST_CHAT_KEY, chatId);
+  } catch {
+    // storage full / disabled — fail silently
+  }
+}
+
+export function deleteLastChatId() {
+  if (!isBrowser()) return;
+  window.localStorage.removeItem(LAST_CHAT_KEY);
 }
 
 // --- MESSAGES ---
@@ -204,7 +230,20 @@ export function loadModelSettings(): ModelSettings {
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_MODEL_SETTINGS;
-    return { ...DEFAULT_MODEL_SETTINGS, ...JSON.parse(raw) };
+    const stored = JSON.parse(raw) as Partial<ModelSettings>;
+    const merged: ModelSettings = {
+      instant: { ...DEFAULT_MODEL_SETTINGS.instant, ...stored.instant },
+      expert: { ...DEFAULT_MODEL_SETTINGS.expert, ...stored.expert },
+    };
+    // One-time migration: bump old maxTokens values up to the new default max.
+    // After this runs once, the user can lower maxTokens and it will stick.
+    if (!window.localStorage.getItem(SETTINGS_MIGRATION_KEY)) {
+      merged.instant.maxTokens = DEFAULT_MODEL_SETTINGS.instant.maxTokens;
+      merged.expert.maxTokens = DEFAULT_MODEL_SETTINGS.expert.maxTokens;
+      window.localStorage.setItem(SETTINGS_MIGRATION_KEY, "1");
+      saveModelSettings(merged);
+    }
+    return merged;
   } catch {
     return DEFAULT_MODEL_SETTINGS;
   }

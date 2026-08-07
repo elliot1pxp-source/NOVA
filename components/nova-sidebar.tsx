@@ -35,6 +35,11 @@ export type Chat = {
   pinned?: boolean;
 };
 
+// Module-level flag that survives component remounts. Navigation between chat
+// URLs remounts the page, so keeping the sidebar open state here prevents the
+// sidebar from closing when creating/switching chats.
+let sidebarHistoryOpenPersist = false;
+
 type Props = {
   chats: Chat[];
   activeChatId: string | null;
@@ -485,9 +490,15 @@ export function NovaSidebar({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paidTierOpen, setPaidTierOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(sidebarHistoryOpenPersist);
   const [deletePendingChatId, setDeletePendingChatId] = useState<string | null>(null);
   const [uploadFilesOpen, setUploadFilesOpen] = useState(false);
+
+  // Keep the module-level flag in sync so the open state survives remounts
+  // caused by navigation between chat URLs.
+  useEffect(() => {
+    sidebarHistoryOpenPersist = historyOpen;
+  }, [historyOpen]);
 
   const groups = groupChats(chats);
   const isPaidTierActive = getServerMode() === "paid" && getPaidTierData() !== null;

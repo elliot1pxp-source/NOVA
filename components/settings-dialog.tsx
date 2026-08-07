@@ -189,8 +189,8 @@ export function SettingsDialog({
               <input
                 type="range"
                 min={256}
-                max={8192}
-                step={256}
+                max={32768}
+                step={512}
                 value={currentParams.maxTokens}
                 onChange={(e) => handleParamChange("maxTokens", parseInt(e.target.value, 10))}
                 className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"

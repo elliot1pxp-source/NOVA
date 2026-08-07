@@ -38,6 +38,30 @@ function isCopyableTarget(target: EventTarget | null) {
   return Boolean(target.closest("[data-chat-message]"));
 }
 
+// --- Chat URL helpers (client-side, no full page reload) ---
+const CHAT_URL_PREFIX = "/chat/";
+
+function getChatIdFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const match = window.location.pathname.match(/^\/chat\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function chatUrlFor(chatId: string | null): string {
+  return chatId ? `${CHAT_URL_PREFIX}${chatId}` : "/";
+}
+
+function updateChatUrl(chatId: string | null, replace = false) {
+  if (typeof window === "undefined") return;
+  const url = chatUrlFor(chatId);
+  if (window.location.pathname === url) return;
+  if (replace) {
+    window.history.replaceState({}, "", url);
+  } else {
+    window.history.pushState({}, "", url);
+  }
+}
+
 export default function Home() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -48,15 +72,35 @@ export default function Home() {
 
   useEffect(() => {
     const stored = loadChats();
+    let uniqueChats: Chat[] = [];
     if (stored.length > 0) {
-      const uniqueChats = dedupeChats(stored.map(toChat));
+      uniqueChats = dedupeChats(stored.map(toChat));
       setChats(uniqueChats);
       if (uniqueChats.length !== stored.length) {
         saveChats(uniqueChats.map(toStored));
       }
     }
+    // If the URL points to a chat, open it; otherwise start at a fresh chat.
+    const urlChatId = getChatIdFromUrl();
+    if (urlChatId && uniqueChats.some((chat) => chat.id === urlChatId)) {
+      setActiveChatId(urlChatId);
+    }
     hydratedRef.current = true;
   }, []);
+
+  // Keep the URL in sync when the user navigates with the browser back/forward.
+  useEffect(() => {
+    const handlePopState = () => {
+      const urlChatId = getChatIdFromUrl();
+      if (urlChatId && chats.some((chat) => chat.id === urlChatId)) {
+        setActiveChatId(urlChatId);
+      } else {
+        setActiveChatId(null);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [chats]);
 
   useEffect(() => {
     void refreshPaidTierStatus();
@@ -75,6 +119,12 @@ export default function Home() {
   const handleNewChat = useCallback(() => {
     pendingChatIdRef.current = generateId();
     setActiveChatId(null);
+    updateChatUrl(null);
+  }, []);
+
+  const handleSelectChat = useCallback((chatId: string) => {
+    setActiveChatId(chatId);
+    updateChatUrl(chatId);
   }, []);
 
   const handleFirstMessage = useCallback(
@@ -88,6 +138,8 @@ export default function Home() {
         return [{ id: chatId, title, createdAt: new Date() }, ...uniquePrev];
       });
       setActiveChatId(chatId);
+      // The chat URL is only generated once a message is sent in a new chat.
+      updateChatUrl(chatId);
     },
     []
   );
@@ -109,7 +161,13 @@ export default function Home() {
   const handleDeleteChat = useCallback((chatId: string) => {
     deleteChat(chatId);
     setChats((prev) => prev.filter((chat) => chat.id !== chatId));
-    setActiveChatId((current) => (current === chatId ? null : current));
+    setActiveChatId((current) => {
+      if (current === chatId) {
+        updateChatUrl(null);
+        return null;
+      }
+      return current;
+    });
   }, []);
 
   const handleDeleteAllChats = useCallback(() => {
@@ -117,6 +175,7 @@ export default function Home() {
     setChats([]);
     setActiveChatId(null);
     pendingChatIdRef.current = generateId();
+    updateChatUrl(null);
   }, []);
 
   const currentChatId = activeChatId ?? pendingChatIdRef.current;
@@ -142,7 +201,7 @@ export default function Home() {
         chats={chats}
         activeChatId={activeChatId}
         onNewChat={handleNewChat}
-        onSelectChat={setActiveChatId}
+        onSelectChat={handleSelectChat}
         onTogglePin={handleTogglePin}
         onRenameChat={handleRenameChat}
         onDeleteChat={handleDeleteChat}
