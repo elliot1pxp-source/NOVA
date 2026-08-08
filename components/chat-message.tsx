@@ -514,12 +514,12 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
         />
         <span className="font-medium text-[#aaa]">
           {isComplete
-            ? `Scanned ${total} file${total === 1 ? "" : "s"}`
+            ? `Analyzed: ${total} file${total === 1 ? "" : "s"}`
             : hasError
-              ? "File scanning failed"
+              ? "File analysis failed"
               : activeName
-                ? `Scanning ${activeName} (${doneCount + 1}/${total})…`
-                : `Preparing to scan ${total} file${total === 1 ? "" : "s"}…`}
+                ? `Analyzing: ${activeName} (${doneCount + 1}/${total})…`
+                : `Preparing to analyze: ${total} file${total === 1 ? "" : "s"}…`}
         </span>
         {isScanning && (
           <span className="ml-auto flex gap-1">

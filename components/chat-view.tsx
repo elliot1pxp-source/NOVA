@@ -145,6 +145,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     setExistingFiles(loadChatFiles(chatId));
   }, [chatId]);
 
+  // Web search cannot run together with file attachments — force it off
+  // whenever files are attached.
+  useEffect(() => {
+    if (attachments.length > 0 && webSearch) {
+      setWebSearch(false);
+    }
+  }, [attachments.length, webSearch]);
+
   const fetchTransport = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await fetch(input, init);
     if (!response.ok) {
@@ -873,6 +881,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               onToggleDeepThink={() => setDeepThink((v) => !v)}
               webSearch={webSearch}
               onToggleWebSearch={() => setWebSearch((v) => !v)}
+              webSearchDisabled={attachments.length > 0}
               attachments={attachments}
               attachmentError={attachmentError}
               onAddFiles={handleAddFiles}
@@ -975,6 +984,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 onToggleDeepThink={() => setDeepThink((v) => !v)}
                 webSearch={webSearch}
                 onToggleWebSearch={() => setWebSearch((v) => !v)}
+                webSearchDisabled={attachments.length > 0}
                 attachments={attachments}
                 attachmentError={attachmentError}
                 onAddFiles={handleAddFiles}

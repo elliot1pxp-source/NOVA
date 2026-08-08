@@ -37,6 +37,8 @@ type ChatInputProps = {
   onToggleDeepThink: () => void;
   webSearch: boolean;
   onToggleWebSearch: () => void;
+  /** Web search is unavailable while files are attached (files + search cannot run together). */
+  webSearchDisabled?: boolean;
   attachments: PendingAttachment[];
   attachmentError?: string;
   onAddFiles: (files: FileList | null) => void;
@@ -58,6 +60,7 @@ export function ChatInput({
   onToggleDeepThink,
   webSearch,
   onToggleWebSearch,
+  webSearchDisabled = false,
   attachments,
   attachmentError,
   onAddFiles,
@@ -172,12 +175,20 @@ export function ChatInput({
               {/* Web Search Switcher Pill */}
               <button
                 type="button"
-                onClick={onToggleWebSearch}
+                onClick={webSearchDisabled ? undefined : onToggleWebSearch}
+                disabled={webSearchDisabled}
+                title={
+                  webSearchDisabled
+                    ? "Web search is unavailable while files are attached"
+                    : "Toggle web search"
+                }
                 className={cn(
                   "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
-                  webSearch
-                    ? "bg-white/20 border-white/40 text-white"
-                    : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
+                  webSearchDisabled
+                    ? "bg-white/[0.03] border-white/5 text-[#4a4d5a] cursor-not-allowed"
+                    : webSearch
+                      ? "bg-white/20 border-white/40 text-white"
+                      : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
                 )}
               >
                 <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
