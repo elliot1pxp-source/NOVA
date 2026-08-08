@@ -10,7 +10,7 @@ export const MAX_NON_IMAGE_SIZE_BYTES = MAX_NON_IMAGE_SIZE_MB * 1024 * 1024;
 // Files are embedded in the chat request as base64 data URLs, so a huge
 // number of attachments makes the request "structurally heavy" and the
 // provider rejects it. Cap both the count and the combined size per send.
-export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 export const MAX_TOTAL_ATTACHMENT_SIZE_MB = 10;
 export const MAX_TOTAL_ATTACHMENT_SIZE_BYTES = MAX_TOTAL_ATTACHMENT_SIZE_MB * 1024 * 1024;
 
