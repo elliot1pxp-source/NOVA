@@ -23,18 +23,18 @@ import { createOpenAI } from "@ai-sdk/openai";
 // unprefixed IDs. Both expose the same logical models.
 export const PRIMARY_MODELS: Record<string, string> = {
   instant: "oc/big-pickle",
-  expert: "oc/nemotron-3-ultra-free",
-  deepthink: "oc/nemotron-3-ultra-free",
+  expert: "oc/deepseek-v4-flash-free",
+  deepthink: "oc/big-pickle",
   websearch: "oc/deepseek-v4-flash-free",
-  fileAnalysis: "oc/nemotron-3-ultra-free",
+  fileAnalysis: "oc/big-pickle",
 };
 
 export const FALLBACK_MODELS: Record<string, string> = {
   instant: "big-pickle",
-  expert: "nemotron-3-ultra-free",
+  expert: "deepseek-v4-flash-free",
   deepthink: "big-pickle",
   websearch: "deepseek-v4-flash-free",
-  fileAnalysis: "nemotron-3-ultra-free",
+  fileAnalysis: "big-pickle",
 };
 
 // Model role keys used by call sites. The fallback functions resolve each key
