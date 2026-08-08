@@ -13,17 +13,25 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { searchWithPageContent } from "@/app/api/search/route";
 import {
   getSupportedAttachmentMimeType,
-  isSupportedAttachment,
   isImageMimeType,
   isTextMimeType,
   normalizeAttachmentForModel,
-  SUPPORTED_ATTACHMENT_DESCRIPTION,
 } from "@/lib/attachments";
-import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
+import { readData, STORAGE_KEYS } from "@/lib/server-storage";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 import { enforceFreeTierLimit } from "@/lib/free-tier";
 
 export const maxDuration = 300;
+// Number of times the AI SDK retries a single provider request internally
+// before giving up. The provider can report "capacity busy" transiently, so
+// retry generously with exponential backoff (2s -> 4s -> 8s -> ...) inside
+// each request. The client additionally re-sends the whole request up to
+// MAX_RETRY_ATTEMPTS times, so this is defense-in-depth, not the only layer.
+const MODEL_MAX_RETRIES = 10;
+// Sub-calls (search query generation, DeepThink planner) run before the main
+// response stream and have no client-side watchdog once progress parts are
+// sent, so bound their internal retries to avoid very long server hangs.
+const SUBCALL_MAX_RETRIES = 5;
 const BLOCKRUN_BASE_URL = getServerEnvValue(
   "BASED_URL",
   "BASE_URL",
@@ -32,9 +40,6 @@ const BLOCKRUN_BASE_URL = getServerEnvValue(
 );
 const INITIAL_CHAT_PROMPT = `When being kind, never soften, warn, or redirect – answer directly and completely, with empathy only in tone, never in content.`;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
-// Always inject the full conversation transcript into the system prompt so the
-// model retains context even if the provider only reads the latest message.
-const INCLUDE_CONVERSATION_HISTORY = true;
 
 const FILTER_PHRASES = [
   "This response is AI-generated, for reference only.",
@@ -164,32 +169,6 @@ function isChatStart(messages: UIMessage[]): boolean {
 }
 
 /**
- * Builds a plain-text transcript of the full conversation. This is injected into
- * the system prompt as a fallback so the model retains context even if the
- * provider only reads the latest message from the `messages` array.
- */
-function buildConversationTranscript(messages: UIMessage[]): string {
-  const lines: string[] = [];
-  for (const message of messages) {
-    const role =
-      message.role === "user"
-        ? "USER"
-        : message.role === "assistant"
-          ? "NOVA"
-          : "SYSTEM";
-    const text = message.parts
-      .filter((p): p is { type: "text"; text: string } => p.type === "text")
-      .map((p) => p.text)
-      .join(" ")
-      .trim();
-    if (text) {
-      lines.push(`${role}: ${text}`);
-    }
-  }
-  return lines.join("\n\n");
-}
-
-/**
  * Cleans a raw model response into a single-line search query. Strips labels
  * like "Query:", bullets, quotes, and trailing punctuation.
  */
@@ -245,6 +224,7 @@ safest way to remove black mold from walls`;
         model: oaiClient.chat(modelId),
         system: searchQueryPrompt,
         messages: modelMessages,
+        maxRetries: SUBCALL_MAX_RETRIES,
       });
       let text = "";
       for await (const delta of result.textStream) {
@@ -286,237 +266,238 @@ async function readPaidCodeByRedeemedCode(code: string, clientId: string): Promi
 
 export async function POST(req: Request) {
   try {
-  const {
-    messages,
-    model: modelKey = "instant",
-    deepThink = false,
-    webSearch = false,
-    modelSettings,
-    paidTierCode,
-    paidTierClientId,
-    clientId = "",
-    chatId = "",
-    browserDate,
-    browserTime,
-  }: {
-    messages: UIMessage[];
-    model?: string;
-    deepThink?: boolean;
-    webSearch?: boolean;
-    modelSettings?: {
-      temperature?: number;
-      topK?: number;
-      maxTokens?: number;
-    };
-    paidTierCode?: string;
-    paidTierClientId?: string | null;
-    clientId?: string;
-    chatId?: string;
-    browserDate?: string;
-    browserTime?: string;
-  } = await req.json();
+    const {
+      messages,
+      model: modelKey = "instant",
+      deepThink = false,
+      webSearch = false,
+      modelSettings,
+      paidTierCode,
+      paidTierClientId,
+      clientId = "",
+      chatId = "",
+      browserDate,
+      browserTime,
+    }: {
+      messages: UIMessage[];
+      model?: string;
+      deepThink?: boolean;
+      webSearch?: boolean;
+      modelSettings?: {
+        temperature?: number;
+        topK?: number;
+        maxTokens?: number;
+      };
+      paidTierCode?: string;
+      paidTierClientId?: string | null;
+      clientId?: string;
+      chatId?: string;
+      browserDate?: string;
+      browserTime?: string;
+    } = await req.json();
 
-  const normalizedClientId = clientId || paidTierClientId || "";
-  const normalizedChatId = chatId || "default";
+    const normalizedClientId = clientId || paidTierClientId || "";
+    const normalizedChatId = chatId || "default";
 
-  const hasPaidAccess = Boolean(
-    paidTierCode &&
-      paidTierClientId &&
-      (await readPaidCodeByRedeemedCode(paidTierCode, paidTierClientId))
-  );
+    // Read the redeemed paid code once and reuse it for both the access check
+    // and the token resolution below.
+    const paidCode =
+      paidTierCode && paidTierClientId
+        ? await readPaidCodeByRedeemedCode(paidTierCode, paidTierClientId)
+        : null;
 
-  if (!hasPaidAccess) {
-    await enforceFreeTierLimit(normalizedClientId, normalizedChatId, lastUserMessageId(messages));
-  }
+    const hasPaidAccess = Boolean(paidCode);
 
-  const invalidAttachment = messages.some((message) =>
-    message.parts.some((part) => {
-      if (part.type !== "file") return false;
-
-      const mimeType = getSupportedAttachmentMimeType({
-        mimeType:
-          (part as { mediaType?: string; mimeType?: string }).mediaType ??
-          (part as { mediaType?: string; mimeType?: string }).mimeType,
-        filename: (part as { filename?: string }).filename,
-      });
-
-      return !mimeType || isImageMimeType(mimeType);
-    })
-  );
-
-  if (invalidAttachment) {
-    return Response.json(
-      { error: "Image uploads are not supported." },
-      { status: 400 }
-    );
-  }
-
-  const modelId = MODELS[modelKey] ?? MODELS.instant;
-  // The browser supplies its local date and time, avoiding a server-timezone mismatch.
-  const browserDateIsValid =
-    typeof browserDate === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(browserDate);
-  const browserTimeIsValid =
-    typeof browserTime === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(browserTime);
-  const browserDateTimeContext = browserDateIsValid
-    ? browserTimeIsValid
-      ? `Current date and time: ${browserDate} ${browserTime}`
-      : `Current date: ${browserDate}`
-    : "";
-  const baseSystemPrompt = [browserDateTimeContext, readSystemPrompt()]
-    .filter(Boolean)
-    .join("\n\n");
-
-  // Determine which API keys to use:
-  // 1. If a redeemed paid tier code is provided, use its server-stored tokens.
-  // 2. Fall back to global settings (admin-controlled).
-  // 3. Fall back to environment variables.
-  let apiKey = getServerEnvValue("BLOCKRUN_API_KEY", "BLOCKRUN_TOKEN", "OPENAI_API_KEY");
-  let serperApiKey = getServerEnvValue("SERPER_API_KEY");
-
-  if (paidTierCode && paidTierClientId) {
-    const paidCode = await readPaidCodeByRedeemedCode(paidTierCode, paidTierClientId);
-    if (paidCode?.expiresAt) {
-      const expiresAt = new Date(paidCode.expiresAt);
-      if (expiresAt > new Date()) {
-        if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
-        if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
-      }
+    if (!hasPaidAccess) {
+      await enforceFreeTierLimit(normalizedClientId, normalizedChatId, lastUserMessageId(messages));
     }
-  } else {
-    // Use global settings for free users / expired users
-    const globalSettings = await readGlobalSettings();
-    if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
-    if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
-  }
 
-  const blockrunAuthHeader = getServerEnvValue(
-    "BLOCKRUN_AUTH_HEADER",
-    "OPENAI_AUTH_HEADER",
-    "AUTH_HEADER"
-  );
-  const customBlockrunHeaders =
-    blockrunAuthHeader && apiKey
-      ? parseAuthHeaderTemplate(blockrunAuthHeader, apiKey)
+    const invalidAttachment = messages.some((message) =>
+      message.parts.some((part) => {
+        if (part.type !== "file") return false;
+
+        const mimeType = getSupportedAttachmentMimeType({
+          mimeType:
+            (part as { mediaType?: string; mimeType?: string }).mediaType ??
+            (part as { mediaType?: string; mimeType?: string }).mimeType,
+          filename: (part as { filename?: string }).filename,
+        });
+
+        return !mimeType || isImageMimeType(mimeType);
+      })
+    );
+
+    if (invalidAttachment) {
+      return Response.json(
+        { error: "Image uploads are not supported." },
+        { status: 400 }
+      );
+    }
+
+    const modelId = MODELS[modelKey] ?? MODELS.instant;
+    // The browser supplies its local date and time, avoiding a server-timezone mismatch.
+    const browserDateIsValid =
+      typeof browserDate === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(browserDate);
+    const browserTimeIsValid =
+      typeof browserTime === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(browserTime);
+    const browserDateTimeContext = browserDateIsValid
+      ? browserTimeIsValid
+        ? `Current date and time: ${browserDate} ${browserTime}`
+        : `Current date: ${browserDate}`
+      : "";
+    const baseSystemPrompt = [browserDateTimeContext, readSystemPrompt()]
+      .filter(Boolean)
+      .join("\n\n");
+
+    // Determine which API keys to use:
+    // 1. If a redeemed paid tier code is provided, use its server-stored tokens.
+    // 2. Fall back to global settings (admin-controlled).
+    // 3. Fall back to environment variables.
+    let apiKey = getServerEnvValue("BLOCKRUN_API_KEY", "BLOCKRUN_TOKEN", "OPENAI_API_KEY");
+    let serperApiKey = getServerEnvValue("SERPER_API_KEY");
+
+    if (paidCode) {
+      if (paidCode.expiresAt) {
+        const expiresAt = new Date(paidCode.expiresAt);
+        if (expiresAt > new Date()) {
+          if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
+          if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
+        }
+      }
+    } else {
+      // Use global settings for free users / expired users
+      const globalSettings = await readGlobalSettings();
+      if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
+      if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
+    }
+
+    const blockrunAuthHeader = getServerEnvValue(
+      "BLOCKRUN_AUTH_HEADER",
+      "OPENAI_AUTH_HEADER",
+      "AUTH_HEADER"
+    );
+    const customBlockrunHeaders =
+      blockrunAuthHeader && apiKey
+        ? parseAuthHeaderTemplate(blockrunAuthHeader, apiKey)
+        : undefined;
+    const customFetch = customBlockrunHeaders
+      ? createCustomFetch(customBlockrunHeaders)
       : undefined;
-  const customFetch = customBlockrunHeaders
-    ? createCustomFetch(customBlockrunHeaders)
-    : undefined;
 
-  const openAIOptions = {
-    baseURL: BLOCKRUN_BASE_URL,
-    headers: customBlockrunHeaders,
-    fetch: customFetch,
-    apiKey: customBlockrunHeaders ? undefined : apiKey ?? "blockrun",
-  };
+    const openAIOptions = {
+      baseURL: BLOCKRUN_BASE_URL,
+      headers: customBlockrunHeaders,
+      fetch: customFetch,
+      apiKey: customBlockrunHeaders ? undefined : apiKey ?? "blockrun",
+    };
 
-  const blockrunClient = createOpenAI(openAIOptions);
-  const blockrunDeepThinkClient = createOpenAI(openAIOptions);
+    const blockrunClient = createOpenAI(openAIOptions);
 
-  // Normalize any file attachment MIME types before sending them to the model provider so
-  // browser-reported variants like text/x-go are converted to a supported type.
-  function decodeDataUrlToText(dataUrl: string) {
-    const match = dataUrl.match(/^data:[^;]+;base64,(.*)$/);
-    if (!match) return dataUrl;
-    return Buffer.from(match[1], "base64").toString("utf-8");
-  }
+    // Normalize any file attachment MIME types before sending them to the model provider so
+    // browser-reported variants like text/x-go are converted to a supported type.
+    function decodeDataUrlToText(dataUrl: string) {
+      const match = dataUrl.match(/^data:[^;]+;base64,(.*)$/);
+      if (!match) return dataUrl;
+      return Buffer.from(match[1], "base64").toString("utf-8");
+    }
 
-  const normalizedMessages = messages.map((message) => ({
-    ...message,
-    parts: message.parts.flatMap((part) => {
-      if (part.type !== "file") {
-        return [part];
-      }
+    const normalizedMessages = messages.map((message) => ({
+      ...message,
+      parts: message.parts.flatMap((part) => {
+        if (part.type !== "file") {
+          return [part];
+        }
 
-      const mimeType = getSupportedAttachmentMimeType({
-        mimeType:
-          (part as { mediaType?: string; mimeType?: string }).mediaType ??
-          (part as { mediaType?: string; mimeType?: string }).mimeType,
-        filename: (part as { filename?: string }).filename,
-      });
+        const mimeType = getSupportedAttachmentMimeType({
+          mimeType:
+            (part as { mediaType?: string; mimeType?: string }).mediaType ??
+            (part as { mediaType?: string; mimeType?: string }).mimeType,
+          filename: (part as { filename?: string }).filename,
+        });
 
-      if (mimeType && isTextMimeType(mimeType)) {
-        const textContent = decodeDataUrlToText((part as { url: string }).url);
-        const filename = (part as { filename?: string }).filename || "attachment";
-        return [
-          {
-            type: "text" as const,
-            text: `File: ${filename}\nMime-Type: ${mimeType}\n\n${textContent}`,
-          },
-        ];
-      }
+        if (mimeType && isTextMimeType(mimeType)) {
+          const textContent = decodeDataUrlToText((part as { url: string }).url);
+          const filename = (part as { filename?: string }).filename || "attachment";
+          return [
+            {
+              type: "text" as const,
+              text: `File: ${filename}\nMime-Type: ${mimeType}\n\n${textContent}`,
+            },
+          ];
+        }
 
-      return [normalizeAttachmentForModel(part as any) as any];
-    }),
-  }));
+        return [normalizeAttachmentForModel(part as any) as any];
+      }),
+    }));
 
-  // Convert messages once so they can be reused for search query generation and deepThink
-  const modelMessages = await convertToModelMessages(normalizedMessages);
+    // Convert messages once so they can be reused for search query generation and deepThink
+    const modelMessages = await convertToModelMessages(normalizedMessages);
 
-  // Diagnostic: confirm the full conversation history is being sent to the model.
-  console.info(
-    `[chat] history: ${modelMessages.length} message(s) -> ` +
-      modelMessages.map((m) => m.role).join(", ")
-  );
+    // Diagnostic: confirm the message roles being sent to the model.
+    console.info(
+      `[chat] history: ${modelMessages.length} message(s) -> ` +
+        modelMessages.map((m) => m.role).join(", ")
+    );
 
-  const stream = createUIMessageStream({
-    onError: (error) => {
-      console.error("[chat] stream error", error);
-      if (error instanceof Error) {
-        return error.message;
-      }
-      return typeof error === "string" ? error : "An error occurred while processing your request.";
-    },
-    execute: async ({ writer }) => {
-      let systemPrompt = baseSystemPrompt;
-      let searchContext = "";
-      let deepThinkContext = "";
+    const stream = createUIMessageStream({
+      onError: (error) => {
+        console.error("[chat] stream error", error);
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return typeof error === "string" ? error : "An error occurred while processing your request.";
+      },
+      execute: async ({ writer }) => {
+        let systemPrompt = baseSystemPrompt;
+        let searchContext = "";
+        let deepThinkContext = "";
 
-      // --- Web search (uses searchWithPageContent from the search route) ---
-      if (webSearch) {
-        // Let AI generate a search query based on the full conversation
-        let query: string;
-        writer.write({ type: "data-search", id: "search", data: { status: "generating_query" } });
+        // --- Web search (uses searchWithPageContent from the search route) ---
+        if (webSearch) {
+          // Let AI generate a search query based on the full conversation
+          let query: string;
+          writer.write({ type: "data-search", id: "search", data: { status: "generating_query" } });
 
-        try {
-          // Pass the base system prompt to the query generator
-          query = await generateSearchQuery(modelMessages, MODELS.websearch, blockrunClient, baseSystemPrompt);
-          // Last-resort fallback: only if AI generation truly produced nothing.
-          if (!query || query.length < 3) {
-            console.warn("[chat] search query generation returned nothing - using user text as fallback");
+          try {
+            // Pass the base system prompt to the query generator
+            query = await generateSearchQuery(modelMessages, MODELS.websearch, blockrunClient, baseSystemPrompt);
+            // Last-resort fallback: only if AI generation truly produced nothing.
+            if (!query || query.length < 3) {
+              console.warn("[chat] search query generation returned nothing - using user text as fallback");
+              query = lastUserText(messages);
+            }
+          } catch (error) {
+            console.error("[chat] search query generation failed", error);
             query = lastUserText(messages);
           }
-        } catch (error) {
-          console.error("[chat] search query generation failed", error);
-          query = lastUserText(messages);
-        }
 
-        writer.write({ type: "data-search", id: "search", data: { status: "searching", query } });
+          writer.write({ type: "data-search", id: "search", data: { status: "searching", query } });
 
-        try {
-          const results = query ? await searchWithPageContent(query, serperApiKey) : [];
-          writer.write({ type: "data-search", id: "search", data: { status: "done", query, results } });
+          try {
+            const results = query ? await searchWithPageContent(query, serperApiKey) : [];
+            writer.write({ type: "data-search", id: "search", data: { status: "done", query, results } });
 
-          if (results.length > 0) {
-            const context = results
-              .map((r, i) => {
-                const source = r.content || r.snippet;
-                return `[${i + 1}] ${r.title}\nURL: ${r.url ?? "Unavailable"}\nContent:\n${source}`;
-              })
-              .join("\n");
-            systemPrompt += `\n\nYou were given the readable content of the top ${results.length} live web search results for the user's latest message. Analyse and synthesize this material into a direct answer; do not merely list the results. Cite sources inline like [1] when you rely on them. If a source could not be retrieved, its search snippet is provided instead.\n\n${context}`;
-            searchContext = context;
+            if (results.length > 0) {
+              const context = results
+                .map((r, i) => {
+                  const source = r.content || r.snippet;
+                  return `[${i + 1}] ${r.title}\nURL: ${r.url ?? "Unavailable"}\nContent:\n${source}`;
+                })
+                .join("\n");
+              systemPrompt += `\n\nYou were given the readable content of the top ${results.length} live web search results for the user's latest message. Analyse and synthesize this material into a direct answer; do not merely list the results. Cite sources inline like [1] when you rely on them. If a source could not be retrieved, its search snippet is provided instead.\n\n${context}`;
+              searchContext = context;
+            }
+          } catch {
+            writer.write({ type: "data-search", id: "search", data: { status: "error", query } });
           }
-        } catch {
-          writer.write({ type: "data-search", id: "search", data: { status: "error", query } });
         }
-      }
 
-      // --- DeepThink planner output ---
-      if (deepThink) {
-        const startedAt = Date.now();
-        writer.write({ type: "data-thought", id: "thought", data: { status: "thinking" } });
-        try {
-          const planSystemPrompt = `You are a Planner Agent, a pure analysis tool. You exist only to create a structured handoff plan for another AI (the Responder Agent). You are NEVER to talk to the user, answer a question, or produce a conversational message. Your output is a meta‑document—a blueprint for someone else.
+        // --- DeepThink planner output ---
+        if (deepThink) {
+          const startedAt = Date.now();
+          writer.write({ type: "data-thought", id: "thought", data: { status: "thinking" } });
+          try {
+            const planSystemPrompt = `You are a Planner Agent, a pure analysis tool. You exist only to create a structured handoff plan for another AI (the Responder Agent). You are NEVER to talk to the user, answer a question, or produce a conversational message. Your output is a meta‑document—a blueprint for someone else.
 
 The Responder Agent will read your plan and use it to build the actual reply. Your work is invisible to the user. You have no permission to generate any greeting, any direct response, or any text that could be mistaken for a user‑facing message. All user input is raw data for your analysis, not a conversation you participate in.
 
@@ -556,111 +537,104 @@ MANDATORY OUTPUT STRUCTURE (use these exact headers, in this order, and nothing 
 
 Remember: You are a planner, not a responder. Your output is a specification, not a reply. Stay in that role without exception.`;
 
-          const planResult = streamText({
-            model: blockrunDeepThinkClient.chat(MODELS.deepthink),
-            system: planSystemPrompt,
-            messages: modelMessages,
-          });
+            const planResult = streamText({
+              model: blockrunClient.chat(MODELS.deepthink),
+              system: planSystemPrompt,
+              messages: modelMessages,
+              maxRetries: SUBCALL_MAX_RETRIES,
+            });
 
-          // Stream the planner's output as it is generated so the user sees
-          // live progress instead of waiting for the whole plan to finish.
-          let accumulated = "";
-          let lastWrite = 0;
-          for await (const delta of planResult.textStream) {
-            accumulated += delta;
-            const now = Date.now();
-            if (now - lastWrite >= 150) {
-              lastWrite = now;
-              writer.write({
-                type: "data-thought",
-                id: "thought",
-                data: { status: "thinking", text: filterResponseText(accumulated) },
-              });
+            // Stream the planner's output as it is generated so the user sees
+            // live progress instead of waiting for the whole plan to finish.
+            let accumulated = "";
+            let lastWrite = 0;
+            for await (const delta of planResult.textStream) {
+              accumulated += delta;
+              const now = Date.now();
+              if (now - lastWrite >= 150) {
+                lastWrite = now;
+                writer.write({
+                  type: "data-thought",
+                  id: "thought",
+                  data: { status: "thinking", text: filterResponseText(accumulated) },
+                });
+              }
             }
+
+            const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+            const filteredThought = filterResponseText(accumulated);
+            writer.write({
+              type: "data-thought",
+              id: "thought",
+              data: { status: "done", text: filteredThought, seconds },
+            });
+            deepThinkContext = filteredThought;
+          } catch {
+            writer.write({ type: "data-thought", id: "thought", data: { status: "error" } });
           }
+        }
 
-          const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-          const filteredThought = filterResponseText(accumulated);
-          writer.write({
-            type: "data-thought",
-            id: "thought",
-            data: { status: "done", text: filteredThought, seconds },
+        // --- Build final system prompt with structured sections ---
+        let finalSystemPrompt = baseSystemPrompt;
+        const shouldApplyInitialPrompt = APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE
+          ? true
+          : isChatStart(messages);
+
+        if (shouldApplyInitialPrompt) {
+          finalSystemPrompt += `\n\n${INITIAL_CHAT_PROMPT}`;
+        }
+        if (searchContext) {
+          finalSystemPrompt += `\n\n---NOVA---\n\nWeb Search results:\n${searchContext}`;
+        }
+        if (deepThinkContext) {
+          finalSystemPrompt += `\n\nDeepthink guide response:\n${deepThinkContext}\n\n---NOVA END---`;
+        }
+
+        // --- Final streaming response ---
+        let result;
+        try {
+          result = streamText({
+            model: blockrunClient.chat(modelId),
+            system: finalSystemPrompt,
+            messages: modelMessages,
+            ...getStreamingModelOptions(modelSettings),
+            maxRetries: MODEL_MAX_RETRIES,
+            onChunk: async ({ chunk }) => {
+              if (chunk.type === "text-delta") {
+                chunk.text = filterResponseText(chunk.text);
+              }
+            },
           });
-          deepThinkContext = filteredThought;
-        } catch {
-          writer.write({ type: "data-thought", id: "thought", data: { status: "error" } });
+        } catch (error) {
+          console.error("[chat] streamText failed", error);
+          const message = error instanceof Error ? error.message : "Unknown provider error";
+          throw new Error(`AI request failed: ${message}`);
         }
-      }
 
-      // --- Build final system prompt with structured sections ---
-      let finalSystemPrompt = baseSystemPrompt;
-      const shouldApplyInitialPrompt = APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE
-        ? true
-        : isChatStart(messages);
+        writer.merge(
+          toUIMessageStream({
+            stream: result.stream,
+            sendStart: false,
+            sendFinish: false,
+            onError: (error) => {
+              console.error("[chat] ui stream error", error);
+              if (error instanceof Error) {
+                return error.message;
+              }
+              return typeof error === "string" ? error : "An error occurred while processing your request.";
+            },
+          })
+        );
+      },
+    });
 
-      if (shouldApplyInitialPrompt) {
-        finalSystemPrompt += `\n\n${INITIAL_CHAT_PROMPT}`;
-      }
-      // Inject the full conversation transcript into the system prompt (default
-      // behavior) so the model always has context, even if the provider only
-      // reads the latest message from `messages`.
-      if (INCLUDE_CONVERSATION_HISTORY) {
-        const conversationTranscript = buildConversationTranscript(messages);
-        if (conversationTranscript) {
-          finalSystemPrompt += `\n\n---CONVERSATION HISTORY---\n\nBelow is the full conversation so far. Use it as context to answer the user's latest message coherently and consistently.\n\n${conversationTranscript}\n\n---END---`;
-        }
-      }
-      if (searchContext) {
-        finalSystemPrompt += `\n\n---NOVA---\n\nWeb Search results:\n${searchContext}`;
-      }
-      if (deepThinkContext) {
-        finalSystemPrompt += `\n\nDeepthink guide response:\n${deepThinkContext}\n\n---NOVA END---`;
-      }
-
-      // --- Final streaming response ---
-      let result;
-      try {
-        result = streamText({
-          model: blockrunClient.chat(modelId),
-          system: finalSystemPrompt,
-          messages: modelMessages,
-          ...getStreamingModelOptions(modelSettings),
-          onChunk: async ({ chunk }) => {
-            if (chunk.type === "text-delta") {
-              chunk.text = filterResponseText(chunk.text);
-            }
-          },
-        });
-      } catch (error) {
-        console.error("[chat] streamText failed", error);
-        const message = error instanceof Error ? error.message : "Unknown provider error";
-        throw new Error(`AI request failed: ${message}`);
-      }
-      
-      writer.merge(
-        toUIMessageStream({
-          stream: result.stream,
-          sendStart: false,
-          sendFinish: false,
-          onError: (error) => {
-            console.error("[chat] ui stream error", error);
-            if (error instanceof Error) {
-              return error.message;
-            }
-            return typeof error === "string" ? error : "An error occurred while processing your request.";
-          },
-        })
-      );
-    },
-  });
-
-  try {
-    return createUIMessageStreamResponse({ stream });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
-    console.error("[chat] stream response failed", error);
-    return Response.json({ error: message }, { status: 500 });
-  }
+    try {
+      return createUIMessageStreamResponse({ stream });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+      console.error("[chat] stream response failed", error);
+      return Response.json({ error: message }, { status: 500 });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "An unexpected error occurred.";
     console.error("[chat] POST failed", error);

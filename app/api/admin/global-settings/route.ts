@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 export type GlobalSettings = {
   BLOCKRUN_API_KEY: string;
@@ -34,13 +33,8 @@ async function writeSettings(settings: GlobalSettings): Promise<void> {
   }
 }
 
-function isAuthorized(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  return authHeader === `Bearer ${ADMIN_KEY}`;
-}
-
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const settings = await readSettings();
@@ -51,7 +45,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

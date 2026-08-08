@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { getRedemptionCount, PaidCode } from "@/lib/paid-codes";
 import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
 
 async function readCodes(): Promise<PaidCode[]> {
   return readData<PaidCode[]>(STORAGE_KEYS.PAID_CODES, []);
@@ -20,13 +19,8 @@ async function writeCodes(codes: PaidCode[]): Promise<void> {
   }
 }
 
-function isAuthorized(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  return authHeader === `Bearer ${ADMIN_KEY}`;
-}
-
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
@@ -42,7 +36,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   
@@ -91,7 +85,7 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -170,7 +164,7 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

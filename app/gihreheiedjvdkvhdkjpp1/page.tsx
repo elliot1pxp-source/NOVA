@@ -3,9 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { Shield, Key, Plus, Trash2, Save, Crown, X, RefreshCw, CheckCircle, AlertTriangle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isAdminAuthenticated, setAdminAuthenticated, logoutAdmin } from "@/lib/paid-tier";
-
-const ADMIN_KEY = "FHUDSFIUSFHIUFE3248328&^&@^#&@#^*@^";
+import {
+  isAdminAuthenticated,
+  setAdminAuthenticated,
+  logoutAdmin,
+  getAdminKey,
+  setAdminKey,
+} from "@/lib/paid-tier";
 
 type PaidCode = {
   code: string;
@@ -59,12 +63,19 @@ export default function AdminPage() {
     return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
   };
 
+  const adminHeaders = (): Record<string, string> => {
+    const adminKey = getAdminKey();
+    return {
+      ...(adminKey ? { Authorization: `Bearer ${adminKey}` } : {}),
+    };
+  };
+
   const loadCodes = useCallback(async () => {
     setRefreshingCodes(true);
     try {
       const response = await fetch("/api/admin/codes", {
         cache: "no-store",
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        headers: adminHeaders(),
       });
       const data = await response.json();
 
@@ -86,11 +97,11 @@ export default function AdminPage() {
       const [codesRes, settingsRes] = await Promise.all([
         fetch("/api/admin/codes", {
           cache: "no-store",
-          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+          headers: adminHeaders(),
         }),
         fetch("/api/admin/global-settings", {
           cache: "no-store",
-          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+          headers: adminHeaders(),
         }),
       ]);
 
@@ -111,7 +122,14 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    setAuthenticated(isAdminAuthenticated());
+    // Require both the auth flag and a session-scoped key. If the key is
+    // missing (e.g. restored localStorage flag after a tab restart), clear the
+    // flag and force a fresh login.
+    if (isAdminAuthenticated() && getAdminKey()) {
+      setAuthenticated(true);
+    } else {
+      setAdminAuthenticated(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -121,11 +139,23 @@ export default function AdminPage() {
   }, [authenticated, loadData]);
 
   const handleLogin = async () => {
-    if (loginKey === ADMIN_KEY) {
-      setAdminAuthenticated(true);
-      setAuthenticated(true);
-    } else {
-      setLoginError("Invalid key");
+    setLoginError("");
+    try {
+      const response = await fetch("/api/admin/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: loginKey }),
+      });
+
+      if (response.ok) {
+        setAdminKey(loginKey);
+        setAdminAuthenticated(true);
+        setAuthenticated(true);
+      } else {
+        setLoginError("Invalid key");
+      }
+    } catch {
+      setLoginError("Failed to verify key. Please try again.");
     }
   };
 
@@ -141,7 +171,7 @@ export default function AdminPage() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_KEY}`,
+          ...adminHeaders(),
         },
         body: JSON.stringify(settings),
       });
@@ -173,7 +203,7 @@ export default function AdminPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_KEY}`,
+          ...adminHeaders(),
         },
         body: JSON.stringify({
           code: newCode.trim(),
@@ -211,7 +241,7 @@ export default function AdminPage() {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_KEY}`,
+          ...adminHeaders(),
         },
         body: JSON.stringify({ code }),
       });
@@ -237,7 +267,7 @@ export default function AdminPage() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_KEY}`,
+          ...adminHeaders(),
         },
         body: JSON.stringify({
           code,
@@ -271,7 +301,7 @@ export default function AdminPage() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_KEY}`,
+          ...adminHeaders(),
         },
         body: JSON.stringify({
           code,

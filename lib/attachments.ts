@@ -7,6 +7,13 @@
 export const MAX_NON_IMAGE_SIZE_MB = 5;
 export const MAX_NON_IMAGE_SIZE_BYTES = MAX_NON_IMAGE_SIZE_MB * 1024 * 1024;
 
+// Files are embedded in the chat request as base64 data URLs, so a huge
+// number of attachments makes the request "structurally heavy" and the
+// provider rejects it. Cap both the count and the combined size per send.
+export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+export const MAX_TOTAL_ATTACHMENT_SIZE_MB = 10;
+export const MAX_TOTAL_ATTACHMENT_SIZE_BYTES = MAX_TOTAL_ATTACHMENT_SIZE_MB * 1024 * 1024;
+
 export const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
   "application/json",
   "application/pdf",
@@ -293,6 +300,33 @@ export function validateFileSize(file: { size: number; type?: string; name?: str
       error: `File too large. Non-image files are limited to ${MAX_NON_IMAGE_SIZE_MB}MB.`,
     };
   }
+  return { valid: true };
+}
+
+/**
+ * Validates a batch of files before they are attached. Beyond the per-file
+ * checks, this enforces a combined cap so the chat request stays lightweight
+ * (each file is embedded as a base64 data URL).
+ */
+export function validateAttachmentBatch(files: Array<{ size: number; type?: string; name?: string }>): {
+  valid: boolean;
+  error?: string;
+} {
+  if (files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+    return {
+      valid: false,
+      error: `Too many files. A message can include at most ${MAX_ATTACHMENTS_PER_MESSAGE} files.`,
+    };
+  }
+
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  if (totalBytes > MAX_TOTAL_ATTACHMENT_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: `Files are too large in total. The combined size is limited to ${MAX_TOTAL_ATTACHMENT_SIZE_MB}MB per message.`,
+    };
+  }
+
   return { valid: true };
 }
 

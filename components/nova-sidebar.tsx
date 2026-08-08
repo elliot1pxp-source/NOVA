@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { PaidTierDialog } from "@/components/paid-tier-dialog";
 import { ModelSettings, ChatFile, loadChatFiles, saveChatFiles, deleteChatFile, clearAllChatFiles } from "@/lib/storage";
-import { getSupportedAttachmentMimeType, validateFileSize, SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
+import { getSupportedAttachmentMimeType, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
 import { getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
 export type Chat = {
@@ -257,8 +257,19 @@ function UploadFilesModal({
       setUploadError("");
       setUploading(true);
 
+      const selectedFiles = Array.from(fileList);
+
+      // Keep the chat's file library from growing unbounded; a later message
+      // can only embed a handful of files at once anyway.
+      const batchCheck = validateAttachmentBatch(selectedFiles);
+      if (!batchCheck.valid) {
+        setUploadError(batchCheck.error || "Invalid files");
+        setUploading(false);
+        return;
+      }
+
       const newFiles: ChatFile[] = [];
-      for (const file of Array.from(fileList)) {
+      for (const file of selectedFiles) {
         const validation = validateFileSize(file);
         if (!validation.valid) {
           setUploadError(validation.error || "Invalid file");

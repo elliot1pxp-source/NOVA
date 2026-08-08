@@ -5,6 +5,9 @@ const PAID_TIER_KEY = "nova_paid_tier_v1";
 const PAID_TIER_CLIENT_ID_KEY = "nova_paid_tier_client_id_v1";
 const ADMIN_AUTH_KEY = "nova_admin_auth_v1";
 const SERVER_MODE_KEY = "nova_server_mode_v1";
+// The admin key is the credential for the admin API. It lives in sessionStorage
+// (never localStorage) so it is dropped when the browser tab closes.
+const ADMIN_KEY_SESSION_KEY = "nova_admin_key_session";
 
 export type ServerMode = "global" | "paid";
 
@@ -34,8 +37,37 @@ export function setAdminAuthenticated(value: boolean) {
   }
 }
 
+/** The admin key as entered by the admin (session-scoped, cleared on tab close). */
+export function getAdminKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.sessionStorage.getItem(ADMIN_KEY_SESSION_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setAdminKey(key: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(ADMIN_KEY_SESSION_KEY, key);
+  } catch {
+    // fail silently
+  }
+}
+
+export function clearAdminKey() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(ADMIN_KEY_SESSION_KEY);
+  } catch {
+    // fail silently
+  }
+}
+
 export function logoutAdmin() {
   setAdminAuthenticated(false);
+  clearAdminKey();
 }
 
 // Paid tier management

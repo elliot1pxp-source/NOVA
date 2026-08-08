@@ -10,7 +10,7 @@ import { ChatMessage, TypingIndicator } from "./chat-message";
 import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
-import { getSupportedAttachmentMimeType, isImageMimeType, normalizeDataUrl, validateFileSize, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
+import { getSupportedAttachmentMimeType, isImageMimeType, normalizeDataUrl, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
 import { getPaidTierClientId, getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
 type Model = "instant" | "expert";
@@ -18,6 +18,15 @@ type Model = "instant" | "expert";
 const MESSAGE_LIMIT = 200;
 const RECENT_MESSAGES_TO_KEEP = 180;
 const SCROLL_BOTTOM_THRESHOLD = 24;
+
+// Retry policy for transient provider failures ("capacity busy" etc.).
+// The server already retries internally (MODEL_MAX_RETRIES), but if a whole
+// request still fails the client re-sends it up to MAX_RETRY_ATTEMPTS times.
+// After the first RETRY_COOLDOWN_AFTER_ATTEMPT attempts, wait
+// RETRY_COOLDOWN_MS before trying again so a busy provider has time to recover.
+const MAX_RETRY_ATTEMPTS = 10;
+const RETRY_COOLDOWN_AFTER_ATTEMPT = 3;
+const RETRY_COOLDOWN_MS = 3000;
 
 type Props = {
   chatId: string;
@@ -199,7 +208,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     [fetchTransport, bodyTransport]
   );
 
-  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat({
+  const { messages, sendMessage, status, error, regenerate, setMessages, stop, clearError } = useChat({
     id: chatId,
     messages: initialMessages as never,
     transport,
@@ -212,6 +221,9 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const streamTimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstTokenReceivedRef = useRef(false);
   const lastAssistantActivityKeyRef = useRef<string | null>(null);
+  // While true, transient errors are hidden from the UI because a retry is
+  // already scheduled. Only the final failed attempt surfaces its error.
+  const suppressingErrorRef = useRef(false);
 
   const clearStreamTimer = useCallback(() => {
     if (streamTimerRef.current) {
@@ -237,6 +249,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const handleFirstTokenSeen = useCallback(() => {
     firstTokenReceivedRef.current = true;
     retryAttemptRef.current = 0;
+    suppressingErrorRef.current = false;
     clearStreamTimer();
   }, [clearStreamTimer]);
 
@@ -261,7 +274,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
   const startAttempt = useCallback(async (attemptTimeout: number) => {
     const attempt = ++retryAttemptRef.current;
-    console.info(`NOVA: starting stream attempt ${attempt}`);
+    console.info(`NOVA: starting stream attempt ${attempt}/${MAX_RETRY_ATTEMPTS}`);
 
     // schedule timeout to detect lack of tokens
     clearStreamTimer();
@@ -276,26 +289,38 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       }
       cleanupPartialAssistantMessages();
       // decide whether to retry
-      if (retryAttemptRef.current < 3 && lastOutgoingRef.current) {
+      if (retryAttemptRef.current < MAX_RETRY_ATTEMPTS && lastOutgoingRef.current) {
+        suppressingErrorRef.current = true;
+        // After the first few attempts, give the provider a breather before
+        // the next try so a busy server has time to recover.
+        const cooldown =
+          retryAttemptRef.current >= RETRY_COOLDOWN_AFTER_ATTEMPT
+            ? RETRY_COOLDOWN_MS
+            : 50;
         // Next attempts use 10s
         const nextTimeout = 10000;
         // Re-request the last outgoing message without appending a duplicate.
         // `sendMessage()` with no payload re-sends the last user message, so we
         // avoid the flicker caused by removing/re-adding messages on retry.
         setTimeout(() => {
+          // Dismiss any error banner left over from the failed attempt before
+          // re-sending, so transient failures never flash at the user.
+          clearError();
           sendMessage();
           startAttempt(nextTimeout);
-        }, 50);
+        }, cooldown);
       } else {
+        suppressingErrorRef.current = false;
         console.warn("NOVA: all retry attempts exhausted or no outgoing payload saved");
         clearStreamTimer();
       }
     }, attemptTimeout);
-  }, [cleanupPartialAssistantMessages, clearStreamTimer, sendMessage, stop]);
+  }, [cleanupPartialAssistantMessages, clearStreamTimer, sendMessage, stop, clearError]);
 
   const startSendWithRetry = useCallback((payload: any) => {
     lastOutgoingRef.current = { type: "send", payload };
     retryAttemptRef.current = 0;
+    suppressingErrorRef.current = false;
     lastAssistantActivityKeyRef.current = null;
     // initial attempt
     sendMessage(payload);
@@ -306,6 +331,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const startRegenerateWithRetry = useCallback((payload: any) => {
     lastOutgoingRef.current = { type: "regenerate", payload };
     retryAttemptRef.current = 0;
+    suppressingErrorRef.current = false;
     lastAssistantActivityKeyRef.current = null;
     regenerate(payload);
     startAttempt(5000);
@@ -343,6 +369,25 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     if (typeof (error as { message?: string }).message === "string") return (error as { message?: string }).message;
     return "An error occurred while processing your request.";
   }, [error]);
+
+  // While a retry is scheduled, transient errors are dismissed immediately so
+  // the user never sees "Failed after 3 attempts..." mid-recovery. Only the
+  // final exhausted attempt keeps its error banner.
+  useEffect(() => {
+    if (!error || !suppressingErrorRef.current) return;
+    clearError();
+  }, [error, clearError]);
+
+  // If the provider fails fast (before the watchdog timeout fires), suppress
+  // the banner as soon as the status flips to "error" as long as a retry is
+  // still possible. The watchdog timer will then abort + re-send.
+  useEffect(() => {
+    if (status !== "error") return;
+    if (retryAttemptRef.current < MAX_RETRY_ATTEMPTS && lastOutgoingRef.current) {
+      suppressingErrorRef.current = true;
+      clearError();
+    }
+  }, [status, clearError]);
 
   const isLoading = status === "submitted" || status === "streaming";
   const visibleMessages = messages.filter((message, index) => {
@@ -536,10 +581,24 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     const summarizedIds = new Set(messagesToSummarize.map((message) => message.id));
     summarizingHistoryRef.current = true;
 
+    // Mirror the paid-tier resolution used by the chat transport so the
+    // summarization call uses the same server mode and code.
+    const paidData = getPaidTierData();
+    const serverMode = getServerMode();
+    const hasActivePaidTier =
+      serverMode === "paid" &&
+      paidData &&
+      new Date(paidData.expiresAt) > new Date();
+
     void fetch("/api/summarize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: historyToSummarize, model }),
+      body: JSON.stringify({
+        messages: historyToSummarize,
+        model,
+        paidTierCode: hasActivePaidTier ? paidData.code : null,
+        paidTierClientId: hasActivePaidTier ? getPaidTierClientId() : null,
+      }),
     })
       .then(async (response) => {
         if (!response.ok) throw new Error("Conversation summarization failed");
@@ -610,6 +669,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       acceptedFiles.push(file);
     }
 
+    // Enforce per-message caps counting what is already attached.
+    const batch = validateAttachmentBatch(acceptedFiles);
+    if (!batch.valid) {
+      errorMsg = batch.error || errorMsg;
+      setAttachmentError(errorMsg);
+      return;
+    }
+
     setAttachmentError(errorMsg);
 
     const next: PendingAttachment[] = acceptedFiles.map((file) => ({
@@ -618,8 +685,25 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       file,
       previewUrl: URL.createObjectURL(file),
     }));
-    setAttachments((prev) => [...prev, ...next]);
-  }, [model]);
+    setAttachments((prev) => {
+      const combined = [...prev, ...next];
+      const batchCheck = validateAttachmentBatch(
+        combined.map((att) =>
+          att.source === "file"
+            ? att.file
+            : { size: att.existingFile.size, type: att.existingFile.mimeType, name: att.existingFile.name }
+        )
+      );
+      if (!batchCheck.valid) {
+        // Reject the newly added files (and their object URLs) if they push
+        // the message over the combined cap.
+        for (const att of next) URL.revokeObjectURL(att.previewUrl);
+        setAttachmentError(batchCheck.error || "");
+        return prev;
+      }
+      return combined;
+    });
+  }, []);
 
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachments((prev) => {
@@ -645,17 +729,21 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       if (prev.some((a) => a.source === "existing" && a.existingFile.id === file.id)) {
         return prev;
       }
-      return [
-        ...prev,
-        {
-          id: generateAttachmentId(),
-          source: "existing" as const,
-          existingFile: file,
-          previewUrl: file.dataUrl,
-        },
-      ];
+      const combined = [...prev, { id: generateAttachmentId(), source: "existing" as const, existingFile: file, previewUrl: file.dataUrl }];
+      const batchCheck = validateAttachmentBatch(
+        combined.map((att) =>
+          att.source === "file"
+            ? att.file
+            : { size: att.existingFile.size, type: att.existingFile.mimeType, name: att.existingFile.name }
+        )
+      );
+      if (!batchCheck.valid) {
+        setAttachmentError(batchCheck.error || "");
+        return prev;
+      }
+      return combined;
     });
-  }, [model]);
+  }, []);
 
   const handleSubmit = async () => {
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
