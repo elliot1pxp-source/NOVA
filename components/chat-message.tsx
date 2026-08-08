@@ -27,6 +27,8 @@ type Props = {
   isStreaming?: boolean;
   /** true while any response is in flight (disables edit/retry to avoid overlap) */
   disableActions?: boolean;
+  /** false for messages already present when the chat loaded, so history doesn't replay its entrance animation */
+  animateIn?: boolean;
 };
 
 function messageText(message: UIMessage) {
@@ -151,6 +153,12 @@ function CodeBlock({
       >
         <pre className="m-0 font-mono text-[11px] sm:text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
           <code className={className}>{codeString}</code>
+          {isStreaming && (
+            <span
+              aria-hidden="true"
+              className="inline-block w-[2px] h-3 sm:h-3.5 -mb-0.5 ml-0.5 bg-white/80 animate-pulse align-middle"
+            />
+          )}
         </pre>
       </div>
     </div>
@@ -280,6 +288,17 @@ function StreamingMarkdown({ text, isStreaming }: { text: string; isStreaming: b
       return;
     }
 
+    // Code blocks render their own inline trailing cursor (see CodeBlock)
+    // and auto-scroll themselves on a separate effect that runs after this
+    // one, so measuring a position here would race that scroll and land the
+    // dot in a stale spot — often past the visible, clipped edge of the
+    // code box. Defer entirely to the code block's own cursor in that case.
+    const parentElement = lastTextNode.parentElement;
+    if (parentElement?.closest("[data-code-scroll]")) {
+      setCursorPosition(null);
+      return;
+    }
+
     const lastCharacterIndex = lastTextNode.textContent?.trimEnd().length ?? 0;
     if (lastCharacterIndex === 0) {
       setCursorPosition(null);
@@ -318,7 +337,7 @@ function ThoughtBlock({ data }: { data: any }) {
   const status = data?.status;
   const seconds = data?.seconds;
   const isThinking = status === "thinking";
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(isThinking);
 
   useEffect(() => {
     if (isThinking) {
@@ -620,7 +639,7 @@ function Attachment({ part }: { part: any }) {
   );
 }
 
-export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disableActions }: Props) {
+export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disableActions, animateIn = true }: Props) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -659,13 +678,14 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
     setIsEditing(false);
   };
 
-  const showActions = isUser || (!isStreaming && !disableActions);
+  const showActions = isUser || !isStreaming;
 
   return (
     <div
       data-chat-message
       className={cn(
-        "flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-2.5 sm:py-4 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
+        "flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-2.5 sm:py-4 transition-all duration-300",
+        animateIn && "animate-in fade-in slide-in-from-bottom-2",
         isUser ? "flex-row-reverse" : "flex-row"
       )}
     >

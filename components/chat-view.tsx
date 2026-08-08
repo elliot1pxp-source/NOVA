@@ -138,12 +138,30 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     blockedUntil?: string;
   } | null>(null);
   const [showFreeTierUsage, setShowFreeTierUsage] = useState(false);
+  const attachmentsRef = useRef<PendingAttachment[]>(attachments);
 
   const initialMessages = useRef(loadMessages(chatId)).current;
+  const initialMessageIdsRef = useRef(new Set(initialMessages.map((m: any) => m.id))).current;
 
   useEffect(() => {
     setExistingFiles(loadChatFiles(chatId));
   }, [chatId]);
+
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  // Object URLs created for locally-picked files (see handleAddFiles) must be
+  // revoked or they leak memory for the lifetime of the tab. Attachments are
+  // revoked individually on removal/submit; this is the safety net for
+  // whatever is still pending if the chat view unmounts (e.g. switching chats).
+  useEffect(() => {
+    return () => {
+      for (const attachment of attachmentsRef.current) {
+        if (attachment.source === "file") URL.revokeObjectURL(attachment.previewUrl);
+      }
+    };
+  }, []);
 
   // Web search cannot run together with file attachments — force it off
   // whenever files are attached.
@@ -349,6 +367,18 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     regenerate(payload);
     startAttempt(5000);
   }, [regenerate, startAttempt]);
+
+  // A manual Stop click must fully cancel the retry system, not just abort
+  // the in-flight fetch. Otherwise the watchdog timer scheduled by
+  // startAttempt() is still armed, sees no token arrive, and auto-resends
+  // the message a few seconds after the user stopped it.
+  const handleStop = useCallback(() => {
+    clearStreamTimer();
+    lastOutgoingRef.current = null;
+    retryAttemptRef.current = 0;
+    suppressingErrorRef.current = false;
+    stop();
+  }, [clearStreamTimer, stop]);
 
   useEffect(() => {
     if (hasPaidAccess) {
@@ -803,6 +833,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     );
 
     startSendWithRetry({ text, files });
+
+    // The blob preview URLs were only needed for the input-bar thumbnails;
+    // the message itself now carries the base64 data URL, so free them.
+    for (const att of pending) {
+      if (att.source === "file") URL.revokeObjectURL(att.previewUrl);
+    }
   };
 
   const handleEditMessage = useCallback(
@@ -828,10 +864,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
 
   const handleRegenerate = useCallback(
     (messageId: string) => {
+      if (isLoading) return;
       setRequestFeatures({ deepThink, webSearch });
       startRegenerateWithRetry({ messageId });
     },
-    [deepThink, regenerate, webSearch]
+    [deepThink, isLoading, regenerate, webSearch]
   );
 
   const isEmpty = messages.length === 0;
@@ -874,7 +911,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               input={input}
               onInputChange={setInput}
               onSubmit={handleSubmit}
-              onStop={stop}
+              onStop={handleStop}
               isLoading={isLoading}
               model={model}
               deepThink={deepThink}
@@ -941,7 +978,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                       }
                       onEdit={message.role === "user" ? handleEditMessage : undefined}
                       isStreaming={isCurrentStreamingAssistant}
-                      disableActions={isCurrentStreamingAssistant}
+                      disableActions={isLoading}
+                      animateIn={!initialMessageIdsRef.has(message.id)}
                     />
                   </div>
                 );
@@ -950,7 +988,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               {displayError && (
                 <div className="flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-3 sm:py-4">
                   <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1">
-                    <img src="/nova-logo.png" alt="NOVA" width={18} height={18} className="sm:w-[20px] sm:h-[20px]" />
+                    <Image src="/nova-logo.png" alt="NOVA" width={20} height={20} className="w-[18px] h-[18px] sm:w-[20px] sm:h-[20px]" />
                   </div>
                   <div className="flex-1 text-xs sm:text-sm leading-relaxed text-[#e87070] bg-[#1e1010] border border-[#3a1a1a] rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3">
                     {displayError}
@@ -977,7 +1015,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 input={input}
                 onInputChange={setInput}
                 onSubmit={handleSubmit}
-                onStop={stop}
+                onStop={handleStop}
                 isLoading={isLoading}
                 model={model}
                 deepThink={deepThink}

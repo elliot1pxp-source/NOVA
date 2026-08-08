@@ -1,66 +1,18 @@
-import { convertToModelMessages, streamText, UIMessage } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
+import { convertToModelMessages, UIMessage } from "ai";
 import { readData, STORAGE_KEYS } from "@/lib/server-storage";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
+import {
+  createProviderClients,
+  getServerEnvValue,
+  MODELS,
+  runSubcallWithFallback,
+} from "@/lib/llm-providers";
 
 export const maxDuration = 60;
 
-// Keep in sync with app/api/chat/route.ts.
-const MODELS: Record<string, string> = {
-  instant: "oc/deepseek-v4-flash-free",
-  expert: "oc/big-pickle",
-};
-
 // The provider can report transient "capacity busy" errors; retry internally
 // so a summarization call does not fail on the first hiccup.
-const MODEL_MAX_RETRIES = 5;
-
-function getServerEnvValue(...names: string[]): string | undefined {
-  for (const name of names) {
-    const value = process.env[name];
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-  return undefined;
-}
-
-function parseAuthHeaderTemplate(template: string, apiKey?: string): Record<string, string> | undefined {
-  const headerValue = apiKey
-    ? template.replace(/\{API_KEY\}/gi, apiKey).trim()
-    : template.trim();
-  const separatorIndex = headerValue.indexOf(":");
-  if (separatorIndex < 0) return undefined;
-
-  const name = headerValue.slice(0, separatorIndex).trim();
-  const value = headerValue.slice(separatorIndex + 1).trim();
-  if (!name || !value) return undefined;
-
-  return { [name]: value };
-}
-
-function createCustomFetch(customHeaders: Record<string, string>) {
-  return async (input: string | Request | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
-    const headers = new Headers(request.headers);
-
-    headers.delete("authorization");
-    for (const [key, value] of Object.entries(customHeaders)) {
-      headers.set(key, value);
-    }
-
-    const requestInit: RequestInit = {
-      ...init,
-      headers,
-      body: request.body,
-      method: request.method,
-      signal: request.signal,
-    };
-
-    return fetch(request.url, requestInit);
-  };
-}
+const MODEL_MAX_RETRIES = 3;
 
 type GlobalSettings = {
   BLOCKRUN_API_KEY?: string;
@@ -116,32 +68,21 @@ export async function POST(req: Request) {
     if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
   }
 
-  const openaiBaseURL = getServerEnvValue("BASED_URL", "BASE_URL", "BLOCKRUN_BASE_URL", "OPENAI_BASE_URL");
-  const openaiAuthHeader = getServerEnvValue("BLOCKRUN_AUTH_HEADER", "OPENAI_AUTH_HEADER", "AUTH_HEADER");
-  const customHeaders = openaiAuthHeader && apiKey ? parseAuthHeaderTemplate(openaiAuthHeader, apiKey) : undefined;
-  const customFetch = customHeaders ? createCustomFetch(customHeaders) : undefined;
+  // Primary + fallback endpoint clients with silent fail-over between them.
+  const providerClients = createProviderClients(apiKey);
 
-  const openAIOptions = {
-    baseURL: openaiBaseURL,
-    headers: customHeaders,
-    fetch: customFetch,
-    apiKey: customHeaders ? undefined : apiKey ?? "blockrun",
-  };
-
-  const client = createOpenAI(openAIOptions);
   // This provider always returns SSE streaming, even without stream: true,
-  // so use streamText instead of generateText to consume the stream.
-  const result = streamText({
-    model: client.chat(MODELS[modelKey] ?? MODELS.instant),
+  // so the text stream is consumed directly. Fails over silently:
+  // default -> fallback -> default -> fallback.
+  const summary = await runSubcallWithFallback(providerClients, {
+    modelId: MODELS[modelKey] ?? MODELS.instant,
     system: "You maintain long-running conversation memory for NOVA. Summarize the supplied conversation so it can replace older messages as private context. Preserve the user's goals, relevant background, decisions, constraints, unresolved questions, and important facts. Do not address the user, add new information, or mention that a summary was made. Be concise but specific.",
     messages: await convertToModelMessages(messages),
     maxRetries: MODEL_MAX_RETRIES,
+    onAttemptError: (error, attempt) => {
+      console.error(`[summarize] provider attempt ${attempt + 1} failed`, error);
+    },
   });
-
-  let summary = "";
-  for await (const delta of result.textStream) {
-    summary += delta;
-  }
 
   return Response.json({ summary: summary.trim() });
 }

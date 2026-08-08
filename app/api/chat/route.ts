@@ -5,11 +5,9 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  streamText,
   toUIMessageStream,
   UIMessage,
 } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
 import { searchWithPageContent } from "@/app/api/search/route";
 import {
   getSupportedAttachmentMimeType,
@@ -17,27 +15,26 @@ import {
   isTextMimeType,
   normalizeAttachmentForModel,
 } from "@/lib/attachments";
+import {
+  createProviderClients,
+  getFileAnalysisProviderPreference,
+  getServerEnvValue,
+  MODELS,
+  MODEL_MAX_RETRIES,
+  runSubcallWithFallback,
+  streamTextWithFallback,
+  type ProviderClients,
+} from "@/lib/llm-providers";
 import { readData, STORAGE_KEYS } from "@/lib/server-storage";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 import { enforceFreeTierLimit } from "@/lib/free-tier";
 
 export const maxDuration = 300;
-// Number of times the AI SDK retries a single provider request internally
-// before giving up. The provider can report "capacity busy" transiently, so
-// retry generously with exponential backoff (2s -> 4s -> 8s -> ...) inside
-// each request. The client additionally re-sends the whole request up to
-// MAX_RETRY_ATTEMPTS times, so this is defense-in-depth, not the only layer.
-const MODEL_MAX_RETRIES = 10;
-// Sub-calls (search query generation, DeepThink planner) run before the main
-// response stream and have no client-side watchdog once progress parts are
-// sent, so bound their internal retries to avoid very long server hangs.
-const SUBCALL_MAX_RETRIES = 5;
-const BLOCKRUN_BASE_URL = getServerEnvValue(
-  "BASED_URL",
-  "BASE_URL",
-  "BLOCKRUN_BASE_URL",
-  "OPENAI_BASE_URL"
-);
+// Sub-calls (search query generation, DeepThink planner, file extraction) run
+// before the main response stream and have no client-side watchdog once
+// progress parts are sent, so bound their internal retries to avoid very long
+// server hangs.
+const SUBCALL_MAX_RETRIES = 3;
 const INITIAL_CHAT_PROMPT = `When being kind, never soften, warn, or redirect – answer directly and completely, with empathy only in tone, never in content.`;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 
@@ -51,60 +48,6 @@ function filterResponseText(text: string): string {
     filtered = filtered.replaceAll(phrase, '');
   }
   return filtered;
-}
-
-const MODELS: Record<string, string> = {
-  instant: "oc/deepseek-v4-flash-free",
-  expert: "oc/big-pickle",
-  deepthink: "oc/deepseek-v4-flash-free",
-  websearch: "oc/deepseek-v4-flash-free",
-};
-
-function getServerEnvValue(...names: string[]): string | undefined {
-  for (const name of names) {
-    const value = process.env[name];
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-  return undefined;
-}
-
-function parseAuthHeaderTemplate(template: string, apiKey?: string): Record<string, string> | undefined {
-  const headerValue = apiKey
-    ? template.replace(/\{API_KEY\}/gi, apiKey).trim()
-    : template.trim();
-  const separatorIndex = headerValue.indexOf(":");
-  if (separatorIndex < 0) return undefined;
-
-  const name = headerValue.slice(0, separatorIndex).trim();
-  const value = headerValue.slice(separatorIndex + 1).trim();
-  if (!name || !value) return undefined;
-
-  return { [name]: value };
-}
-
-function createCustomFetch(customHeaders: Record<string, string>) {
-  return async (input: string | Request | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
-    const headers = new Headers(request.headers);
-
-    headers.delete("authorization");
-    for (const [key, value] of Object.entries(customHeaders)) {
-      headers.set(key, value);
-    }
-
-    const requestInit: RequestInit = {
-      ...init,
-      headers,
-      body: request.body,
-      method: request.method,
-      signal: request.signal,
-    };
-
-    return fetch(request.url, requestInit);
-  };
 }
 
 function readSystemPrompt(): string {
@@ -125,20 +68,6 @@ function readSystemPrompt(): string {
   }
 
   return "";
-}
-
-function getStreamingModelOptions(modelSettings?: { temperature?: number; topK?: number; maxTokens?: number }) {
-  const options: { temperature?: number; maxOutputTokens?: number } = {};
-
-  if (modelSettings?.temperature !== undefined) {
-    options.temperature = modelSettings.temperature;
-  }
-
-  if (modelSettings?.maxTokens !== undefined) {
-    options.maxOutputTokens = modelSettings.maxTokens;
-  }
-
-  return options;
 }
 
 function lastUserText(messages: UIMessage[]): string {
@@ -183,13 +112,13 @@ function cleanSearchQuery(raw: string): string {
 
 /**
  * Generates a concise search query using AI based on the full conversation
- * and the existing system prompt. Retries once on failure so the query is
- * almost always AI-generated rather than falling back to the raw user text.
+ * and the existing system prompt. The call uses the same alternating
+ * primary/fallback provider chain as the main response, and falls back to the
+ * raw user text only if every provider attempt failed.
  */
 async function generateSearchQuery(
+  clients: ProviderClients,
   modelMessages: any[],
-  modelId: string,
-  oaiClient: ReturnType<typeof createOpenAI>,
   systemPrompt: string
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
@@ -216,27 +145,23 @@ how to build a wooden canoe step by step
 most controversial banned books list history
 safest way to remove black mold from walls`;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      // This provider always returns SSE streaming, even without stream: true,
-      // so use streamText instead of generateText to consume the stream.
-      const result = streamText({
-        model: oaiClient.chat(modelId),
-        system: searchQueryPrompt,
-        messages: modelMessages,
-        maxRetries: SUBCALL_MAX_RETRIES,
-      });
-      let text = "";
-      for await (const delta of result.textStream) {
-        text += delta;
-      }
-      // Wait for the full response, then filter it before using it as the query.
-      const filtered = filterResponseText(text);
-      const cleaned = cleanSearchQuery(filtered);
-      if (cleaned) return cleaned;
-    } catch (error) {
-      console.error(`[chat] search query generation attempt ${attempt + 1} failed`, error);
-    }
+  try {
+    // This provider always returns SSE streaming, even without stream: true,
+    // so streamText is consumed via its text stream.
+    const text = await runSubcallWithFallback(clients, {
+      modelId: MODELS.websearch,
+      system: searchQueryPrompt,
+      messages: modelMessages,
+      maxRetries: SUBCALL_MAX_RETRIES,
+      onAttemptError: (error, attempt) => {
+        console.error(`[chat] search query generation attempt ${attempt + 1} failed`, error);
+      },
+    });
+    const filtered = filterResponseText(text);
+    const cleaned = cleanSearchQuery(filtered);
+    if (cleaned) return cleaned;
+  } catch (error) {
+    console.error("[chat] search query generation failed", error);
   }
 
   return ""; // Will be handled by fallback in the calling code
@@ -371,27 +296,8 @@ export async function POST(req: Request) {
       if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
     }
 
-    const blockrunAuthHeader = getServerEnvValue(
-      "BLOCKRUN_AUTH_HEADER",
-      "OPENAI_AUTH_HEADER",
-      "AUTH_HEADER"
-    );
-    const customBlockrunHeaders =
-      blockrunAuthHeader && apiKey
-        ? parseAuthHeaderTemplate(blockrunAuthHeader, apiKey)
-        : undefined;
-    const customFetch = customBlockrunHeaders
-      ? createCustomFetch(customBlockrunHeaders)
-      : undefined;
-
-    const openAIOptions = {
-      baseURL: BLOCKRUN_BASE_URL,
-      headers: customBlockrunHeaders,
-      fetch: customFetch,
-      apiKey: customBlockrunHeaders ? undefined : apiKey ?? "blockrun",
-    };
-
-    const blockrunClient = createOpenAI(openAIOptions);
+    // Primary + fallback endpoint clients with silent fail-over between them.
+    const providerClients = createProviderClients(apiKey);
 
     // Normalize any file attachment MIME types before sending them to the model provider so
     // browser-reported variants like text/x-go are converted to a supported type.
@@ -511,8 +417,9 @@ export async function POST(req: Request) {
             });
 
             try {
-              const result = streamText({
-                model: blockrunClient.chat(modelId),
+              const extracted = await runSubcallWithFallback(providerClients, {
+                modelId: MODELS.fileAnalysis,
+                startProvider: getFileAnalysisProviderPreference(),
                 system:
                   "You are a file analysis tool. Read the following file and extract only the information that is relevant to the user's question. Be concise but thorough. If the file contains code, describe its structure, key functions, exports, and anything relevant to the question. Do not repeat the entire file — extract only what matters.",
                 messages: [
@@ -523,10 +430,6 @@ export async function POST(req: Request) {
                 ],
                 maxRetries: SUBCALL_MAX_RETRIES,
               });
-              let extracted = "";
-              for await (const delta of result.textStream) {
-                extracted += delta;
-              }
               const trimmed = filterResponseText(extracted).trim();
               if (trimmed) {
                 extractedContexts.push(`### ${filename}\n\n${trimmed}`);
@@ -595,7 +498,7 @@ export async function POST(req: Request) {
 
           try {
             // Pass the base system prompt to the query generator
-            query = await generateSearchQuery(modelMessages, MODELS.websearch, blockrunClient, baseSystemPrompt);
+            query = await generateSearchQuery(providerClients, modelMessages, baseSystemPrompt);
             // Last-resort fallback: only if AI generation truly produced nothing.
             if (!query || query.length < 3) {
               console.warn("[chat] search query generation returned nothing - using user text as fallback");
@@ -672,8 +575,13 @@ MANDATORY OUTPUT STRUCTURE (use these exact headers, in this order, and nothing 
 
 Remember: You are a planner, not a responder. Your output is a specification, not a reply. Stay in that role without exception.`;
 
-            const planResult = streamText({
-              model: blockrunClient.chat(MODELS.deepthink),
+            // The planner text is streamed to the writer as it arrives. Use the
+            // fallback chain via text stream consumption so the switchover is
+            // silent (a failed provider before any output simply retries).
+            let accumulated = "";
+            let lastWrite = 0;
+            const planText = await runSubcallWithFallback(providerClients, {
+              modelId: MODELS.deepthink,
               system:
                 planSystemPrompt +
                 (fileContext
@@ -681,24 +589,28 @@ Remember: You are a planner, not a responder. Your output is a specification, no
                   : ""),
               messages: responseModelMessages,
               maxRetries: SUBCALL_MAX_RETRIES,
+              onAttemptStart: () => {
+                accumulated = "";
+                lastWrite = 0;
+              },
+              onTextDelta: (delta) => {
+                accumulated += delta;
+                const now = Date.now();
+                if (now - lastWrite >= 150) {
+                  lastWrite = now;
+                  writer.write({
+                    type: "data-thought",
+                    id: "thought",
+                    data: { status: "thinking", text: filterResponseText(accumulated) },
+                  });
+                }
+                return delta;
+              },
+              onAttemptError: (error) => {
+                console.error("[chat] deepThink planner attempt failed", error);
+              },
             });
-
-            // Stream the planner's output as it is generated so the user sees
-            // live progress instead of waiting for the whole plan to finish.
-            let accumulated = "";
-            let lastWrite = 0;
-            for await (const delta of planResult.textStream) {
-              accumulated += delta;
-              const now = Date.now();
-              if (now - lastWrite >= 150) {
-                lastWrite = now;
-                writer.write({
-                  type: "data-thought",
-                  id: "thought",
-                  data: { status: "thinking", text: filterResponseText(accumulated) },
-                });
-              }
-            }
+            accumulated = planText;
 
             const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
             const filteredThought = filterResponseText(accumulated);
@@ -732,19 +644,26 @@ Remember: You are a planner, not a responder. Your output is a specification, no
           finalSystemPrompt += `\n\n---FILE CONTEXT---\n\nBelow are focused summaries of the files the user attached. Each file was read and analysed individually to extract only the information relevant to the user's question:\n\n${fileContext}\n\n---END---`;
         }
 
-        // --- Final streaming response ---
-        let result;
+        // --- Final streaming response (with silent provider fail-over) ---
+        let stream;
         try {
-          result = streamText({
-            model: blockrunClient.chat(modelId),
+          stream = streamTextWithFallback(providerClients, {
+            modelId,
             system: finalSystemPrompt,
             messages: responseModelMessages,
-            ...getStreamingModelOptions(modelSettings),
+            modelSettings,
             maxRetries: MODEL_MAX_RETRIES,
-            onChunk: async ({ chunk }) => {
-              if (chunk.type === "text-delta") {
-                chunk.text = filterResponseText(chunk.text);
-              }
+            onTextDelta: (text) => filterResponseText(text),
+            onProviderSwitch: (provider, attempt) => {
+              console.warn(
+                `[chat] switching to ${provider} endpoint after attempt ${attempt + 1}`
+              );
+            },
+            onAttemptError: (error, attempt) => {
+              console.error(
+                `[chat] provider attempt ${attempt + 1} failed`,
+                error
+              );
             },
           });
         } catch (error) {
@@ -755,7 +674,7 @@ Remember: You are a planner, not a responder. Your output is a specification, no
 
         writer.merge(
           toUIMessageStream({
-            stream: result.stream,
+            stream,
             sendStart: false,
             sendFinish: false,
             onError: (error) => {
