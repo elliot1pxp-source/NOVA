@@ -51,7 +51,7 @@ function filterResponseText(text: string): string {
 const MODELS: Record<string, string> = {
   instant: "oc/deepseek-v4-flash-free",
   expert: "oc/big-pickle",
-  deepthink: "oc/nemotron-3-ultra-free",
+  deepthink: "oc/deepseek-v4-flash-free",
   websearch: "oc/deepseek-v4-flash-free",
 };
 
