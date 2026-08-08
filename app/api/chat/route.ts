@@ -50,9 +50,9 @@ function filterResponseText(text: string): string {
 
 const MODELS: Record<string, string> = {
   instant: "oc/deepseek-v4-flash-free",
-  expert: "ds-web/deepseek-v4-pro",
-  deepthink: "ds-web/DeepSeek-R1",
-  websearch: "ds-web/deepseek-v4-flash",
+  expert: "oc/big-pickle",
+  deepthink: "oc/nemotron-3-ultra-free",
+  websearch: "oc/deepseek-v4-flash-free",
 };
 
 function getServerEnvValue(...names: string[]): string | undefined {
