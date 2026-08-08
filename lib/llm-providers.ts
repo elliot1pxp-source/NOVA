@@ -24,9 +24,9 @@ import { createOpenAI } from "@ai-sdk/openai";
 export const PRIMARY_MODELS: Record<string, string> = {
   instant: "oc/big-pickle",
   expert: "oc/nemotron-3-ultra-free",
-  deepthink: "oc/big-pickle",
+  deepthink: "oc/nemotron-3-ultra-free",
   websearch: "oc/deepseek-v4-flash-free",
-  fileAnalysis: "oc/big-pickle",
+  fileAnalysis: "oc/nemotron-3-ultra-free",
 };
 
 export const FALLBACK_MODELS: Record<string, string> = {
@@ -34,7 +34,7 @@ export const FALLBACK_MODELS: Record<string, string> = {
   expert: "nemotron-3-ultra-free",
   deepthink: "big-pickle",
   websearch: "deepseek-v4-flash-free",
-  fileAnalysis: "big-pickle",
+  fileAnalysis: "nemotron-3-ultra-free",
 };
 
 // Model role keys used by call sites. The fallback functions resolve each key
