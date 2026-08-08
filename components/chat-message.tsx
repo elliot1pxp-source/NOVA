@@ -15,6 +15,8 @@ import {
   Search,
   Check,
   Brain,
+  X,
+  FileSearch,
 } from "lucide-react";
 
 type Props = {
@@ -454,6 +456,150 @@ function SearchBlock({ data }: { data: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boolean }) {
+  // Derive the full file chain state from all accumulated data-file parts.
+  // Each event has a unique id so they all accumulate in message.parts.
+  const { files, total, hasError, isDone } = useMemo(() => {
+    let total = 0;
+    let isDone = false;
+    const fileMap = new Map<number, { name: string; status: string }>();
+
+    for (const part of parts) {
+      const d = part.data;
+      if (!d) continue;
+      if (typeof d.total === "number") total = d.total;
+      if (d.status === "done") isDone = true;
+      if (d.filename && typeof d.index === "number") {
+        fileMap.set(d.index, { name: d.filename, status: d.status });
+      }
+    }
+
+    const files = Array.from({ length: total }, (_, i) => {
+      const state = fileMap.get(i);
+      return { name: state?.name ?? `File ${i + 1}`, status: state?.status ?? "pending" };
+    });
+
+    const hasError = parts.some((p) => p.data?.status === "error");
+
+    return { files, total, hasError, isDone };
+  }, [parts]);
+
+  if (total === 0) return null;
+
+  // The scan is "active" while streaming AND the final "done" event hasn't
+  // arrived yet. Once done (or the stream finished), animations freeze.
+  const isScanning = isStreaming && !isDone && !hasError;
+  const isComplete = !isScanning && !hasError && (isDone || !isStreaming);
+
+  const readingIndex = files.findIndex((f) => f.status === "reading");
+  const doneCount = files.filter((f) => f.status === "analyzed").length;
+  const activeName =
+    readingIndex >= 0 ? files[readingIndex].name : doneCount < total ? "files" : "";
+  const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  return (
+    <div className="mb-2.5 sm:mb-3 rounded-xl bg-[#141414] border border-[#2a2a2a] p-2.5 sm:p-3 shadow-sm">
+      {/* Header */}
+      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs select-none">
+        <FileSearch
+          className={cn(
+            "w-3.5 h-3.5 sm:w-4 sm:h-4 transition-all duration-300",
+            isComplete
+              ? "text-[#22c55e]"
+              : hasError
+                ? "text-red-400"
+                : "text-[#4a6cf7] animate-pulse"
+          )}
+        />
+        <span className="font-medium text-[#aaa]">
+          {isComplete
+            ? `Scanned ${total} file${total === 1 ? "" : "s"}`
+            : hasError
+              ? "File scanning failed"
+              : activeName
+                ? `Scanning ${activeName} (${doneCount + 1}/${total})…`
+                : `Preparing to scan ${total} file${total === 1 ? "" : "s"}…`}
+        </span>
+        {isScanning && (
+          <span className="ml-auto flex gap-1">
+            <span className="w-1 h-1 rounded-full bg-[#4a6cf7] animate-pulse [animation-delay:0ms]" />
+            <span className="w-1 h-1 rounded-full bg-[#4a6cf7] animate-pulse [animation-delay:200ms]" />
+            <span className="w-1 h-1 rounded-full bg-[#4a6cf7] animate-pulse [animation-delay:400ms]" />
+          </span>
+        )}
+      </div>
+
+      {/* Animated chain */}
+      <div className="flex items-center mt-2 overflow-x-auto pb-1 no-scrollbar">
+        {files.map((file, i) => {
+          const isReading = file.status === "reading";
+          const isDoneFile = file.status === "analyzed";
+          const isFailed = file.status === "error";
+          const isPending = file.status === "pending";
+
+          return (
+            <div key={i} className="flex items-center shrink-0">
+              {/* File chip */}
+              <div
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] border transition-all duration-300 whitespace-nowrap",
+                  isReading && isScanning
+                    ? "bg-[#4a6cf7]/15 border-[#4a6cf7]/50 text-[#7a8cff] file-scan-chip-active"
+                    : isReading
+                      ? "bg-[#4a6cf7]/15 border-[#4a6cf7]/50 text-[#7a8cff]"
+                      : isDoneFile
+                        ? "bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]"
+                        : isFailed
+                          ? "bg-red-500/10 border-red-500/40 text-red-400"
+                          : "bg-white/5 border-white/10 text-[#555]"
+                )}
+              >
+                {isReading && <span className="w-1.5 h-1.5 rounded-full bg-[#4a6cf7] animate-pulse" />}
+                {isDoneFile && <Check className="w-3 h-3" />}
+                {isFailed && <X className="w-3 h-3" />}
+                {isPending && <span className="w-1.5 h-1.5 rounded-full bg-[#555]" />}
+                <span className="truncate max-w-[110px]">{file.name}</span>
+              </div>
+
+              {/* Chain link */}
+              {i < files.length - 1 && (
+                <div
+                  className={cn(
+                    "w-4 h-[2px] shrink-0 rounded-full transition-colors duration-300",
+                    isScanning
+                      ? "bg-[#4a6cf7]/30"
+                      : isDoneFile || isDone
+                        ? "bg-[#22c55e]/40"
+                        : isFailed
+                          ? "bg-red-500/40"
+                          : "bg-white/10"
+                  )}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress bar */}
+      {isScanning && (
+        <div className="mt-2.5">
+          <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#4a6cf7] to-[#7a8cff] transition-all duration-500 ease-out"
+              style={{ width: `${Math.max(percent, doneCount > 0 ? 8 : 0)}%` }}
+            />
+          </div>
+          <div className="mt-1 text-right text-[10px] text-[#666]">
+            {percent}% complete
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Attachment({ part }: { part: any }) {
   const isImage = typeof part.mediaType === "string" && part.mediaType.startsWith("image/");
   if (isImage) {
@@ -487,6 +633,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
   }, [message, isEditing]);
 
   const fileParts = message.parts.filter((p) => p.type === "file");
+  const scanParts = message.parts.filter((p) => p.type === "data-file");
   const thoughtParts = message.parts.filter((p) => p.type === "data-thought").slice(-1);
   const searchParts = message.parts.filter((p) => p.type === "data-search").slice(-1);
 
@@ -539,6 +686,9 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
           </div>
         )}
 
+        {!isUser && scanParts.length > 0 && (
+          <FileScanBlock parts={scanParts} isStreaming={Boolean(isStreaming)} />
+        )}
         {!isUser && searchParts.map((p, i) => <SearchBlock key={`s-${i}`} data={(p as any).data} />)}
         {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
 

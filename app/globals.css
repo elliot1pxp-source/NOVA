@@ -169,3 +169,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* File scan chain animations */
+/* Active file chip gets a static glow (no moving sweep) */
+.file-scan-chip-active {
+  box-shadow: 0 0 14px rgba(74, 108, 247, 0.25);
+}

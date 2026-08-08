@@ -574,6 +574,140 @@ Remember: You are a planner, not a responder. Your output is a specification, no
           }
         }
 
+        // --- Per-file sequential scanning ---
+        // Extract file attachments from the last user message and process each
+        // file through a focused sub-agent call, one at a time. This avoids
+        // sending all raw file content in one request (which causes "structurally
+        // heavy" / long-context errors) and instead injects compact summaries.
+        let fileContext = "";
+        let responseModelMessages = modelMessages;
+        const lastUserMsg = [...normalizedMessages]
+          .reverse()
+          .find((m) => m.role === "user");
+        const fileTextParts =
+          lastUserMsg?.parts.filter(
+            (p): p is { type: "text"; text: string } =>
+              p.type === "text" && p.text.startsWith("File: ")
+          ) ?? [];
+        if (fileTextParts.length > 0) {
+          const userQuestion = lastUserText(messages);
+          const extractedContexts: string[] = [];
+          const fileCount = fileTextParts.length;
+          // NOTE: data parts with the same type+id REPLACE each other in the
+          // AI SDK stream, so every event gets a unique id and the client
+          // aggregates the full state from the accumulated parts.
+          let eventSeq = 0;
+          const nextEventId = () => `file-scan-${eventSeq++}`;
+
+          writer.write({
+            type: "data-file",
+            id: nextEventId(),
+            data: { status: "scanning", total: fileCount },
+          });
+
+          for (let i = 0; i < fileTextParts.length; i++) {
+            const text = fileTextParts[i].text;
+            const match = text.match(
+              /^File: (.+?)\nMime-Type: (.+?)\n\n([\s\S]*)$/
+            );
+            if (!match) continue;
+            const [, filename, mimeType, content] = match;
+
+            const cappedContent =
+              content.length > 80_000
+                ? content.slice(0, 80_000) +
+                  "\n\n[...truncated – content exceeds 80 000 characters]"
+                : content;
+
+            writer.write({
+              type: "data-file",
+              id: nextEventId(),
+              data: {
+                status: "reading",
+                filename,
+                mimeType,
+                index: i,
+                total: fileCount,
+              },
+            });
+
+            try {
+              const result = streamText({
+                model: blockrunClient.chat(modelId),
+                system:
+                  "You are a file analysis tool. Read the following file and extract only the information that is relevant to the user's question. Be concise but thorough. If the file contains code, describe its structure, key functions, exports, and anything relevant to the question. Do not repeat the entire file — extract only what matters.",
+                messages: [
+                  {
+                    role: "user" as const,
+                    content: `File: ${filename} (type: ${mimeType})\n\n${cappedContent}\n\n---\nUser's question: ${userQuestion}\n\nExtract the relevant information from this file.`,
+                  },
+                ],
+                maxRetries: SUBCALL_MAX_RETRIES,
+              });
+              let extracted = "";
+              for await (const delta of result.textStream) {
+                extracted += delta;
+              }
+              const trimmed = filterResponseText(extracted).trim();
+              if (trimmed) {
+                extractedContexts.push(`### ${filename}\n\n${trimmed}`);
+              }
+            } catch (error) {
+              console.error(
+                `[chat] file extraction failed for ${filename}`,
+                error
+              );
+            }
+
+            writer.write({
+              type: "data-file",
+              id: nextEventId(),
+              data: {
+                status: "analyzed",
+                filename,
+                mimeType,
+                index: i,
+                total: fileCount,
+              },
+            });
+          }
+
+          writer.write({
+            type: "data-file",
+            id: nextEventId(),
+            data: { status: "done", total: fileCount },
+          });
+
+          if (extractedContexts.length > 0) {
+            fileContext = extractedContexts.join("\n\n");
+            // Replace the full file content in the last user message with a
+            // compact reference so the final request is lightweight.
+            const lastUserMsgIdx = normalizedMessages.indexOf(lastUserMsg!);
+            const strippedParts = lastUserMsg!.parts.map((part) => {
+              if (
+                part.type === "text" &&
+                (part as { text?: string }).text?.startsWith("File: ")
+              ) {
+                const nameMatch = (part as { text: string }).text.match(
+                  /^File: (.+?)\n/
+                );
+                return {
+                  type: "text" as const,
+                  text: `[File: ${nameMatch?.[1] ?? "attachment"} — context extracted below]`,
+                };
+              }
+              return part;
+            });
+            const strippedMessages = [...normalizedMessages];
+            strippedMessages[lastUserMsgIdx] = {
+              ...lastUserMsg!,
+              parts: strippedParts,
+            } as any;
+            responseModelMessages =
+              await convertToModelMessages(strippedMessages);
+          }
+        }
+
         // --- Build final system prompt with structured sections ---
         let finalSystemPrompt = baseSystemPrompt;
         const shouldApplyInitialPrompt = APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE
@@ -589,6 +723,9 @@ Remember: You are a planner, not a responder. Your output is a specification, no
         if (deepThinkContext) {
           finalSystemPrompt += `\n\nDeepthink guide response:\n${deepThinkContext}\n\n---NOVA END---`;
         }
+        if (fileContext) {
+          finalSystemPrompt += `\n\n---FILE CONTEXT---\n\nBelow are focused summaries of the files the user attached. Each file was read and analysed individually to extract only the information relevant to the user's question:\n\n${fileContext}\n\n---END---`;
+        }
 
         // --- Final streaming response ---
         let result;
@@ -596,7 +733,7 @@ Remember: You are a planner, not a responder. Your output is a specification, no
           result = streamText({
             model: blockrunClient.chat(modelId),
             system: finalSystemPrompt,
-            messages: modelMessages,
+            messages: responseModelMessages,
             ...getStreamingModelOptions(modelSettings),
             maxRetries: MODEL_MAX_RETRIES,
             onChunk: async ({ chunk }) => {

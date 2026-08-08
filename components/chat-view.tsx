@@ -60,14 +60,19 @@ function fileToDataUrl(file: File, normalizedMimeType: string): Promise<string> 
 function isProgressOnlyAssistantMessage(message: { role: string; parts: Array<{ type: string }> }) {
   return (
     message.role === "assistant" &&
-    message.parts.some((part) => part.type === "data-search" || part.type === "data-thought") &&
+    message.parts.some(
+      (part) =>
+        part.type === "data-search" ||
+        part.type === "data-thought" ||
+        part.type === "data-file"
+    ) &&
     !message.parts.some((part) => part.type === "text")
   );
 }
 
 function getCurrentResponseProgressStatus(
   messages: UIMessage[],
-  partType: "data-search" | "data-thought"
+  partType: "data-search" | "data-thought" | "data-file"
 ): string | undefined {
   let lastUserIndex = -1;
   for (let index = messages.length - 1; index >= 0; index--) {
@@ -407,8 +412,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const deepThinkComplete =
     !requestFeatures.deepThink ||
     isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-thought"));
+  const filesComplete =
+    !attachments.length ||
+    isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-file"));
   const showTypingIndicator =
-    status !== "ready" && status !== "error" && searchComplete && deepThinkComplete;
+    status !== "ready" && status !== "error" && searchComplete && deepThinkComplete && filesComplete;
 
   useEffect(() => {
     if (isLoading && !wasLoadingRef.current) {
