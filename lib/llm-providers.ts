@@ -21,20 +21,21 @@ import { createOpenAI } from "@ai-sdk/openai";
 // Per-provider model mappings. The primary endpoint (BASED_URL) uses "oc/"
 // prefixed model IDs; the fallback endpoint (FALLBACK_BASED_URL) uses
 // unprefixed IDs. Both expose the same logical models.
-export const PRIMARY_MODELS: Record<string, string> = {
-  instant: "oc/big-pickle",
-  expert: "oc/deepseek-v4-flash-free",
-  deepthink: "oc/big-pickle",
-  websearch: "oc/deepseek-v4-flash-free",
-  fileAnalysis: "oc/big-pickle",
-};
 
-export const FALLBACK_MODELS: Record<string, string> = {
+export const PRIMARY_MODELS: Record<string, string> = {
   instant: "big-pickle",
   expert: "deepseek-v4-flash-free",
   deepthink: "big-pickle",
   websearch: "deepseek-v4-flash-free",
   fileAnalysis: "big-pickle",
+};
+
+export const FALLBACK_MODELS: Record<string, string> = {
+  instant: "oc/big-pickle",
+  expert: "oc/deepseek-v4-flash-free",
+  deepthink: "oc/big-pickle",
+  websearch: "oc/deepseek-v4-flash-free",
+  fileAnalysis: "oc/big-pickle",
 };
 
 // Model role keys used by call sites. The fallback functions resolve each key
