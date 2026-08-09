@@ -288,6 +288,111 @@ Fix (components/chat-message.tsx):
     user messages.
 
 ────────────────────────────────────────────
+FIX 14: Background generation when switching chats
+────────────────────────────────────────────
+
+Problem (reported by user):
+  Switching to another chat (or creating a new chat) while an assistant
+  response was still generating INTERRUPTED/CANCELLED the generation.
+  ChatView was mounted with key={currentChatId}, so switching chats
+  UNMOUNTED the old ChatView — killing its useChat state, the in-flight
+  stream, the retry watchdog timers, and losing the response.
+
+Requirements:
+  - Switching chats must NOT cancel active assistant generations.
+  - Creating a new chat must NOT cancel existing generations.
+  - Each chat maintains its own independent generation state.
+  - Multiple chats can generate simultaneously (like browser tabs).
+  - Generation stops ONLY on: manual Stop, request failure, page close,
+    or explicit cancellation — never on a chat switch.
+  - Generation state lives OUTSIDE the active view; the active view only
+    controls DISPLAY.
+
+Fix (app/page.tsx + components/chat-view.tsx):
+  - app/page.tsx no longer remounts ChatView per chat. Instead it keeps
+    EVERY chat's ChatView MOUNTED, wrapped in a div that is hidden
+    (className "hidden") unless it is the active chat:
+        <div className={cn("h-full w-full", chatId === currentChatId ? "" : "hidden")}>
+          <ChatView chatId={chatId} isActive={chatId === currentChatId} ... />
+        </div>
+    Switching chats now only toggles CSS display — the mounted ChatView
+    (and its useChat stream, retry timers, branch state) keeps running.
+  - mountedChatIds is a memo of chat ids to mount: all chats in `chats`
+    plus the pending (new) chat id when activeChatId === null. The
+    pending chat's id is now STATE (pendingChatId) kept in sync with a
+    ref, so "New Chat" always re-renders and mounts a fresh empty view.
+  - The pending chat → real chat transition is seamless: onFirstMessage
+    adds the chat to `chats` under the SAME id the pending view was keyed
+    by, so the key stays stable and the view never remounts.
+  - ChatView gains an isActive prop. When a hidden chat becomes active
+    again, a new effect restores scroll position: if a generation was in
+    flight (status submitted/streaming) OR the user was following the
+    bottom when they left, it scrolls to the bottom so a completed
+    background response is visible; otherwise the scroll position is left
+    untouched (no yanking the user up/down). It remembers the follow
+    state via wasFollowingWhenHiddenRef.
+  - Deleting a chat still cancels its generation (the id leaves
+    mountedChatIds → view unmounts), which is correct — deletion is an
+    explicit cancellation.
+
+Result:
+  - Chat A can keep generating while the user switches to Chat B and
+    sends messages there, then return to Chat A to find the completed
+    (or still-streaming) response — exactly like changing tabs.
+  - Multiple chats can have independent active generations simultaneously.
+
+────────────────────────────────────────────
+FIX 15: New empty chat restoration after page refresh
+────────────────────────────────────────────
+
+Problem (reported by user):
+  Steps to reproduce:
+  1. Open an existing chat.
+  2. Create a new chat.
+  3. Do not send any messages.
+  4. Refresh the page.
+  5. The app returns to the previous chat instead of staying on the
+     newly created empty chat.
+
+Root Cause (two issues):
+  A) Hidden background ChatViews (kept mounted so their generations keep
+     running) fire the onFirstMessage effect on mount — they load their
+     existing messages from localStorage, and the effect fires whenever
+     messages.length >= 1. onFirstMessage calls handleFirstMessage, which
+     sets activeChatId to THAT chat and updates the URL — yanking the user
+     out of their current (new/empty) chat back to the previous one.
+
+  B) The pending (new, empty) chat id was never persisted. handleNewChat
+     only stored it in a ref/state; on refresh a brand-new random id was
+     generated, so the empty chat the user was on was lost.
+
+Fix:
+  A) components/chat-view.tsx — the onFirstMessage effect is now gated on
+     isActive: only the chat currently being DISPLAYED may fire it. Hidden
+     background chats no longer re-navigate.
+
+  B) app/page.tsx — the active chat id is persisted IMMEDIATELY via
+     saveLastChatId() in every navigation path:
+       - handleNewChat: saves the new pending chat id
+       - handleSelectChat: saves the selected chat id
+       - handleFirstMessage: saves the chat id
+       - handleDeleteChat / handleDeleteAllChats: saves the fresh pending id
+     On hydration, the URL chat id wins; otherwise loadLastChatId() is
+     restored — if it exists in the chat list it becomes the active chat
+     (even with zero messages), and if it does NOT exist (a fresh empty
+     chat that never received a message) it is restored as the pending
+     chat id. The app never falls back to an older chat just because the
+     current one has no messages.
+
+Behavior after fix:
+  - Create a new chat → refresh → the SAME empty chat is restored (URL "/",
+    empty message list, previous chats still in the sidebar).
+  - Sending the first message in the restored empty chat converts it into
+    a real chat under the SAME id (URL /chat/{id}, appears in sidebar).
+  - Only switches away from the active chat if: the id no longer exists,
+    the user manually selects another chat, or the chat was deleted.
+
+────────────────────────────────────────────
 Summary of behavior after all fixes
 ────────────────────────────────────────────
 
@@ -317,5 +422,20 @@ Bubble sizing:
   2. Short messages stay compact; long messages wrap naturally
   3. Assistant prose uses the full available width, no empty bubble
 
+Background generation:
+  1. Switching chats / creating a new chat NEVER cancels an in-flight
+     generation — every chat's ChatView stays mounted (hidden when not
+     active), so its stream, retry timers, and branch state keep running
+  2. Returning to a chat shows the completed (or still-streaming) response
+  3. Generations stop only on: manual Stop, request failure, page close,
+     or explicit cancellation (deleting the chat)
+
+Empty chat restoration:
+  1. A new empty chat's id is persisted immediately (saveLastChatId) and
+     restored on refresh — the SAME empty chat is kept, never an older one
+  2. The active chat id is never derived from message existence — a chat
+     with zero messages is still a valid, restorable chat
+
 No duplicate key errors, no disappearing messages, no orphaned branches,
-no stale retry markers, no crashes, no oversized bubbles.
+no stale retry markers, no crashes, no oversized bubbles, no lost
+generations, no lost empty chats.

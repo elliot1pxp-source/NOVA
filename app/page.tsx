@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { NovaSidebar, Chat } from "@/components/nova-sidebar";
 import { ChatView } from "@/components/chat-view";
+import { cn } from "@/lib/utils";
 import {
   loadChats,
   saveChats,
   clearAllChats,
   deleteChat,
+  loadLastChatId,
+  saveLastChatId,
   StoredChat,
   ModelSettings,
   loadModelSettings,
@@ -67,7 +70,8 @@ export default function Home() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [model, setModel] = useState<Model>("instant");
   const [modelSettings, setModelSettings] = useState<ModelSettings>(loadModelSettings);
-  const pendingChatIdRef = useRef<string>(generateId());
+  const [pendingChatId, setPendingChatId] = useState<string>(() => generateId());
+  const pendingChatIdRef = useRef<string>(pendingChatId);
   const hydratedRef = useRef(false);
 
   useEffect(() => {
@@ -80,10 +84,26 @@ export default function Home() {
         saveChats(uniqueChats.map(toStored));
       }
     }
-    // If the URL points to a chat, open it; otherwise start at a fresh chat.
+    // If the URL points to a chat, open it; otherwise restore the last active
+    // chat id — which may be an EMPTY, not-yet-committed chat (an empty chat
+    // is still a real conversation and must survive a refresh). Never fall
+    // back to an older chat just because the current one has no messages.
     const urlChatId = getChatIdFromUrl();
+    const lastChatId = loadLastChatId();
     if (urlChatId && uniqueChats.some((chat) => chat.id === urlChatId)) {
       setActiveChatId(urlChatId);
+      saveLastChatId(urlChatId);
+    } else if (lastChatId) {
+      if (uniqueChats.some((chat) => chat.id === lastChatId)) {
+        // The last active chat exists in the list (even with zero messages).
+        setActiveChatId(lastChatId);
+        updateChatUrl(lastChatId, true);
+      } else {
+        // The last active chat was a fresh, empty chat that never received a
+        // message — restore it as the pending chat so the user stays on it.
+        pendingChatIdRef.current = lastChatId;
+        setPendingChatId(lastChatId);
+      }
     }
     hydratedRef.current = true;
   }, []);
@@ -117,13 +137,19 @@ export default function Home() {
   }, []);
 
   const handleNewChat = useCallback(() => {
-    pendingChatIdRef.current = generateId();
+    const nextId = generateId();
+    pendingChatIdRef.current = nextId;
+    setPendingChatId(nextId);
+    // Persist the active chat id IMMEDIATELY so a refresh restores this new
+    // (possibly empty) chat instead of an older one.
+    saveLastChatId(nextId);
     setActiveChatId(null);
     updateChatUrl(null);
   }, []);
 
   const handleSelectChat = useCallback((chatId: string) => {
     setActiveChatId(chatId);
+    saveLastChatId(chatId);
     updateChatUrl(chatId);
   }, []);
 
@@ -138,6 +164,7 @@ export default function Home() {
         return [{ id: chatId, title, createdAt: new Date() }, ...uniquePrev];
       });
       setActiveChatId(chatId);
+      saveLastChatId(chatId);
       // The chat URL is only generated once a message is sent in a new chat.
       updateChatUrl(chatId);
     },
@@ -163,6 +190,12 @@ export default function Home() {
     setChats((prev) => prev.filter((chat) => chat.id !== chatId));
     setActiveChatId((current) => {
       if (current === chatId) {
+        // The deleted chat was active — start a fresh pending chat and persist
+        // its id so a refresh stays on the new empty chat.
+        const nextId = generateId();
+        pendingChatIdRef.current = nextId;
+        setPendingChatId(nextId);
+        saveLastChatId(nextId);
         updateChatUrl(null);
         return null;
       }
@@ -174,11 +207,27 @@ export default function Home() {
     clearAllChats();
     setChats([]);
     setActiveChatId(null);
-    pendingChatIdRef.current = generateId();
+    const nextId = generateId();
+    pendingChatIdRef.current = nextId;
+    setPendingChatId(nextId);
+    saveLastChatId(nextId);
     updateChatUrl(null);
   }, []);
 
   const currentChatId = activeChatId ?? pendingChatIdRef.current;
+
+  // Every chat's ChatView stays MOUNTED (hidden when not active) so that
+  // in-flight assistant generations keep running in the background while the
+  // user views another chat — switching chats is a display change, never a
+  // cancellation. The pending (new) chat is mounted too; it only enters
+  // `chats` after its first message is sent.
+  const mountedChatIds = useMemo(() => {
+    const ids = new Set(chats.map((c) => c.id));
+    if (activeChatId === null) {
+      ids.add(pendingChatIdRef.current);
+    }
+    return Array.from(ids);
+  }, [chats, activeChatId, pendingChatId]);
 
   return (
     <div
@@ -210,14 +259,21 @@ export default function Home() {
         onUpdateModelSettings={handleUpdateModelSettings}
       />
       <main className="flex flex-1 overflow-hidden">
-        <ChatView
-          key={currentChatId}
-          chatId={currentChatId}
-          model={model}
-          modelSettings={modelSettings[model]}
-          onModelChange={setModel}
-          onFirstMessage={(title) => handleFirstMessage(currentChatId, title)}
-        />
+        {mountedChatIds.map((chatId) => (
+          <div
+            key={chatId}
+            className={cn("h-full w-full", chatId === currentChatId ? "" : "hidden")}
+          >
+            <ChatView
+              chatId={chatId}
+              model={model}
+              modelSettings={modelSettings[model]}
+              onModelChange={setModel}
+              isActive={chatId === currentChatId}
+              onFirstMessage={(title) => handleFirstMessage(chatId, title)}
+            />
+          </div>
+        ))}
       </main>
     </div>
   );

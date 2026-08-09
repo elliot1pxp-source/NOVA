@@ -34,6 +34,11 @@ type Props = {
   modelSettings?: ModelParams;
   onModelChange: (m: Model) => void;
   onFirstMessage: (title: string) => void;
+  /** Whether this chat is the one currently displayed. Inactive chats stay
+   *  mounted (hidden) so their assistant generations keep running in the
+   *  background; this flag lets the view restore scroll position when it
+   *  becomes visible again. */
+  isActive?: boolean;
 };
 
 const MODEL_TABS: { id: Model; label: string; icon: React.ReactNode }[] = [
@@ -173,7 +178,7 @@ function saveBranchGroups(chatId: string, groups: Record<string, BranchGroup>) {
   }
 }
 
-export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage }: Props) {
+export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage, isActive = true }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const shouldFollowMessagesRef = useRef(true);
@@ -745,6 +750,29 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     return () => cancelAnimationFrame(frame);
   }, [messages, status, isLoading]);
 
+  // When this chat becomes the displayed one again (it stays mounted while
+  // hidden so background generations keep running), restore the scroll
+  // position: if a generation was in flight (or the user was following the
+  // bottom when they left), jump to the bottom so the freshly completed
+  // response is visible; otherwise leave the scroll position untouched.
+  const wasFollowingWhenHiddenRef = useRef(true);
+  useEffect(() => {
+    if (!isActive) {
+      wasFollowingWhenHiddenRef.current = shouldFollowMessagesRef.current;
+      return;
+    }
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const frame = requestAnimationFrame(() => {
+      const generating = status === "submitted" || status === "streaming";
+      if (generating || wasFollowingWhenHiddenRef.current) {
+        container.scrollTop = container.scrollHeight;
+        shouldFollowMessagesRef.current = true;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isActive, status]);
+
   useEffect(() => {
     if (isLoading) {
       // Don't save during streaming; clear any pending save
@@ -828,6 +856,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, [messages, model, setMessages, status]);
 
   useEffect(() => {
+    // Only the chat currently being DISPLAYED may fire onFirstMessage. Hidden
+    // background chats (kept mounted so their generations keep running) also
+    // load their existing messages on mount — firing onFirstMessage there
+    // would re-navigate to that chat and yank the user out of their current
+    // (possibly new/empty) chat.
+    if (!isActive) return;
     if (!notifiedRef.current && messages.length >= 1) {
       const firstUser = messages.find((m) => m.role === "user");
       if (firstUser) {
@@ -842,7 +876,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         }
       }
     }
-  }, [messages, onFirstMessage]);
+  }, [messages, onFirstMessage, isActive]);
 
   const handleAddFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
