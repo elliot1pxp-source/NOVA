@@ -150,7 +150,7 @@ export function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={`Message NOVA ${model === "instant" ? "Instant" : "Expert"}...`}
             rows={1}
-            className="w-full bg-transparent text-white placeholder-[#787a85] text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 focus:outline-none resize-none max-h-[160px] sm:max-h-[200px] leading-relaxed scrollbar-none"
+            className="w-full min-h-[40px] bg-transparent text-white placeholder-[#787a85] text-sm px-2 sm:px-3 py-2 sm:py-2.5 focus:outline-none resize-none max-h-[160px] sm:max-h-[200px] leading-relaxed"
           />
 
           {/* Input Action Controls Bar */}

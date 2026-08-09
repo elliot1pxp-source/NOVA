@@ -2,7 +2,7 @@ NOVA Branching, Retry & Layout Fixes — Debug Log (latest)
 ==========================================================
 
 All conversation-logic changes in: components/chat-view.tsx
-UI styling changes in: components/chat-message.tsx
+UI styling changes in: components/chat-message.tsx, components/chat-input.tsx
 
 ────────────────────────────────────────────
 FIX 1: Retry only applies to EDITED user messages
@@ -393,6 +393,34 @@ Behavior after fix:
     the user manually selects another chat, or the chat was deleted.
 
 ────────────────────────────────────────────
+FIX 16: Chat input textarea invisible / too small
+────────────────────────────────────────────
+
+Problem (reported by user):
+  The chat input textarea was invisible or nearly invisible — the capsule
+  showed the DeepThink / Search / Attach buttons and the send arrow, but
+  the text input area above them was either collapsed or too small to
+  notice.
+
+Root Cause:
+  The textarea had `rows={1}`, tiny padding (`py-1` / `py-1.5`), small
+  font sizes (`text-xs` on mobile), and a `scrollbar-none` utility class
+  that doesn't exist in the project's CSS (the global stylesheet defines
+  `no-scrollbar`, not `scrollbar-none`). With no text and a transparent
+  background, the textarea had minimal visible height — effectively
+  invisible inside the dark capsule.
+
+Fix (components/chat-input.tsx):
+  - Added `min-h-[40px]` — the textarea now has a guaranteed minimum
+    height even when empty, making it clearly visible and tappable.
+  - Changed font size from `text-xs sm:text-sm` to just `text-sm` —
+    consistent sizing on all screens, large enough to read comfortably.
+  - Increased vertical padding from `py-1 sm:py-1.5` to `py-2 sm:py-2.5`
+    — better spacing and larger touch target.
+  - Removed the non-existent `scrollbar-none` class — it was silently
+    dropped by Tailwind v4 (only `no-scrollbar` is defined in globals.css).
+
+────────────────────────────────────────────
 Summary of behavior after all fixes
 ────────────────────────────────────────────
 
@@ -438,4 +466,4 @@ Empty chat restoration:
 
 No duplicate key errors, no disappearing messages, no orphaned branches,
 no stale retry markers, no crashes, no oversized bubbles, no lost
-generations, no lost empty chats.
+generations, no lost empty chats, no invisible input textarea.
