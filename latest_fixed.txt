@@ -1,0 +1,321 @@
+NOVA Branching, Retry & Layout Fixes — Debug Log (latest)
+==========================================================
+
+All conversation-logic changes in: components/chat-view.tsx
+UI styling changes in: components/chat-message.tsx
+
+────────────────────────────────────────────
+FIX 1: Retry only applies to EDITED user messages
+────────────────────────────────────────────
+
+Problem:
+  The client-side retry watchdog (startAttempt) re-sent EVERY failed
+  request — including plain new sends and plain assistant regenerations.
+  Retrying a plain send could duplicate the user message; retrying a
+  plain regeneration re-issued a request against already-truncated state.
+
+v1 (first attempt):
+  Added a shared ref retryEligibleUserMessageIdRef, set ONLY by
+  handleEditMessage (to the new "::vN" version id) and cleared when a
+  generation reached status === "ready".
+
+  BUG in v1 (reported by user):
+    The ref was only cleared on status === "ready". If an edit flow's
+    generation FAILED (status "error") or was stopped, the stale edited
+    message id persisted. The NEXT plain assistant regenerate then:
+      a) wrongly armed the watchdog, AND
+      b) retried regenerate({ messageId: <stale edited user id> }) —
+         regenerating the USER message instead of the assistant message
+         the user clicked.
+
+v2 (per-request eligibility — final):
+  Removed the shared ref entirely. Retry eligibility is now carried
+  PER-REQUEST inside lastOutgoingRef:
+      type OutgoingRequest = {
+        type: "send" | "regenerate";
+        payload: any;
+        retryable: boolean;
+        editedMessageId?: string;
+        retryFn: "sendMessage" | "regenerate";
+      };
+  - ONLY the edit flow passes retryable: true, via
+      startRegenerateWithRetry(undefined, { retryable: true, editedMessageId })
+    called DIRECTLY from handleEditMessage (the pendingRegenerateAfterEdit
+    state/effect was removed entirely).
+  - startSendWithRetry always records retryable: false — plain new sends
+    are single-shot; failures surface as an error banner immediately.
+  - Plain regenerations (handleRegenerate) also record retryable: false —
+    the provider truncates history to the regenerated message, so a
+    re-issue after truncation would slice away the old response entirely.
+  - The watchdog retry dispatches on retryFn:
+      * edit flow (retryFn "sendMessage") → sendMessage() — re-sends the
+        LAST user message (the edited version, guaranteed to be last after
+        cleanup), no duplicate appended.
+      * regen flow (retryFn "regenerate") → regenerate() with NO messageId.
+  - The error-suppression effect is gated on
+      lastOutgoingRef.current?.retryable && editedMessageId so transient
+      errors are hidden only when a legitimate retry is armed.
+  - handleStop clears lastOutgoingRef, the timer, and the attempt counter
+    so a manual Stop fully cancels the retry system.
+
+────────────────────────────────────────────
+FIX 2: "message ...::vN not found" runtime error (retry crash)
+────────────────────────────────────────────
+
+Problem (reported by user):
+  Runtime error: "message 4Ks4CZhxEciMZBid::v2 not found" at
+  ChatView.useCallback[startAttempt] (components/chat-view.tsx:450).
+  The retry watchdog was calling regenerate({ messageId: editedMessageId })
+  with a USER message id — but AI SDK's regenerate() expects an ASSISTANT
+  message id and throws "message not found" for anything else. Worse, after
+  a failed regenerate() the SDK may have already TRUNCATED the message out
+  of the state, so even an assistant id could be stale.
+
+Fix:
+  - The retry re-issues the SAME request type that started the cycle via
+    retryFn (see FIX 1): edit flow → sendMessage() (no id), regen flow →
+    regenerate() with NO args. After cleanupPartialAssistantMessages the
+    last message is the user message the reply belongs to, and
+    regenerate() (no args) targets exactly that — never a stale id.
+
+────────────────────────────────────────────
+FIX 3: Duplicate React key error
+────────────────────────────────────────────
+
+Problem:
+  "Encountered two children with the same key, DSvuLNrMKMibGUT3" — React
+  rendered two elements with the same message.id during regeneration /
+  branch swaps, causing non-unique keys and component identity issues.
+
+Fix:
+  After filtering messages into visibleMessages, deduplicate by id:
+    const dedupedVisibleMessages = visibleMessages.filter(
+      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i
+    );
+  All downstream references (userMessages memo, the render loop) use
+  dedupedVisibleMessages.
+
+────────────────────────────────────────────
+FIX 4: ReferenceError — assistantIdx is not defined
+────────────────────────────────────────────
+
+Problem:
+  Runtime error: "assistantIdx is not defined" in the onFinish useEffect
+  handler. The variable assistantIdx only exists inside handleRegenerate;
+  onFinish uses its own search for the new assistant.
+
+Fix:
+  onFinish's regeneration path now finds the NEW assistant by scanning
+  from the END of the messages array (the SDK truncates the old assistant
+  during regenerate), not by looking up the old id.
+
+────────────────────────────────────────────
+FIX 5: Tree branch model — per-message branch groups
+────────────────────────────────────────────
+
+Problem:
+  Branches were keyed by the ROOT USER message id and stored full tails
+  from the user message. Switching an assistant version could orphan
+  downstream messages, and nested assistant branches inside edited user
+  branches were impossible to represent.
+
+Fix (unified tree model):
+  - BranchGroup = { branches: MessageBranch[], activeIndex,
+    parentMessageId } and
+    MessageBranch = { messages: UIMessage[], childBranchIds: string[] }.
+  - Each EDITED user message or REGENERATED assistant gets its OWN branch
+    group keyed by its ORIGINAL message id. Version ids ("::vN") map back
+    to the group via branchGroupForMessageRef.
+  - Every branch snapshot is a FULL tail from that message:
+    [message, assistant reply, ...every downstream message] — children
+    stay with their parent version.
+  - The useChat messages array IS the active path (kept in sync by every
+    handler). computeVisibleMessages is a linear filter (hides system +
+    progress-only assistant messages) — no fragile branch substitution,
+    because restoring a snapshot would otherwise corrupt the display.
+  - branchGroupForMessageRef maps: original ids -> group id, version ids
+    -> group id, and each new assistant's id -> its own group.
+
+────────────────────────────────────────────
+FIX 6: User message editing — sibling user branches
+────────────────────────────────────────────
+
+Problem:
+  Editing a user message that was already a version ("::vN") created an
+  orphaned group instead of adding a sibling version to the original
+  group. Follow-ups sent while a version was displayed could be lost.
+
+Fix (handleEditMessage):
+  - Resolve the group via branchGroupForMessageRef[messageId] ?? messageId
+    so editing a version adds a sibling to the ORIGINAL group.
+  - REFRESH the current (leaving) version's branch with the full tail
+    from this message BEFORE truncating — follow-ups sent while this
+    version was displayed stay inside its snapshot.
+  - Add the new "::vN" version ({ messages: [editedMessage] }), switch the
+    group to it, truncate the visible tail, then trigger the edit
+    regeneration with retryable: true.
+  - The original conversation branch remains fully available via the
+    switcher.
+
+────────────────────────────────────────────
+FIX 7: Assistant retry — sibling assistant branches (not children)
+────────────────────────────────────────────
+
+Problem:
+  Retrying an assistant could be treated as a continuation (child) instead
+  of an alternative version (sibling), and the old assistant's downstream
+  was not preserved.
+
+Fix (handleRegenerate + onFinish):
+  - handleRegenerate resolves the group via branchGroupForMessageRef
+    (assistant may already be a version), refreshes the leaving branch's
+    tail (assistant + downstream), sets regeneratingAssistantIdRef, then
+    calls startRegenerateWithRetry({ messageId }).
+  - onFinish regeneration path: the SDK has TRUNCATED the old assistant
+    from messages — find the NEW assistant at the end, push
+    messages.slice(newAssistantIdx) as a NEW BRANCH VERSION (sibling,
+    same parent), set activeIndex to it, and map the new head id to the
+    group. The original response remains accessible as version 1.
+  - The switcher counter shows < 1/2 > / < 2/2 >.
+
+────────────────────────────────────────────
+FIX 8: Nested assistant branches inside edited user branches
+────────────────────────────────────────────
+
+Problem:
+  Assistant retries inside an edited user branch could escape their user
+  version and appear under another user version.
+
+Fix:
+  Because each message owns its group (FIX 5), an assistant retry inside
+  an edited user branch is scoped to that assistant's group, which lives
+  inside the user version's branch snapshot. Switching user versions swaps
+  the whole subtree — nested assistant groups come along, and handleBranchNav
+  syncs nested group activeIndexes so their counters match the displayed
+  version. Assistant retries can never leak across user versions.
+
+────────────────────────────────────────────
+FIX 9: Branch switching — only switch the selected node, load its child chain
+────────────────────────────────────────────
+
+Problem:
+  Switching between assistant versions could keep or remove messages below
+  the node incorrectly, mixing children from different versions.
+
+Fix (handleBranchNav):
+  - Save the leaving branch as messages.slice(msgIdx) — the full visible
+    tail from the clicked message (its child chain).
+  - Load the selected branch's messages and splice them in from the same
+    index.
+  - Sync NESTED branch groups: for every message in the restored snapshot
+    that is a group head, set that group's activeIndex to the version
+    present in the snapshot — the switcher counter always matches the
+    displayed version, never mixes versions.
+  - Swapped-in messages are added to noAnimateIdsRef (flat render, no
+    entrance animation).
+
+────────────────────────────────────────────
+FIX 10: Follow-ups extend the correct branch (edited-version ancestor)
+────────────────────────────────────────────
+
+Problem:
+  Sending a follow-up after a response inside an EDITED user version only
+  checked the last user message's group (which usually doesn't exist), so
+  the ancestor user group's active branch was NOT extended — switching
+  away and back lost the follow-up.
+
+Fix (onFinish normal path):
+  Walk EVERY message in the current array; for each message that is the
+  ACTIVE HEAD of a group (i.e. the version currently displayed), extend
+  that group's active branch with messages.slice(i). This covers:
+    - user groups whose root sits ABOVE the last user message (edited
+      versions),
+    - assistant groups,
+    - nested groups at any depth.
+  Then ensure the freshly streamed assistant has a branch group so it can
+  be regenerated later as a sibling (same parent).
+
+────────────────────────────────────────────
+FIX 11: Switcher placement — only on the message the user acted on
+────────────────────────────────────────────
+
+Problem (reported by user):
+  A. After retrying ONLY an assistant message, the branch switcher also
+     appeared on the USER message row.
+  B. After editing a USER message, the switcher ALSO appeared on the
+     assistant reply.
+
+Fix (getBranchInfo):
+  With per-message groups (FIX 5), the switcher shows iff a message
+  resolves to its OWN group with >= 2 branches:
+    - a USER message only if it was edited (its own group has versions),
+    - an ASSISTANT message only if it was regenerated (its own group has
+      versions),
+    - edit byproducts and downstream followers have no group of their own
+      → never show a switcher,
+    - never renders for a single version (branches.length < 2 guard — no
+      lone "1 / 1").
+
+────────────────────────────────────────────
+FIX 12: Branch switcher styling — raw icons, no box
+────────────────────────────────────────────
+
+Fix (components/chat-message.tsx):
+  The switcher is rendered as raw chevron icon buttons
+  (p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc]
+  active:scale-90) with the "n / m" counter as plain text between them —
+  no box / border / background pill. branchInfo.total > 1 guard stays.
+
+────────────────────────────────────────────
+FIX 13: Message bubble sizing — content-fit bubbles
+────────────────────────────────────────────
+
+Problem (reported by user):
+  Short user messages ("hi") rendered as oversized bubbles stretching to
+  ~80% of the conversation width, with wasted empty space.
+
+Fix (components/chat-message.tsx):
+  - User content column: "items-end max-w-[70%] ml-auto" (was
+    max-w-[85%]/[80%]) — bubbles cap at 70% of the conversation width,
+    right-aligned.
+  - User bubble: "w-fit max-w-full" (was w-full) + break-words — the
+    bubble width is fit-content: "hi" renders compact, long messages
+    expand up to the 70% cap and wrap naturally.
+  - Assistant messages: prose block stays full conversation width
+    (w-full, no background bubble) — no large empty bubble.
+  - Action row (copy/edit/retry/version switcher) does NOT stretch the
+    bubble: it sits below the bubble in the column, right-aligned for
+    user messages.
+
+────────────────────────────────────────────
+Summary of behavior after all fixes
+────────────────────────────────────────────
+
+Regenerating an assistant message:
+  1. Old response + its downstream are saved as branch version 1
+  2. New response streams in as a NEW sibling version (same parent)
+  3. Raw < n / m > switcher appears ONLY on the assistant rows
+  4. Switching restores the exact child chain of the selected version
+  5. Downstream messages of sibling versions are never mixed
+
+Editing a user message:
+  1. Original message + its subtree are saved as branch version 1
+  2. Edited version (::vN) + its own assistant responses become a sibling
+  3. Raw < n / m > switcher appears ONLY on the edited user message
+  4. Nested assistant retries stay inside that user version
+  5. Follow-ups sent after the edited version extend ITS branch
+
+Retry behavior:
+  1. Auto-retry fires ONLY for the edited-user-message flow
+  2. Plain sends and plain assistant regenerations fail fast with an
+     error banner — never silently re-requested
+  3. A retry re-issues the same request type (sendMessage for edits,
+     regenerate with no args for regens) — no "message not found" crash
+
+Bubble sizing:
+  1. User bubbles are content-fit (w-fit), capped at 70% width
+  2. Short messages stay compact; long messages wrap naturally
+  3. Assistant prose uses the full available width, no empty bubble
+
+No duplicate key errors, no disappearing messages, no orphaned branches,
+no stale retry markers, no crashes, no oversized bubbles.

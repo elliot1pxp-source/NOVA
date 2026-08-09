@@ -112,6 +112,67 @@ function createConversationSummary(text: string) {
   };
 }
 
+// --- Edit-message version branching -----------------------------------
+// When a user edits a message, we keep the original (and every prior edit)
+// around as a "branch" instead of discarding it, so the message can show a
+// "< 2 / 3 >" switcher like ChatGPT/Claude's own edit UI.
+//
+// Branch model (tree structure):
+//   Each message that has been edited/regenerated gets its own BranchGroup,
+//   keyed by that message's ID. A BranchGroup contains branches that start
+//   from that specific message:
+//     - For a USER message edit: branches = [edited user msg, assistant reply, ...downstream]
+//     - For an ASSISTANT message regenerate: branches = [regenerated assistant msg, ...downstream]
+//
+//   The conversation is a tree. Each branch knows its parent message ID.
+//   When rendering, we follow the active branch from the root down,
+//   switching at each branch point to the active version.
+//
+//   BranchGroup structure:
+//     { branches: MessageBranch[], activeIndex: number, parentMessageId: string | null }
+//   MessageBranch structure:
+//     { messages: UIMessage[], childBranchIds: string[] }  // childBranchIds maps child message index -> branch group id
+  type MessageBranch = { messages: UIMessage[]; childBranchIds: string[] };
+  type BranchGroup = { branches: MessageBranch[]; activeIndex: number; parentMessageId: string | null };
+
+function branchStorageKey(chatId: string) {
+  return `nova-edit-branches:${chatId}`;
+}
+
+function loadBranchGroups(chatId: string): Record<string, BranchGroup> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(branchStorageKey(chatId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, BranchGroup>;
+    // Migration: ensure childBranchIds exists on all branches
+    for (const group of Object.values(parsed)) {
+      for (const branch of group.branches) {
+        if (!branch.childBranchIds) {
+          branch.childBranchIds = [];
+        }
+      }
+    }
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveBranchGroups(chatId: string, groups: Record<string, BranchGroup>) {
+  if (typeof window === "undefined") return;
+  try {
+    if (Object.keys(groups).length === 0) {
+      window.localStorage.removeItem(branchStorageKey(chatId));
+      return;
+    }
+    window.localStorage.setItem(branchStorageKey(chatId), JSON.stringify(groups));
+  } catch {
+    // Storage unavailable (private mode, quota, etc) — versions just won't
+    // survive a refresh, which is a fine degradation.
+  }
+}
+
 export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -129,7 +190,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const [requestFeatures, setRequestFeatures] = useState({ deepThink: false, webSearch: false });
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
-  const [pendingRegenerateAfterEdit, setPendingRegenerateAfterEdit] = useState(false);
   const [existingFiles, setExistingFiles] = useState<ChatFile[]>([]);
   const [freeTierStatus, setFreeTierStatus] = useState<{
     count: number;
@@ -139,9 +199,38 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   } | null>(null);
   const [showFreeTierUsage, setShowFreeTierUsage] = useState(false);
   const attachmentsRef = useRef<PendingAttachment[]>(attachments);
+  // When regenerating an assistant message, track which one is being regenerated
+  // so that when the new response arrives, we can create a branch with the old
+  // response as version 1 and the new one as version 2.
+  const regeneratingAssistantIdRef = useRef<string | null>(null);
 
   const initialMessages = useRef(loadMessages(chatId)).current;
-  const initialMessageIdsRef = useRef(new Set(initialMessages.map((m: any) => m.id))).current;
+  // Message ids that should render flat, without the slide/fade entrance
+  // animation: history loaded on mount, plus anything swapped into view by
+  // editing a message or navigating between its versions. handleEditMessage
+  // and handleBranchNav both add their ids here before calling setMessages,
+  // so only a genuinely new send or freshly streamed reply is missing from
+  // this set and gets the "new message" animation.
+  const noAnimateIdsRef = useRef(new Set(initialMessages.map((m: any) => m.id))).current;
+
+  const initialBranchGroups = useRef(loadBranchGroups(chatId)).current;
+  const [branchGroups, setBranchGroups] = useState<Record<string, BranchGroup>>(initialBranchGroups);
+  // Maps a message id -> the branch group id that governs versions of this message.
+  // For a user message that was edited, this maps the original user message id -> its branch group.
+  // For an assistant message that was regenerated, this maps the assistant message id -> its branch group.
+  // Also maps version ids (e.g., "msgId::v2") to their branch group.
+  const branchGroupForMessageRef = useRef<Record<string, string>>(
+    (() => {
+      const map: Record<string, string> = {};
+      for (const [groupId, group] of Object.entries(initialBranchGroups)) {
+        for (const branch of group.branches) {
+          const headId = branch.messages[0]?.id;
+          if (headId) map[headId] = groupId;
+        }
+      }
+      return map;
+    })()
+  );
 
   useEffect(() => {
     setExistingFiles(loadChatFiles(chatId));
@@ -247,8 +336,23 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   });
 
   // Retry controller refs and helpers
+  // `lastOutgoingRef` describes the CURRENT in-flight request. The retry
+  // watchdog only auto-retries requests that were issued for a user message
+  // that was just EDITED (`retryable: true` + the edited version id). Every
+  // request carries its own eligibility, so a stale flag can never leak from
+  // one request into the next (e.g. a plain assistant regeneration never
+  // inherits retry behavior from an earlier edit).
+  type OutgoingRequest = {
+    type: "send" | "regenerate";
+    payload: any;
+    retryable: boolean;
+    editedMessageId?: string;
+    // For edit flow: use sendMessage (re-send last user message)
+    // For regenerate flow: use regenerate with assistant messageId
+    retryFn: "sendMessage" | "regenerate";
+  };
+  const lastOutgoingRef = useRef<null | OutgoingRequest>(null);
   const retryAttemptRef = useRef(0);
-  const lastOutgoingRef = useRef<null | { type: "send" | "regenerate"; payload: any }>(null);
   const streamTimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstTokenReceivedRef = useRef(false);
   const lastAssistantActivityKeyRef = useRef<string | null>(null);
@@ -319,8 +423,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         // ignore
       }
       cleanupPartialAssistantMessages();
-      // decide whether to retry
-      if (retryAttemptRef.current < MAX_RETRY_ATTEMPTS && lastOutgoingRef.current) {
+      // Only auto-retry requests that were issued for a user message that was
+      // just EDITED. The edited version id is brand-new (the server has never
+      // seen it), so re-issuing the exact same request is safe and idempotent.
+      // Plain new sends and plain regenerations are never retryable, so the
+      // retry never touches a user message the user didn't edit.
+      const outgoing = lastOutgoingRef.current;
+      const retryEligible = !!outgoing && outgoing.retryable && !!outgoing.editedMessageId;
+      if (retryAttemptRef.current < MAX_RETRY_ATTEMPTS && outgoing && retryEligible) {
         suppressingErrorRef.current = true;
         // After the first few attempts, give the provider a breather before
         // the next try so a busy server has time to recover.
@@ -330,43 +440,74 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             : 50;
         // Next attempts use 10s
         const nextTimeout = 10000;
-        // Re-request the last outgoing message without appending a duplicate.
-        // `sendMessage()` with no payload re-sends the last user message, so we
-        // avoid the flicker caused by removing/re-adding messages on retry.
+        const retryFn = outgoing.retryFn;
         setTimeout(() => {
           // Dismiss any error banner left over from the failed attempt before
           // re-sending, so transient failures never flash at the user.
           clearError();
-          sendMessage();
+          if (retryFn === "sendMessage") {
+            // Edit flow: re-send the last user message (the edited version,
+            // guaranteed to be last after cleanup) — no duplicate is appended.
+            sendMessage();
+          } else {
+            // Assistant regeneration flow: regenerate the LAST message.
+            // NEVER pass a messageId here — after a failed attempt the SDK
+            // may have truncated the original assistant message, so targeting
+            // it by id would throw "message not found". After cleanup the
+            // last message is the user message the reply belongs to, and
+            // regenerate() (no args) targets exactly that.
+            regenerate();
+          }
           startAttempt(nextTimeout);
         }, cooldown);
       } else {
         suppressingErrorRef.current = false;
-        console.warn("NOVA: all retry attempts exhausted or no outgoing payload saved");
+        if (!retryEligible && retryAttemptRef.current <= 1) {
+          console.info("NOVA: no auto-retry for this request (only edited user messages are retried)");
+        } else {
+          console.warn("NOVA: all retry attempts exhausted or no outgoing payload saved");
+        }
         clearStreamTimer();
       }
     }, attemptTimeout);
-  }, [cleanupPartialAssistantMessages, clearStreamTimer, sendMessage, stop, clearError]);
+  }, [cleanupPartialAssistantMessages, clearStreamTimer, sendMessage, stop, clearError, regenerate]);
 
   const startSendWithRetry = useCallback((payload: any) => {
-    lastOutgoingRef.current = { type: "send", payload };
+    // Plain sends are never auto-retried — the message the user just typed is
+    // theirs, not an edited version, so a silent re-send could duplicate it.
+    lastOutgoingRef.current = { type: "send", payload, retryable: false, retryFn: "sendMessage" };
     retryAttemptRef.current = 0;
     suppressingErrorRef.current = false;
     lastAssistantActivityKeyRef.current = null;
-    // initial attempt
     sendMessage(payload);
-    // start watcher for initial 5s
-    startAttempt(5000);
-  }, [sendMessage, startAttempt]);
+  }, [sendMessage]);
 
-  const startRegenerateWithRetry = useCallback((payload: any) => {
-    lastOutgoingRef.current = { type: "regenerate", payload };
-    retryAttemptRef.current = 0;
-    suppressingErrorRef.current = false;
-    lastAssistantActivityKeyRef.current = null;
-    regenerate(payload);
-    startAttempt(5000);
-  }, [regenerate, startAttempt]);
+  const startRegenerateWithRetry = useCallback(
+    (payload: any, options?: { retryable?: boolean; editedMessageId?: string }) => {
+      const retryable = options?.retryable ?? false;
+      // Only the edited-user-message flow (handleEditMessage) passes
+      // retryable: true. Plain regenerations never auto-retry: the provider
+      // truncates the history to the regenerated message, and re-issuing the
+      // request after the state is already truncated would slice away the old
+      // response entirely.
+      lastOutgoingRef.current = {
+        type: "regenerate",
+        payload,
+        retryable,
+        editedMessageId: retryable ? options?.editedMessageId : undefined,
+        retryFn: retryable ? "sendMessage" : "regenerate", // edit flow uses sendMessage, plain regenerate uses regenerate
+      };
+      retryAttemptRef.current = 0;
+      suppressingErrorRef.current = false;
+      lastAssistantActivityKeyRef.current = null;
+      regenerate(payload);
+      if (retryable) {
+        // start watcher for initial 5s
+        startAttempt(5000);
+      }
+    },
+    [regenerate, startAttempt]
+  );
 
   // A manual Stop click must fully cancel the retry system, not just abort
   // the in-flight fetch. Otherwise the watchdog timer scheduled by
@@ -422,28 +563,49 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, [error, clearError]);
 
   // If the provider fails fast (before the watchdog timeout fires), suppress
-  // the banner as soon as the status flips to "error" as long as a retry is
-  // still possible. The watchdog timer will then abort + re-send.
+  // the banner as long as a retry is still possible. The watchdog timer will
+  // then abort + re-request. Only requests that are retry-eligible (an edited
+  // user message is in flight) get this treatment — everything else surfaces
+  // its error immediately.
   useEffect(() => {
     if (status !== "error") return;
-    if (retryAttemptRef.current < MAX_RETRY_ATTEMPTS && lastOutgoingRef.current) {
+    if (
+      lastOutgoingRef.current?.retryable &&
+      lastOutgoingRef.current.editedMessageId &&
+      retryAttemptRef.current < MAX_RETRY_ATTEMPTS
+    ) {
       suppressingErrorRef.current = true;
       clearError();
     }
   }, [status, clearError]);
 
   const isLoading = status === "submitted" || status === "streaming";
-  const visibleMessages = messages.filter((message, index) => {
-    if (message.role === "system") return false;
-    const nextMessage = messages[index + 1];
-    if (
-      isProgressOnlyAssistantMessage(message) &&
-      nextMessage?.role === "assistant"
-    ) {
-      return false;
+
+  // Compute visible messages. The `messages` array from useChat IS the active
+  // path (kept in sync by handleEditMessage / handleRegenerate /
+  // handleBranchNav / onFinish), so no branch substitution is needed here —
+  // substituting by activeIndex would corrupt restored snapshots. We only
+  // hide system messages and progress-only assistant messages.
+  const computeVisibleMessages = useCallback((): UIMessage[] => {
+    const result: UIMessage[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      if (message.role === "system") continue;
+      const nextMessage = messages[i + 1];
+      if (isProgressOnlyAssistantMessage(message) && nextMessage?.role === "assistant") {
+        continue;
+      }
+      result.push(message);
     }
-    return true;
-  });
+    return result;
+  }, [messages]);
+
+  const visibleMessages = computeVisibleMessages();
+  
+  // Deduplicate by id — regeneration/branch swaps can momentarily produce duplicates
+  const dedupedVisibleMessages = visibleMessages.filter(
+    (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i
+  );
   const searchComplete =
     !requestFeatures.webSearch ||
     isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-search"));
@@ -511,8 +673,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, []);
 
   const userMessages = useMemo(() => {
-    return visibleMessages.filter((m) => m.role === "user");
-  }, [visibleMessages]);
+    return dedupedVisibleMessages.filter((m) => m.role === "user");
+  }, [dedupedVisibleMessages]);
 
   const navItems: NavItem[] = useMemo(() => {
     return userMessages.map((message, i) => {
@@ -682,13 +844,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     }
   }, [messages, onFirstMessage]);
 
-  useEffect(() => {
-    if (pendingRegenerateAfterEdit) {
-      setPendingRegenerateAfterEdit(false);
-      startRegenerateWithRetry(undefined);
-    }
-  }, [pendingRegenerateAfterEdit]);
-
   const handleAddFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
 
@@ -802,6 +957,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     setAttachmentError("");
 
     if (pending.length === 0) {
+      // A plain (non-edited) send is never auto-retried — startSendWithRetry
+      // issues it once and failures surface as an error banner.
       startSendWithRetry({ text });
       return;
     }
@@ -832,6 +989,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       })
     );
 
+    // A plain (non-edited) send is never auto-retried (see above).
     startSendWithRetry({ text, files });
 
     // The blob preview URLs were only needed for the input-bar thumbnails;
@@ -844,31 +1002,326 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const handleEditMessage = useCallback(
     (messageId: string, newText: string) => {
       if (isLoading) return;
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === messageId);
-        if (idx === -1) return prev;
-        const editedMessage = {
-          ...prev[idx],
-          parts: [
-            ...prev[idx].parts.filter((p) => p.type !== "text"),
-            { type: "text" as const, text: newText },
-          ],
+
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx === -1) return;
+
+      // Create a branch group for THIS user message.
+      // The group key is the user message's ORIGINAL ID — if this message is
+      // already a version (`::vN`), resolve back to the original group so the
+      // edit adds a sibling version instead of an orphaned group.
+      const groupId = branchGroupForMessageRef.current[messageId] ?? messageId;
+      const existingGroup = branchGroups[groupId];
+
+      // Refresh the CURRENT (leaving) version's branch with the full tail
+      // from this message BEFORE truncating — follow-ups sent while this
+      // version was displayed must stay inside its branch snapshot.
+      const branches = existingGroup ? existingGroup.branches.slice() : [];
+      if (existingGroup) {
+        branches[existingGroup.activeIndex] = {
+          messages: messages.slice(idx),
+          childBranchIds: existingGroup.branches[existingGroup.activeIndex]?.childBranchIds ?? [],
         };
-        return [...prev.slice(0, idx), editedMessage];
-      });
+      } else {
+        branches.push({ messages: messages.slice(idx), childBranchIds: [] });
+      }
+      const baseGroup: BranchGroup = {
+        branches,
+        activeIndex: existingGroup ? existingGroup.activeIndex : 0,
+        parentMessageId: idx > 0 ? messages[idx - 1]?.id ?? null : null,
+      };
+      if (!existingGroup) {
+        branchGroupForMessageRef.current[groupId] = groupId;
+      }
+
+      const newVersionId = `${groupId}::v${baseGroup.branches.length + 1}`;
+      const editedMessage = {
+        ...messages[idx],
+        id: newVersionId,
+        parts: [
+          ...messages[idx].parts.filter((p) => p.type !== "text"),
+          { type: "text" as const, text: newText },
+        ],
+      };
+
+      branchGroupForMessageRef.current[newVersionId] = groupId;
+      noAnimateIdsRef.add(newVersionId);
+
+      setBranchGroups((g) => ({
+        ...g,
+        [groupId]: {
+          branches: [...baseGroup.branches, { messages: [editedMessage], childBranchIds: [] }],
+          activeIndex: baseGroup.branches.length,
+          parentMessageId: baseGroup.parentMessageId,
+        },
+      }));
+
+      setMessages([...messages.slice(0, idx), editedMessage]);
       setRequestFeatures({ deepThink, webSearch });
-      setPendingRegenerateAfterEdit(true);
+
+      // Trigger the regeneration for the edited message.
+      // The edit flow uses sendMessage (re-send last user message) for retries,
+      // not regenerate (which expects an assistant message ID).
+      startRegenerateWithRetry(undefined, { retryable: true, editedMessageId: newVersionId });
     },
-    [deepThink, isLoading, setMessages, webSearch]
+    [branchGroups, deepThink, isLoading, messages, setMessages, webSearch]
+  );
+
+  // Once a (re)generation finishes, snapshot the freshly produced tail back
+  // into whichever branch is currently active, so switching away and back
+  // to this version preserves its own response instead of a stale one.
+  // For assistant message regeneration, also create a new branch version.
+  const prevStatusRef = useRef(status);
+  useEffect(() => {
+    const wasLoading = prevStatusRef.current === "submitted" || prevStatusRef.current === "streaming";
+    prevStatusRef.current = status;
+    if (!wasLoading || status !== "ready") return;
+
+    // Handle assistant message regeneration as a new branch version
+    const isRegeneratingAssistant = regeneratingAssistantIdRef.current !== null;
+    if (isRegeneratingAssistant) {
+      const oldAssistantId = regeneratingAssistantIdRef.current!;
+      regeneratingAssistantIdRef.current = null;
+
+      // NOTE: the AI SDK's regenerate() TRUNCATES the messages array at the
+      // regenerated assistant message — the old assistant id is GONE from
+      // `messages`. The new response was streamed in as the last assistant
+      // message, so find the NEW assistant at the end of the array.
+      let newAssistantIdx = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "assistant") {
+          newAssistantIdx = i;
+          break;
+        }
+      }
+      if (newAssistantIdx === -1) return;
+
+      // Resolve the group key the same way handleRegenerate did — if the
+      // regenerated assistant was itself a version, the group lives under
+      // the ORIGINAL assistant id.
+      const groupId = branchGroupForMessageRef.current[oldAssistantId] ?? oldAssistantId;
+      const group = branchGroups[groupId];
+      if (!group) return;
+
+      const newAssistantId = messages[newAssistantIdx].id;
+
+      setBranchGroups((g) => {
+        const grp = g[groupId];
+        if (!grp) return g;
+
+        const branches = grp.branches.slice();
+        // Check if we already have this new version (re-streamed)
+        const newVersionExists = branches.some(
+          (b: MessageBranch) =>
+            b.messages.length > 0 && b.messages[b.messages.length - 1].id === newAssistantId
+        );
+
+        if (!newVersionExists) {
+          // Add the new regenerated response as a new branch version —
+          // sibling of the old assistant (same parent), NOT a child.
+          branches.push({ messages: messages.slice(newAssistantIdx), childBranchIds: [] });
+        }
+
+        // Switch to the new version
+        const newActiveIndex = branches.length - 1;
+        for (const m of messages.slice(newAssistantIdx)) {
+          noAnimateIdsRef.add(m.id);
+        }
+        // Map the new version's head back to its group
+        branchGroupForMessageRef.current[newAssistantId] = groupId;
+
+        return { ...g, [groupId]: { ...grp, branches, activeIndex: newActiveIndex } };
+      });
+    } else {
+      // Normal generation (new send or edited-message regeneration).
+      // Walk every message in the current array: for each message that is
+      // the ACTIVE HEAD of a branch group (i.e. the version currently
+      // displayed), extend that group's active branch with the full tail
+      // from that message. This keeps follow-ups sent after a response
+      // inside the correct branch — including user groups whose root sits
+      // ABOVE the last user message (edited versions) and assistant groups.
+      const groupUpdates: Record<string, BranchGroup> = {};
+      for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+        const groupId = branchGroupForMessageRef.current[m.id];
+        if (!groupId) continue;
+        const grp = branchGroups[groupId];
+        if (!grp) continue;
+        const activeHead = grp.branches[grp.activeIndex]?.messages[0];
+        if (!activeHead || activeHead.id !== m.id) continue;
+        groupUpdates[groupId] = {
+          ...grp,
+          branches: grp.branches.map((b, bi) =>
+            bi === grp.activeIndex
+              ? { messages: messages.slice(i), childBranchIds: b.childBranchIds ?? [] }
+              : b
+          ),
+        };
+      }
+      if (Object.keys(groupUpdates).length > 0) {
+        setBranchGroups((g) => ({ ...g, ...groupUpdates }));
+      }
+
+      // Ensure the freshly streamed assistant has a branch group so it can
+      // be regenerated later as a sibling (same parent).
+      let lastAssistantIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "assistant") {
+          lastAssistantIndex = i;
+          break;
+        }
+      }
+      if (lastAssistantIndex !== -1) {
+        const assistantMessageId = messages[lastAssistantIndex].id;
+        if (!branchGroups[assistantMessageId]) {
+          const parentId =
+            lastAssistantIndex > 0 ? messages[lastAssistantIndex - 1]?.id ?? null : null;
+          setBranchGroups((g) => ({
+            ...g,
+            [assistantMessageId]: {
+              branches: [{ messages: messages.slice(lastAssistantIndex), childBranchIds: [] }],
+              activeIndex: 0,
+              parentMessageId: parentId,
+            },
+          }));
+          branchGroupForMessageRef.current[assistantMessageId] = assistantMessageId;
+        }
+      }
+    }
+  }, [status, messages, branchGroups]);
+
+  // Persist versions alongside the conversation so they survive a refresh.
+  useEffect(() => {
+    saveBranchGroups(chatId, branchGroups);
+  }, [chatId, branchGroups]);
+
+  // Resolve the branch group that governs a message: look up the message's
+  // branch group directly (each message with versions has its own group).
+  const resolveGroupForMessage = useCallback(
+    (messageId: string): { groupId: string; group: BranchGroup | undefined } => {
+      const groupId = branchGroupForMessageRef.current[messageId];
+      if (!groupId) return { groupId: "", group: undefined };
+      return { groupId, group: branchGroups[groupId] };
+    },
+    [branchGroups]
+  );
+
+  const getBranchInfo = useCallback(
+    (messageId: string) => {
+      const { groupId, group } = resolveGroupForMessage(messageId);
+      if (!groupId || !group || group.branches.length < 2) return undefined;
+      return { current: group.activeIndex + 1, total: group.branches.length };
+    },
+    [resolveGroupForMessage]
+  );
+
+  const handleBranchNav = useCallback(
+    (messageId: string, direction: "prev" | "next") => {
+      if (isLoading) return;
+      const { groupId, group } = resolveGroupForMessage(messageId);
+      if (!groupId || !group) return;
+
+      const newIndex = direction === "prev" ? group.activeIndex - 1 : group.activeIndex + 1;
+      if (newIndex < 0 || newIndex >= group.branches.length) return;
+
+      // Save the currently visible tail from this message onward into the
+      // branch we are leaving
+      const msgIdx = messages.findIndex((m) => m.id === messageId);
+      if (msgIdx === -1) return;
+
+      const branches = group.branches.slice();
+      branches[group.activeIndex] = {
+        messages: messages.slice(msgIdx),
+        childBranchIds: group.branches[group.activeIndex]?.childBranchIds ?? [],
+      };
+
+      const nextBranch = branches[newIndex];
+      const nextMessages = nextBranch.messages;
+
+      // Mark new messages as no-animate
+      for (const m of nextMessages) noAnimateIdsRef.add(m.id);
+
+      // Update branchGroupForMessageRef for the new head messages
+      if (nextMessages.length > 0) {
+        branchGroupForMessageRef.current[nextMessages[0].id] = groupId;
+      }
+
+      // Update the branch group — AND any nested branch groups whose active
+      // version appears in the restored snapshot, so their switcher counters
+      // point at the version actually being displayed (never mix versions).
+      setBranchGroups((g) => {
+        const next: Record<string, BranchGroup> = {
+          [groupId]: { ...group, branches, activeIndex: newIndex },
+        };
+        for (const m of nextMessages) {
+          const nestedGroupId = branchGroupForMessageRef.current[m.id];
+          const nestedGroup = nestedGroupId ? g[nestedGroupId] : undefined;
+          if (!nestedGroupId || !nestedGroup || nestedGroup.branches.length < 2) continue;
+          const versionIndex = nestedGroup.branches.findIndex(
+            (b) => b.messages[0]?.id === m.id
+          );
+          if (versionIndex !== -1 && versionIndex !== nestedGroup.activeIndex) {
+            next[nestedGroupId] = { ...nestedGroup, activeIndex: versionIndex };
+          }
+        }
+        return { ...g, ...next };
+      });
+
+      // Replace messages from this message onward with the selected branch
+      setMessages([...messages.slice(0, msgIdx), ...nextMessages]);
+    },
+    [branchGroups, isLoading, messages, resolveGroupForMessage, setMessages]
   );
 
   const handleRegenerate = useCallback(
     (messageId: string) => {
       if (isLoading) return;
+
+      const assistantIdx = messages.findIndex((m) => m.id === messageId);
+      if (assistantIdx === -1) return;
+
+      // Create a branch group for THIS assistant message.
+      // The group key is the assistant message's ORIGINAL id — if this
+      // assistant is already a version (a prior retry), resolve back to the
+      // original group so the retry adds a SIBLING version (same parent).
+      const groupId = branchGroupForMessageRef.current[messageId] ?? messageId;
+      const existingGroup = branchGroups[groupId];
+
+      // The currently displayed assistant message + its downstream is the
+      // version we are leaving. Refresh its tail in the group so switching
+      // back later restores the exact subtree (including follow-ups sent
+      // while it was displayed).
+      const branches = existingGroup ? existingGroup.branches.slice() : [];
+      if (existingGroup) {
+        branches[existingGroup.activeIndex] = {
+          messages: messages.slice(assistantIdx),
+          childBranchIds: existingGroup.branches[existingGroup.activeIndex]?.childBranchIds ?? [],
+        };
+      } else {
+        branches.push({ messages: messages.slice(assistantIdx), childBranchIds: [] });
+      }
+      const baseGroup: BranchGroup = {
+        branches,
+        activeIndex: existingGroup ? existingGroup.activeIndex : 0,
+        parentMessageId: messages[assistantIdx - 1]?.id ?? null,
+      };
+      if (!existingGroup) {
+        branchGroupForMessageRef.current[groupId] = groupId;
+      }
+
+      // Mark this as a regeneration so onFinish captures the NEW response as
+      // a new sibling version.
+      regeneratingAssistantIdRef.current = messageId;
+
+      setBranchGroups((g) => ({
+        ...g,
+        [groupId]: baseGroup,
+      }));
+
       setRequestFeatures({ deepThink, webSearch });
       startRegenerateWithRetry({ messageId });
     },
-    [deepThink, isLoading, regenerate, webSearch]
+    [branchGroups, deepThink, isLoading, messages, setMessages, webSearch]
   );
 
   const isEmpty = messages.length === 0;
@@ -963,9 +1416,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             onTouchMove={handleMessagesTouchMove}
             className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-40 sm:pb-48"
           >
-            <div className="max-w-3xl mx-auto">
-              {visibleMessages.map((message, i) => {
-                const isLastAssistant = i === visibleMessages.length - 1 && message.role === "assistant";
+            {/* Fades in once, on mount — i.e. whenever a whole conversation is
+                opened or switched to (ChatView remounts per chatId). This is
+                separate from the flat swap used for edit-version branch nav
+                and from the per-message animation for freshly sent/streamed
+                messages below. */}
+            <div className="max-w-3xl mx-auto animate-in fade-in duration-300">
+              {dedupedVisibleMessages.map((message, i) => {
+                const isLastAssistant = i === dedupedVisibleMessages.length - 1 && message.role === "assistant";
                 const isCurrentStreamingAssistant = isLastAssistant && status === "streaming";
                 return (
                   <div key={message.id} data-message-id={message.id}>
@@ -977,9 +1435,15 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                           : undefined
                       }
                       onEdit={message.role === "user" ? handleEditMessage : undefined}
+                      branchInfo={getBranchInfo(message.id)}
+                      onBranchNav={
+                        getBranchInfo(message.id)
+                          ? (direction) => handleBranchNav(message.id, direction)
+                          : undefined
+                      }
                       isStreaming={isCurrentStreamingAssistant}
                       disableActions={isLoading}
-                      animateIn={!initialMessageIdsRef.has(message.id)}
+                      animateIn={!noAnimateIdsRef.has(message.id)}
                     />
                   </div>
                 );

@@ -8,6 +8,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   RotateCcw,
   Pencil,
@@ -29,6 +31,10 @@ type Props = {
   disableActions?: boolean;
   /** false for messages already present when the chat loaded, so history doesn't replay its entrance animation */
   animateIn?: boolean;
+  /** edit/regenerate version info — when present with total > 1, renders the < n / m > branch switcher */
+  branchInfo?: { current: number; total: number };
+  /** navigate between edit/regenerate versions */
+  onBranchNav?: (direction: "prev" | "next") => void;
 };
 
 function messageText(message: UIMessage) {
@@ -639,7 +645,7 @@ function Attachment({ part }: { part: any }) {
   );
 }
 
-export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disableActions, animateIn = true }: Props) {
+export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disableActions, animateIn = true, branchInfo, onBranchNav }: Props) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -697,7 +703,7 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
       )}
 
       {/* Content */}
-      <div className={cn("flex flex-col gap-1.5 sm:gap-2 min-w-0", isUser ? "items-end max-w-[85%] sm:max-w-[80%] ml-auto" : "flex-1")}>
+      <div className={cn("flex flex-col gap-1.5 sm:gap-2 min-w-0", isUser ? "items-end max-w-[70%] ml-auto" : "flex-1")}>
         {fileParts.length > 0 && (
           <div className={cn("flex flex-wrap gap-1.5 sm:gap-2", isUser && "justify-end")}>
             {fileParts.map((part, i) => (
@@ -748,10 +754,10 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
         ) : (
           <div
             className={cn(
-              "text-xs sm:text-sm leading-relaxed min-w-0 w-full",
+              "text-xs sm:text-sm leading-relaxed min-w-0",
               isUser
-                ? "bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3.5 py-2.5 sm:px-4 sm:py-3 text-white shadow-sm overflow-hidden"
-                : "text-[#ddd] prose prose-invert prose-xs sm:prose-sm max-w-none overflow-visible"
+                ? "w-fit max-w-full bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3.5 py-2.5 sm:px-4 sm:py-3 text-white shadow-sm overflow-hidden break-words"
+                : "w-full text-[#ddd] prose prose-invert prose-xs sm:prose-sm max-w-none overflow-visible"
             )}
           >
             {message.parts.map((part, index) => {
@@ -807,6 +813,30 @@ export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disabl
               >
                 <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
+            )}
+
+            {branchInfo && branchInfo.total > 1 && (
+              <div className="flex items-center gap-0.5 select-none">
+                <button
+                  onClick={() => onBranchNav?.("prev")}
+                  disabled={disableActions || branchInfo.current <= 1}
+                  className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
+                  aria-label="Previous version"
+                >
+                  <ChevronLeft className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                </button>
+                <span className="text-[10px] sm:text-[11px] text-[#666] font-medium tabular-nums whitespace-nowrap">
+                  {branchInfo.current} / {branchInfo.total}
+                </span>
+                <button
+                  onClick={() => onBranchNav?.("next")}
+                  disabled={disableActions || branchInfo.current >= branchInfo.total}
+                  className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
+                  aria-label="Next version"
+                >
+                  <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                </button>
+              </div>
             )}
           </div>
         )}

@@ -19,7 +19,7 @@ import {
 import { createOpenAI } from "@ai-sdk/openai";
 
 // Per-provider model mappings. The primary endpoint (BASED_URL) uses "oc/"
-// prefixed model IDs; the fallback endpoint (FALLBACK_BASED_URL) uses
+// prefixed model IDs; the fallback endpoint (FALLBACK_BASED_URL) uses 
 // unprefixed IDs. Both expose the same logical models.
 
 export const PRIMARY_MODELS: Record<string, string> = {
@@ -220,6 +220,7 @@ type StreamWithFallbackOptions = {
   startProvider?: ProviderPreference;
   abortSignal?: AbortSignal;
 };
+
 export function streamTextWithFallback(
   clients: ProviderClients,
   options: StreamWithFallbackOptions
