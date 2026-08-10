@@ -15,7 +15,7 @@ type Props = {
 };
 
 // Marketing copy shown in the code-entry state (rendered as markdown).
-const PAID_TIER_MARKDOWN = `Unlock all the NOVA's features and unlimited chatting without limit!
+const PAID_TIER_MARKDOWN = `## **Unlock all the NOVA's features and unlimited chatting without limit!**
 
 **How does the Paid Tier Works:**
 
@@ -23,9 +23,7 @@ NOVA doesn't have a subscription service in the traditional sense.
 
 Instead we use **one-time codes**.
 
-**Paid Tier (one-time codes):**
-
-**How does the code work:**
+**How does the Paid Tier (one-time codes) work:**
 
 Admins create codes with:
 
@@ -35,7 +33,7 @@ Admins create codes with:
 You redeem a code once — it's not a recurring subscription.
 
 - The timer starts on first redemption (shared across all users who use that code)
-- Once expired, you'll return to the free tier with 20 messages per chat.
+- Once expired, you'll return to the limited free tier.
 
 **What you get with a paid code:**
 
