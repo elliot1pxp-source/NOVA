@@ -25,6 +25,8 @@ type PaidCode = {
     BLOCKRUN_API_KEY?: string;
     FALLBACK_API_KEY?: string;
     SERPER_API_KEY: string;
+    BASED_URL?: string;
+    FALLBACK_BASED_URL?: string;
   };
   redeemed: boolean;
   redeemedBy?: string | null;
@@ -80,10 +82,12 @@ export default function AdminPage() {
   const [newBlockrunApiKey, setNewBlockrunApiKey] = useState("");
   const [newFallbackApiKey, setNewFallbackApiKey] = useState("");
   const [newSerper, setNewSerper] = useState("");
+  const [newBaseUrl, setNewBaseUrl] = useState("");
+  const [newFallbackBaseUrl, setNewFallbackBaseUrl] = useState("");
 
   // Editing
   const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editTokens, setEditTokens] = useState<{ BLOCKRUN_API_KEY?: string; FALLBACK_API_KEY?: string; SERPER_API_KEY: string } | null>(null);
+  const [editTokens, setEditTokens] = useState<{ BLOCKRUN_API_KEY?: string; FALLBACK_API_KEY?: string; SERPER_API_KEY: string; BASED_URL?: string; FALLBACK_BASED_URL?: string } | null>(null);
   const [editExpiry, setEditExpiry] = useState("");
   const [editDurationHours, setEditDurationHours] = useState("");
   const [editMaxRedemptions, setEditMaxRedemptions] = useState("");
@@ -302,6 +306,8 @@ export default function AdminPage() {
     setNewBlockrunApiKey(currentSettingsValues.BLOCKRUN_API_KEY);
     setNewFallbackApiKey(currentSettingsValues.FALLBACK_API_KEY);
     setNewSerper(currentSettingsValues.SERPER_API_KEY);
+    setNewBaseUrl(currentSettingsValues.BASED_URL);
+    setNewFallbackBaseUrl(currentSettingsValues.FALLBACK_BASED_URL);
   };
 
   const effectivePrimaryBaseURL = settings.useFallbackAsPrimary
@@ -323,6 +329,8 @@ export default function AdminPage() {
       BLOCKRUN_API_KEY: currentSettingsValues.BLOCKRUN_API_KEY || editTokens.BLOCKRUN_API_KEY,
       FALLBACK_API_KEY: currentSettingsValues.FALLBACK_API_KEY || editTokens.FALLBACK_API_KEY,
       SERPER_API_KEY: currentSettingsValues.SERPER_API_KEY || editTokens.SERPER_API_KEY || "",
+      BASED_URL: currentSettingsValues.BASED_URL || editTokens.BASED_URL,
+      FALLBACK_BASED_URL: currentSettingsValues.FALLBACK_BASED_URL || editTokens.FALLBACK_BASED_URL,
     });
   };
 
@@ -513,6 +521,8 @@ export default function AdminPage() {
             BLOCKRUN_API_KEY: newBlockrunApiKey,
             FALLBACK_API_KEY: newFallbackApiKey,
             SERPER_API_KEY: newSerper,
+            BASED_URL: newBaseUrl,
+            FALLBACK_BASED_URL: newFallbackBaseUrl,
           },
         }),
       });
@@ -527,6 +537,8 @@ export default function AdminPage() {
         setNewBlockrunApiKey("");
         setNewFallbackApiKey("");
         setNewSerper("");
+        setNewBaseUrl("");
+        setNewFallbackBaseUrl("");
       } else {
         setMessage({ type: "error", text: data.error || "Failed to create code" });
       }
@@ -1018,6 +1030,26 @@ export default function AdminPage() {
                   placeholder="Enter Serper API key for this code..."
                 />
               </div>
+              <div>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">BASED_URL (for this code)</label>
+                <input
+                  type="text"
+                  value={newBaseUrl}
+                  onChange={(e) => setNewBaseUrl(e.target.value)}
+                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                  placeholder="Enter primary endpoint URL for this code..."
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">FALLBACK_BASED_URL (for this code)</label>
+                <input
+                  type="text"
+                  value={newFallbackBaseUrl}
+                  onChange={(e) => setNewFallbackBaseUrl(e.target.value)}
+                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                  placeholder="Enter fallback endpoint URL for this code..."
+                />
+              </div>
             </div>
             <div className="flex justify-end">
               <button
@@ -1170,6 +1202,24 @@ export default function AdminPage() {
                             type="text"
                             value={editTokens?.SERPER_API_KEY || ""}
                             onChange={(e) => setEditTokens({ ...editTokens!, SERPER_API_KEY: e.target.value })}
+                            className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-white/20 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">BASED_URL</label>
+                          <input
+                            type="text"
+                            value={editTokens?.BASED_URL || ""}
+                            onChange={(e) => setEditTokens({ ...editTokens!, BASED_URL: e.target.value })}
+                            className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-white/20 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">FALLBACK_BASED_URL</label>
+                          <input
+                            type="text"
+                            value={editTokens?.FALLBACK_BASED_URL || ""}
+                            onChange={(e) => setEditTokens({ ...editTokens!, FALLBACK_BASED_URL: e.target.value })}
                             className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-white/20 transition-all"
                           />
                         </div>

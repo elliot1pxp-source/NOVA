@@ -312,8 +312,52 @@ export type StreamingModelOptions = {
   maxOutputTokens?: number;
 };
 
+// PRIMARY_MODELS / FALLBACK_MODELS point at two aggregator/proxy endpoints
+// whose advertised max-output-tokens figures do not reliably match what the
+// backend actually enforces (confirmed: a request above the real ceiling is
+// rejected with a 400 rather than being clamped upstream). Every resolved
+// model id currently in use here has been verified to top out at 131072 —
+// list them explicitly for clarity, and fall back to that same conservative
+// value for anything not listed rather than trusting an unverified
+// advertised limit or an unbounded client-supplied maxTokens.
+const DEFAULT_MAX_OUTPUT_TOKENS = 131_072;
+
+const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
+  "oc/deepseek-v4-flash-free": 131_072,
+  "oc/big-pickle": 131_072,
+  "deepseek-v4-flash-free": 131_072,
+  "big-pickle": 131_072,
+  "nemotron-3-ultra-free": 131_072,
+};
+
+/**
+ * Clamps a requested max-output-tokens value to the known-safe ceiling for
+ * the resolved model. Returns `undefined` unchanged when no value was
+ * requested — this only guards against asking for MORE than a model
+ * supports; it never invents a cap where the caller (or the provider's own
+ * default) didn't ask for one.
+ */
+function clampMaxOutputTokens(
+  resolvedModelId: string | undefined,
+  requested: number | undefined
+): number | undefined {
+  if (requested === undefined) return undefined;
+  const cap =
+    (resolvedModelId !== undefined
+      ? MODEL_MAX_OUTPUT_TOKENS[resolvedModelId]
+      : undefined) ?? DEFAULT_MAX_OUTPUT_TOKENS;
+  if (requested > cap) {
+    console.warn(
+      `[llm-providers] requested maxTokens ${requested} exceeds ${resolvedModelId ?? "model"}'s limit of ${cap} — clamping`
+    );
+    return cap;
+  }
+  return requested;
+}
+
 export function getStreamingModelOptions(
-  modelSettings?: { temperature?: number; topK?: number; maxTokens?: number }
+  modelSettings?: { temperature?: number; topK?: number; maxTokens?: number },
+  resolvedModelId?: string
 ): StreamingModelOptions {
   const options: StreamingModelOptions = {};
 
@@ -321,8 +365,9 @@ export function getStreamingModelOptions(
     options.temperature = modelSettings.temperature;
   }
 
-  if (modelSettings?.maxTokens !== undefined) {
-    options.maxOutputTokens = modelSettings.maxTokens;
+  const clampedMaxTokens = clampMaxOutputTokens(resolvedModelId, modelSettings?.maxTokens);
+  if (clampedMaxTokens !== undefined) {
+    options.maxOutputTokens = clampedMaxTokens;
   }
 
   return options;
@@ -417,7 +462,7 @@ export function streamTextWithFallback(
             model: client.chat(resolvedModelId),
             system,
             messages,
-            ...getStreamingModelOptions(modelSettings),
+            ...getStreamingModelOptions(modelSettings, resolvedModelId),
             ...(reasoning ? { reasoning } : {}),
             maxRetries,
             abortSignal,

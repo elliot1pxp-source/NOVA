@@ -87,6 +87,8 @@ export async function POST(req: Request) {
   if (paidCode?.expiresAt && new Date(paidCode.expiresAt) > new Date()) {
     if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
     if (paidCode.tokens.FALLBACK_API_KEY) fallbackApiKey = paidCode.tokens.FALLBACK_API_KEY;
+    if (paidCode.tokens.BASED_URL) primaryBaseURL = paidCode.tokens.BASED_URL;
+    if (paidCode.tokens.FALLBACK_BASED_URL) fallbackBaseURL = paidCode.tokens.FALLBACK_BASED_URL;
   }
 
   if (useFallbackAsPrimary) {

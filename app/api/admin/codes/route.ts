@@ -70,6 +70,8 @@ export async function POST(req: Request) {
         BLOCKRUN_API_KEY: tokens.BLOCKRUN_API_KEY || "",
         FALLBACK_API_KEY: tokens.FALLBACK_API_KEY || "",
         SERPER_API_KEY: tokens.SERPER_API_KEY || "",
+        BASED_URL: tokens.BASED_URL || "",
+        FALLBACK_BASED_URL: tokens.FALLBACK_BASED_URL || "",
       },
       redeemed: false,
     };
@@ -138,6 +140,8 @@ export async function PUT(req: Request) {
       if (tokens.BLOCKRUN_API_KEY !== undefined) codes[index].tokens.BLOCKRUN_API_KEY = tokens.BLOCKRUN_API_KEY;
       if (tokens.FALLBACK_API_KEY !== undefined) codes[index].tokens.FALLBACK_API_KEY = tokens.FALLBACK_API_KEY;
       if (tokens.SERPER_API_KEY !== undefined) codes[index].tokens.SERPER_API_KEY = tokens.SERPER_API_KEY;
+      if (tokens.BASED_URL !== undefined) codes[index].tokens.BASED_URL = tokens.BASED_URL;
+      if (tokens.FALLBACK_BASED_URL !== undefined) codes[index].tokens.FALLBACK_BASED_URL = tokens.FALLBACK_BASED_URL;
     }
     if (redeemedUserIds !== undefined) codes[index].redeemedUserIds = redeemedUserIds;
     if (redemptionCount !== undefined) codes[index].redemptionCount = Number(redemptionCount);

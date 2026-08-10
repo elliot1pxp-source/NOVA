@@ -76,7 +76,51 @@ async function fetchPageContent(url: string): Promise<string | undefined> {
   }
 }
 
-// --- NEW: Serper.dev search function ---
+// --- NEW: Serper Scrape API for fetching full page content ---
+async function scrapeSerperPage(url: string, apiKey: string): Promise<string | undefined> {
+  try {
+    const response = await fetch("https://scrape.serper.dev", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        includeMarkdown: false, // we just want the plain text
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) {
+      console.error(`Serper Scrape API returned ${response.status} for ${url}`);
+      return undefined;
+    }
+
+    const data = await response.json();
+    // API returns { text, markdown, metadata, jsonld }
+    const text = data.text || data.markdown;
+    return text ? text.slice(0, MAX_PAGE_TEXT_LENGTH) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// --- NEW: Batch scrape top 3 results using Serper Scrape API ---
+async function scrapeTopResultsWithSerper(results: SearchResult[], apiKey: string): Promise<SearchResult[]> {
+  const topResults = results.slice(0, 3); // top 3 only
+  const scraped = await Promise.all(
+    topResults.map(async (result) => {
+      if (!result.url) return { ...result, content: undefined };
+      const content = await scrapeSerperPage(result.url, apiKey);
+      return { ...result, content };
+    })
+  );
+  // Return merged: scraped top 3 + untouched rest
+  return [...scraped, ...results.slice(3)];
+}
+
+// --- Serper Search ---
 async function searchSerper(query: string, customApiKey?: string): Promise<SearchResult[]> {
   const apiKey = customApiKey || process.env.SERPER_API_KEY;
   if (!apiKey) {
@@ -175,10 +219,33 @@ export async function searchDuckDuckGo(query: string, serperApiKey?: string): Pr
 }
 
 /**
- * Finds the five best search results and retrieves their readable page text.
+ * Finds the best search results and retrieves their readable page text.
+ * Uses Serper Scrape API for top 3 results, falls back to raw HTML fetch for the rest.
  */
 export async function searchWithPageContent(query: string, serperApiKey?: string): Promise<SearchResult[]> {
+  const apiKey = serperApiKey || process.env.SERPER_API_KEY;
   const results = await searchDuckDuckGo(query, serperApiKey);
+
+  if (apiKey && results.some(r => r.url)) {
+    // Use Serper Scrape for top 3 results with URLs
+    const withSerperScraped = await scrapeTopResultsWithSerper(results, apiKey);
+    // For remaining results with URLs (beyond top 3), fall back to raw fetch
+    const remaining = withSerperScraped.slice(3);
+    const remainingWithContent = await Promise.all(
+      remaining.map((result) =>
+        result.url ? fetchPageContent(result.url) : Promise.resolve(undefined)
+      )
+    );
+    return [
+      ...withSerperScraped.slice(0, 3),
+      ...remaining.map((result, index) => ({
+        ...result,
+        content: remainingWithContent[index] ?? result.content,
+      })),
+    ];
+  }
+
+  // No Serper API key or no URLs - fall back to raw HTML fetch for all
   const content = await Promise.all(
     results.map((result) =>
       result.url ? fetchPageContent(result.url) : Promise.resolve(undefined)

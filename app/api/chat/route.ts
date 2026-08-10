@@ -342,6 +342,8 @@ export async function POST(req: Request) {
       if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
       if (paidCode.tokens.FALLBACK_API_KEY) fallbackApiKey = paidCode.tokens.FALLBACK_API_KEY;
       if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
+      if (paidCode.tokens.BASED_URL) primaryBaseURL = paidCode.tokens.BASED_URL;
+      if (paidCode.tokens.FALLBACK_BASED_URL) fallbackBaseURL = paidCode.tokens.FALLBACK_BASED_URL;
     }
 
     if (useFallbackAsPrimary) {
