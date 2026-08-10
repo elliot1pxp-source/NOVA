@@ -1418,6 +1418,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               onAttachExistingFile={handleAttachExistingFile}
               freeTierStatus={freeTierStatus}
               showFreeTierUsage={showFreeTierUsage}
+              isPaidUser={hasPaidAccess}
             />
           </div>
         </div>
@@ -1535,6 +1536,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 onAttachExistingFile={handleAttachExistingFile}
                 freeTierStatus={freeTierStatus}
                 showFreeTierUsage={showFreeTierUsage}
+                isPaidUser={hasPaidAccess}
               />
             </div>
           </div>

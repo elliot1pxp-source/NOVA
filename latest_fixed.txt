@@ -493,6 +493,39 @@ Fix (components/chat-input.tsx, components/chat-view.tsx,
       reasoning "high"  -> reasoning_effort "high"
 
 ────────────────────────────────────────────
+FIX 19: "Extra High" (xhigh) reasoning level + paid-tier gating
+────────────────────────────────────────────
+
+Problem:
+  The endpoints advertise effort tiers up to "xhigh", but the UI only
+  offered low/medium/high. High and xhigh are expensive (long thinking
+  phases) and should be a paid-tier perk — free users must not be able to
+  select them, and the server must not honor them even if a client sends
+  them anyway.
+
+Fix (components/chat-input.tsx, components/chat-view.tsx,
+      app/api/chat/route.ts):
+  - UI (chat-input.tsx): `ReasoningLevel` is now
+    "low" | "medium" | "high" | "xhigh"; `REASONING_LEVEL_LABELS` maps
+    xhigh → "Extra High". The selector renders Low / Medium / High /
+    Extra High. High and Extra High are DISABLED for free users
+    (`isRestricted = (level === "high" || level === "xhigh") && !isPaidUser`)
+    — greyed out, `cursor-not-allowed`, `aria-disabled`, with a
+    "Requires paid tier" tooltip; clicking does nothing.
+  - chat-view.tsx passes `isPaidUser={hasPaidAccess}` to both ChatInput
+    instances (hasPaidAccess = paid server mode + unexpired code).
+  - Server (chat route): the paid-code lookup (`hasPaidAccess`) was moved
+    BEFORE the reasoning resolution. `isRestrictedLevel` = high or xhigh;
+    if a free user requests one, it silently falls back to
+    `DEFAULT_REASONING_LEVEL` ("medium") — the server never honors a
+    restricted level without a valid paid code, even from a tampered
+    client.
+  - `REASONING_LEVELS = ["low", "medium", "high", "xhigh"]`; the route
+    logs `[chat] reasoning: none|low|medium|high|xhigh` per request.
+  - Verified: free-user requests for "high" and "xhigh" both log
+    `reasoning: medium`; paid requests pass the level through.
+
+────────────────────────────────────────────
 Summary of behavior after all fixes
 ────────────────────────────────────────────
 
@@ -538,14 +571,17 @@ Empty chat restoration:
 
 Native DeepThink / reasoning:
   1. DeepThink ON → the main chat model thinks natively at the chosen
-     level (low/medium/high), and its LIVE reasoning text streams into the
-     Thought block, ending with "Thought for Ns"
+     level (low/medium/high/xhigh), and its LIVE reasoning text streams
+     into the Thought block, ending with "Thought for Ns"
   2. DeepThink OFF → explicit reasoning_effort "none" is sent — no hidden
      thinking, no wasted reasoning tokens
   3. Web search, file analysis, and summarization NEVER reason
   4. The reasoning-level selector appears only while DeepThink is ON
+  5. High and Extra High are paid-tier only — disabled in the UI for free
+     users, and the server silently downgrades them to medium if a free
+     client sends them anyway
 
 No duplicate key errors, no disappearing messages, no orphaned branches,
 no stale retry markers, no crashes, no oversized bubbles, no lost
 generations, no lost empty chats, no invisible input textarea, no hidden
-reasoning, no planner round-trip.
+reasoning, no planner round-trip, no free-tier access to high/xhigh.

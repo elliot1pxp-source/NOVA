@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatFile } from "@/lib/storage";
+import { openPaidTierDialog } from "@/lib/paid-tier";
 
 export type PendingAttachment =
   | { id: string; source: "file"; file: File; previewUrl: string }
@@ -26,8 +27,14 @@ type FreeTierStatus = {
   blockedUntil?: string;
 };
 
-export type ReasoningLevel = "low" | "medium" | "high";
-const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high"];
+export type ReasoningLevel = "low" | "medium" | "high" | "xhigh";
+const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high", "xhigh"];
+const REASONING_LEVEL_LABELS: Record<ReasoningLevel, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra High",
+};
 
 type ChatInputProps = {
   input: string;
@@ -53,6 +60,8 @@ type ChatInputProps = {
   onAttachExistingFile?: (file: ChatFile) => void;
   freeTierStatus?: FreeTierStatus | null;
   showFreeTierUsage?: boolean;
+  /** Whether the user has an active paid tier (for gating high/xhigh reasoning). */
+  isPaidUser?: boolean;
 };
 
 export function ChatInput({
@@ -77,6 +86,7 @@ export function ChatInput({
   onAttachExistingFile,
   freeTierStatus = null,
   showFreeTierUsage = false,
+  isPaidUser = false,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -187,22 +197,36 @@ export function ChatInput({
                   role="group"
                   aria-label="Reasoning level"
                 >
-                  {REASONING_LEVELS.map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => onReasoningLevelChange(level)}
-                      aria-pressed={reasoningLevel === level}
-                      className={cn(
-                        "px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold capitalize transition-all duration-200 select-none",
-                        reasoningLevel === level
-                          ? "bg-white/20 text-white"
-                          : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
-                      )}
-                    >
-                      {level}
-                    </button>
-                  ))}
+                  {REASONING_LEVELS.map((level) => {
+                    const isRestricted = (level === "high" || level === "xhigh") && !isPaidUser;
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => {
+                          if (isRestricted) {
+                            // Not available on the free tier — surface the paid tier dialog.
+                            openPaidTierDialog();
+                            return;
+                          }
+                          onReasoningLevelChange(level);
+                        }}
+                        aria-pressed={reasoningLevel === level}
+                        aria-disabled={isRestricted}
+                        title={isRestricted ? "Requires paid tier — click to unlock" : undefined}
+                        className={cn(
+                          "px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold capitalize transition-all duration-200 select-none",
+                          isRestricted
+                            ? "text-[#4a4d5a] cursor-not-allowed opacity-50 hover:text-amber-400/70 hover:opacity-80"
+                            : reasoningLevel === level
+                              ? "bg-white/20 text-white"
+                              : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
+                        )}
+                      >
+                        {REASONING_LEVEL_LABELS[level]}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 

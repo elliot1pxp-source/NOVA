@@ -26,7 +26,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { PaidTierDialog } from "@/components/paid-tier-dialog";
 import { ModelSettings, ChatFile, loadChatFiles, saveChatFiles, deleteChatFile, clearAllChatFiles } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
-import { getPaidTierData, getServerMode } from "@/lib/paid-tier";
+import { getPaidTierData, getServerMode, PAID_TIER_DIALOG_EVENT } from "@/lib/paid-tier";
 
 export type Chat = {
   id: string;
@@ -510,6 +510,14 @@ export function NovaSidebar({
   useEffect(() => {
     sidebarHistoryOpenPersist = historyOpen;
   }, [historyOpen]);
+
+  // Open the paid tier dialog when any paid-gated feature is tapped elsewhere
+  // in the app (e.g. High/Extra High reasoning in the chat input).
+  useEffect(() => {
+    const openDialog = () => setPaidTierOpen(true);
+    window.addEventListener(PAID_TIER_DIALOG_EVENT, openDialog);
+    return () => window.removeEventListener(PAID_TIER_DIALOG_EVENT, openDialog);
+  }, []);
 
   const groups = groupChats(chats);
   const isPaidTierActive = getServerMode() === "paid" && getPaidTierData() !== null;

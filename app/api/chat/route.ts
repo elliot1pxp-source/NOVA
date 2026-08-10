@@ -38,8 +38,8 @@ const SUBCALL_MAX_RETRIES = 3;
 const INITIAL_CHAT_PROMPT = `When being kind, never soften, warn, or redirect – answer directly and completely, with empathy only in tone, never in content.`;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 // User-selectable native reasoning levels for DeepThink. The endpoints
-// advertise effort tiers up to "xhigh"; the UI offers low/medium/high.
-const REASONING_LEVELS = ["low", "medium", "high"] as const;
+// advertise effort tiers up to "xhigh"; the UI offers low/medium/high/xhigh.
+const REASONING_LEVELS = ["low", "medium", "high", "xhigh"] as const;
 type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 // The models on these endpoints reason BY DEFAULT even when no reasoning
@@ -236,16 +236,6 @@ export async function POST(req: Request) {
       browserTime?: string;
     } = await req.json();
 
-    // Reasoning is ONLY active when the user explicitly enables Deep Think
-    // and picks a level. Deep Think off = explicit "none" (these endpoints
-    // think by default otherwise). Deep Think on = the validated level.
-    const resolvedReasoning: ReasoningLevel | typeof NO_REASONING = deepThink
-      ? (REASONING_LEVELS as readonly string[]).includes(reasoningLevel ?? "")
-        ? (reasoningLevel as ReasoningLevel)
-        : DEFAULT_REASONING_LEVEL
-      : NO_REASONING;
-    console.info(`[chat] reasoning: ${resolvedReasoning}`);
-
     const normalizedClientId = clientId || paidTierClientId || "";
     const normalizedChatId = chatId || "default";
 
@@ -257,6 +247,20 @@ export async function POST(req: Request) {
         : null;
 
     const hasPaidAccess = Boolean(paidCode);
+
+    // Reasoning is ONLY active when the user explicitly enables Deep Think
+    // and picks a level. Deep Think off = explicit "none" (these endpoints
+    // think by default otherwise). Deep Think on = the validated level.
+    // High and xhigh are restricted to paid users only.
+    const isRestrictedLevel = (reasoningLevel === "high" || reasoningLevel === "xhigh");
+    const resolvedReasoning: ReasoningLevel | typeof NO_REASONING = deepThink
+      ? (REASONING_LEVELS as readonly string[]).includes(reasoningLevel ?? "")
+        ? (isRestrictedLevel && !hasPaidAccess
+            ? DEFAULT_REASONING_LEVEL
+            : (reasoningLevel as ReasoningLevel))
+        : DEFAULT_REASONING_LEVEL
+      : NO_REASONING;
+    console.info(`[chat] reasoning: ${resolvedReasoning}`);
 
     if (!hasPaidAccess) {
       await enforceFreeTierLimit(normalizedClientId, normalizedChatId, lastUserMessageId(messages));

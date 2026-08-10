@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { X, Crown, CheckCircle, Clock, AlertTriangle, ArrowLeft, Globe, Server } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { getPaidTierClientId, getPaidTierData, setPaidTierData, clearPaidTierData, getServerMode, setServerMode, ServerMode, refreshPaidTierStatus } from "@/lib/paid-tier";
 
@@ -10,6 +12,82 @@ type DialogState = "enter-code" | "paid-user" | "expired";
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+};
+
+// Marketing copy shown in the code-entry state (rendered as markdown).
+const PAID_TIER_MARKDOWN = `Unlock all the NOVA's features and unlimited chatting without limit!
+
+**How does the Paid Tier Works:**
+
+NOVA doesn't have a subscription service in the traditional sense.
+
+Instead we use **one-time codes**.
+
+**Paid Tier (one-time codes):**
+
+**How does the code work:**
+
+Admins create codes with:
+
+- Duration in minutes (e.g., 30 days)
+- Max redemptions (how many users can use it)
+
+You redeem a code once — it's not a recurring subscription.
+
+- The timer starts on first redemption (shared across all users who use that code)
+- Once expired, you'll return to the free tier with 20 messages per chat.
+
+**What you get with a paid code:**
+
+- No more 20-message free tier limit
+- Uses the paid code's dedicated API keys (not shared with free users)
+- No per-chat message caps
+
+**There is no:**
+
+- Monthly recurring billing
+- Credit card signup
+- Auto-renewal
+
+**Pricing:**
+
+- **$30** — 7 days
+- **$60** — 30 days
+
+Unlock all features and unlimited chatting for either plan!
+
+Contact us at Telegram: [t.me/elliotpxp](https://t.me/elliotpxp)`;
+
+const paidTierMarkdownComponents = {
+  p({ children }: any) {
+    return <p className="my-1.5 text-[13px] leading-relaxed text-[#ccc]">{children}</p>;
+  },
+  strong({ children }: any) {
+    return <strong className="font-semibold text-white">{children}</strong>;
+  },
+  ul({ children }: any) {
+    return <ul className="space-y-1.5 my-2">{children}</ul>;
+  },
+  li({ children }: any) {
+    return (
+      <li className="flex items-start gap-2 text-[13px] leading-relaxed text-[#ccc]">
+        <span className="text-amber-400/80 leading-relaxed select-none">•</span>
+        <span>{children}</span>
+      </li>
+    );
+  },
+  a({ href, children }: any) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-amber-400 hover:text-amber-300 underline font-medium"
+      >
+        {children}
+      </a>
+    );
+  },
 };
 
 export function PaidTierDialog({ isOpen, onClose }: Props) {
@@ -161,18 +239,18 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
       onClick={handleClose}
     >
       <div
-        className="relative w-full max-w-md rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-2xl flex flex-col max-h-[88vh] overflow-hidden rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-5 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
               <Crown className="w-5 h-5 text-amber-400" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-white tracking-wide">Paid Tier</h2>
-              <p className="text-[11px] text-[#8c8f9c]">Private dedicated server access</p>
+              <p className="text-[11px] text-[#8c8f9c]">One-time codes · No subscription</p>
             </div>
           </div>
           <button
@@ -185,6 +263,8 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
           </button>
         </div>
 
+        {/* Scrollable content */}
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
         {/* Server Mode Toggle - always visible when paid user */}
         {(dialogState === "paid-user" || (getPaidTierData() !== null && getServerMode() === "global")) && (
           <div className="mb-4">
@@ -232,16 +312,16 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
           </div>
         ) : dialogState === "enter-code" && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
-              <p className="text-xs leading-relaxed text-[#ccc]">
-                Unlock unlimited chatting with Paid Tier. No more limitations.
-                Telegram: <a href="https://t.me/elliotpxp" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">t.me/elliotpxp</a>
-              </p>
+            {/* Marketing copy */}
+            <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4 sm:p-5">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={paidTierMarkdownComponents}>
+                {PAID_TIER_MARKDOWN}
+              </ReactMarkdown>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-[#8c8f9c] mb-2">
-                Enter the code below to unlock Paid Tier.
+                Have a code? Enter it below to unlock Paid Tier.
               </label>
               <div className="flex gap-2">
                 <input
@@ -328,9 +408,10 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
             </div>
           </div>
         )}
+        </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end mt-5">
+        <div className="flex items-center justify-end mt-5 pt-4 border-t border-white/5 flex-shrink-0">
           <button
             type="button"
             onClick={handleClose}

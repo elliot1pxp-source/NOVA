@@ -133,6 +133,15 @@ export function isPaidUser(): boolean {
   return getPaidTierData() !== null;
 }
 
+// Global event used to ask any mounted PaidTierDialog to open — fired when a
+// free user taps a paid-gated feature (e.g. High/Extra High reasoning).
+export const PAID_TIER_DIALOG_EVENT = "nova:open-paid-tier-dialog";
+
+export function openPaidTierDialog() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(PAID_TIER_DIALOG_EVENT));
+}
+
 export async function refreshPaidTierStatus(): Promise<boolean> {
   if (typeof window === "undefined") return false;
 
