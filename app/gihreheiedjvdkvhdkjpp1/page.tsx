@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { Shield, Key, Plus, Trash2, Save, Crown, X, RefreshCw, CheckCircle, AlertTriangle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [refreshingCodes, setRefreshingCodes] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [changeReason, setChangeReason] = useState<string>("");
 
   // New code form
   const [newCode, setNewCode] = useState("");
@@ -205,7 +207,42 @@ export default function AdminPage() {
     setAuthenticated(false);
   };
 
+  const validateSettings = (): string | null => {
+    const urlFields = [
+      { label: "Primary endpoint", value: settings.BASED_URL },
+      { label: "Fallback endpoint", value: settings.FALLBACK_BASED_URL },
+    ];
+
+    for (const field of urlFields) {
+      if (field.value && field.value.trim().length > 0) {
+        try {
+          new URL(field.value.trim());
+        } catch {
+          return `${field.label} must be a valid URL.`;
+        }
+      }
+    }
+
+    const modelMaps = [settings.PRIMARY_MODELS, settings.FALLBACK_MODELS];
+    for (const map of modelMaps) {
+      if (!map) continue;
+      for (const [key, value] of Object.entries(map)) {
+        if (typeof value !== "string") {
+          return `Model mapping for ${key} must be a string.`;
+        }
+      }
+    }
+
+    return null;
+  };
+
   const handleSaveGlobalSettings = async () => {
+    const validationError = validateSettings();
+    if (validationError) {
+      setMessage({ type: "error", text: validationError });
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/admin/global-settings", {
@@ -218,13 +255,15 @@ export default function AdminPage() {
           ...settings,
           PRIMARY_MODELS: settings.PRIMARY_MODELS,
           FALLBACK_MODELS: settings.FALLBACK_MODELS,
+          label: changeReason,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setMessage({ type: "success", text: "Global settings updated successfully!" });
+        setChangeReason("");
       } else {
-        setMessage({ type: "error", text: "Failed to update settings" });
+        setMessage({ type: "error", text: data.error || "Failed to update settings" });
       }
     } catch (error) {
       setMessage({ type: "error", text: `Failed to update settings: ${error instanceof Error ? error.message : String(error)}` });
@@ -627,188 +666,172 @@ export default function AdminPage() {
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
         {/* Global Settings Section */}
         <section>
-          <div className="flex items-center gap-2.5 mb-4">
+          <div className="flex flex-wrap items-center gap-2.5 mb-4">
             <div className="p-1.5 rounded-lg bg-white/5 border border-white/10">
               <Key className="w-4 h-4 text-[#8c8f9c]" />
             </div>
-            <h2 className="text-sm font-semibold">Global Server Settings</h2>
-            <span className="text-[10px] text-[#5e616e] bg-white/[0.04] px-2 py-0.5 rounded-md">Free Users & Expired</span>
+            <div>
+              <h2 className="text-sm font-semibold">Global Server Settings</h2>
+              <p className="text-[10px] text-[#8c8f9c]">Edit the active runtime configuration values and audit previous changes.</p>
+            </div>
+            <Link
+              href="/gihreheiedjvdkvhdkjpp1/history"
+              className="ml-auto text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-full hover:bg-amber-500/15 transition-colors"
+            >
+              History
+            </Link>
           </div>
+          <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Current Environment Values</p>
+                    <p className="text-[11px] text-[#6d7288]">These values are used by the runtime when paid access is not active.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="useFallbackAsPrimary"
+                      type="checkbox"
+                      checked={Boolean(settings.useFallbackAsPrimary)}
+                      onChange={(e) => setSettings({ ...settings, useFallbackAsPrimary: e.target.checked })}
+                      className="h-4 w-4 rounded border-white/10 bg-white/5 text-amber-400 focus:ring-amber-400"
+                    />
+                    <label htmlFor="useFallbackAsPrimary" className="text-xs text-[#c1c5d0]">
+                      Make fallback endpoint and models primary
+                    </label>
+                  </div>
+                </div>
 
-          <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Current environment values</p>
                 <div className="grid gap-3">
-                  <label className="block text-[10px] font-medium text-[#8c8f9c]">ADMIN_KEY</label>
-                  <input
-                    type="text"
-                    value={envValues.ADMIN_KEY}
-                    readOnly
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
-                  />
-                  <label className="block text-[10px] font-medium text-[#8c8f9c]">SERPER_API_KEY</label>
-                  <input
-                    type="text"
-                    value={envValues.SERPER_API_KEY}
-                    readOnly
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
-                  />
-                  <label className="block text-[10px] font-medium text-[#8c8f9c]">BLOCKRUN_API_KEY</label>
-                  <input
-                    type="text"
-                    value={effectiveEnvValues.BLOCKRUN_API_KEY}
-                    readOnly
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
-                  />
-                  <label className="block text-[10px] font-medium text-[#8c8f9c]">FALLBACK_API_KEY</label>
-                  <input
-                    type="text"
-                    value={effectiveEnvValues.FALLBACK_API_KEY}
-                    readOnly
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
-                  />
-                  <label className="block text-[10px] font-medium text-[#8c8f9c]">BASED_URL</label>
-                  <input
-                    type="text"
-                    value={effectiveEnvValues.BASED_URL}
-                    readOnly
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
-                  />
-                  <label className="block text-[10px] font-medium text-[#8c8f9c]">FALLBACK_BASED_URL</label>
-                  <input
-                    type="text"
-                    value={effectiveEnvValues.FALLBACK_BASED_URL}
-                    readOnly
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
-                  />
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#8c8f9c]">ADMIN_KEY</label>
+                    <input
+                      type="text"
+                      value={envValues.ADMIN_KEY}
+                      readOnly
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#8c8f9c]">SERPER_API_KEY</label>
+                    <input
+                      type="text"
+                      value={envValues.SERPER_API_KEY ?? ""}
+                      readOnly
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      placeholder="Global Serper API key"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#8c8f9c]">PRIMARY_KEY</label>
+                    <input
+                      type="text"
+                      value={effectiveEnvValues.BLOCKRUN_API_KEY ?? ""}
+                      readOnly
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      placeholder="Primary API key"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#8c8f9c]">FALLBACK_KEY</label>
+                    <input
+                      type="text"
+                      value={effectiveEnvValues.FALLBACK_API_KEY ?? ""}
+                      readOnly
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      placeholder="Fallback API key"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#8c8f9c]">PRIMARY_ENDPOINT</label>
+                    <input
+                      type="text"
+                      value={effectiveEnvValues.BASED_URL ?? ""}
+                      readOnly
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      placeholder="Primary endpoint URL"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#8c8f9c]">FALLBACK_ENDPOINT</label>
+                    <input
+                      type="text"
+                      value={effectiveEnvValues.FALLBACK_BASED_URL ?? ""}
+                      readOnly
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      placeholder="Fallback endpoint URL"
+                    />
+                  </div>
                 </div>
               </div>
+
               <div className="space-y-4">
-                <div className="space-y-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Override values for free users</p>
-                  <div className="grid gap-3">
-                    <div>
-                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">SERPER_API_KEY</label>
-                      <input
-                        type="text"
-                        value={settings.SERPER_API_KEY}
-                        onChange={(e) => setSettings({ ...settings, SERPER_API_KEY: e.target.value })}
-                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                        placeholder="Global Serper API key"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">BLOCKRUN_API_KEY</label>
-                      <input
-                        type="text"
-                        value={effectiveBlockrunApiKey}
-                        onChange={(e) => handlePrimaryApiKeyChange(e.target.value)}
-                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                        placeholder="Global primary API key"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">FALLBACK_API_KEY</label>
-                      <input
-                        type="text"
-                        value={effectiveFallbackApiKey}
-                        onChange={(e) => handleFallbackApiKeyChange(e.target.value)}
-                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                        placeholder="Global fallback API key"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">BASED_URL</label>
-                      <input
-                        type="text"
-                        value={effectivePrimaryBaseURL}
-                        onChange={(e) => handlePrimaryBaseURLChange(e.target.value)}
-                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                        placeholder="Global primary endpoint URL"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">FALLBACK_BASED_URL</label>
-                      <input
-                        type="text"
-                        value={effectiveFallbackBaseURL}
-                        onChange={(e) => handleFallbackBaseURLChange(e.target.value)}
-                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                        placeholder="Global fallback endpoint URL"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        id="useFallbackAsPrimary"
-                        type="checkbox"
-                        checked={Boolean(settings.useFallbackAsPrimary)}
-                        onChange={(e) => setSettings({ ...settings, useFallbackAsPrimary: e.target.checked })}
-                        className="h-4 w-4 rounded border-white/10 bg-white/5 text-amber-400 focus:ring-amber-400"
-                      />
-                      <label htmlFor="useFallbackAsPrimary" className="text-xs text-[#c1c5d0]">
-                        Make fallback endpoint and models primary
-                      </label>
-                    </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Model mappings</p>
+                    <p className="text-[11px] text-[#6d7288]">Configure primary and fallback model IDs used by the provider layer.</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={resetPrimaryModelsToDefault}
+                    className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                  >
+                    Reset primary defaults
+                  </button>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <label className="block text-[10px] font-medium text-[#8c8f9c]">PRIMARY_MODELS</label>
-                      <button
-                        type="button"
-                        onClick={resetPrimaryModelsToDefault}
-                        className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
-                      >
-                        Reset defaults
-                      </button>
+                <div className="space-y-2">
+                  {MODEL_KEYS.map((key) => (
+                    <div key={key} className="grid gap-1">
+                      <label className="text-[10px] font-medium text-[#8c8f9c]">Primary model for {key}</label>
+                      <input
+                        type="text"
+                        value={effectivePrimaryModels[key] ?? ""}
+                        onChange={(e) => setEffectivePrimaryModel(key, e.target.value)}
+                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                        placeholder={`Primary model for ${key}`}
+                      />
                     </div>
-                    <div className="space-y-2">
-                      {MODEL_KEYS.map((key) => (
-                        <div key={key} className="grid gap-1">
-                          <label className="text-[10px] font-medium text-[#8c8f9c]">{key}</label>
-                          <input
-                            type="text"
-                            value={effectivePrimaryModels[key] ?? ""}
-                            onChange={(e) => setEffectivePrimaryModel(key, e.target.value)}
-                            className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                            placeholder={`Primary model for ${key}`}
-                          />
-                        </div>
-                      ))}
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-3 pt-4 border-t border-white/10">
+                  <p className="text-[10px] font-medium text-[#8c8f9c]">Fallback model mappings</p>
+                  <button
+                    type="button"
+                    onClick={resetFallbackModelsToDefault}
+                    className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                  >
+                    Reset fallback defaults
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {MODEL_KEYS.map((key) => (
+                    <div key={key} className="grid gap-1">
+                      <label className="text-[10px] font-medium text-[#8c8f9c]">Fallback model for {key}</label>
+                      <input
+                        type="text"
+                        value={effectiveFallbackModels[key] ?? ""}
+                        onChange={(e) => setEffectiveFallbackModel(key, e.target.value)}
+                        className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                        placeholder={`Fallback model for ${key}`}
+                      />
                     </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <label className="block text-[10px] font-medium text-[#8c8f9c]">FALLBACK_MODELS</label>
-                      <button
-                        type="button"
-                        onClick={resetFallbackModelsToDefault}
-                        className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
-                      >
-                        Reset defaults
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {MODEL_KEYS.map((key) => (
-                        <div key={key} className="grid gap-1">
-                          <label className="text-[10px] font-medium text-[#8c8f9c]">{key}</label>
-                          <input
-                            type="text"
-                            value={effectiveFallbackModels[key] ?? ""}
-                            onChange={(e) => setEffectiveFallbackModel(key, e.target.value)}
-                            className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                            placeholder={`Fallback model for ${key}`}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  ))}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Change reason</label>
+                  <input
+                    type="text"
+                    value={changeReason}
+                    onChange={(e) => setChangeReason(e.target.value)}
+                    placeholder="Brief description for history"
+                    className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-white/20 transition-all"
+                  />
                 </div>
               </div>
             </div>
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[10px] text-[#6d7288]">Saving will update the current active configuration and record the previous state in history.</p>
               <button
                 type="button"
                 onClick={handleSaveGlobalSettings}

@@ -18,6 +18,16 @@ export type GlobalSettings = {
   FALLBACK_MODELS?: ModelMap;
 };
 
+export type GlobalSettingsHistoryEntry = {
+  id: string;
+  timestamp: string;
+  label: string;
+  changedBy: string;
+  before: GlobalSettings;
+  after: GlobalSettings;
+  changes: Record<string, { before: any; after: any }>;
+};
+
 const DEFAULT_SETTINGS: GlobalSettings = {
   BLOCKRUN_API_KEY: "",
   FALLBACK_API_KEY: "",
@@ -45,6 +55,50 @@ async function writeSettings(settings: GlobalSettings): Promise<void> {
     console.error("writeSettings error:", err);
     throw err;
   }
+}
+
+async function readSettingsHistory(): Promise<GlobalSettingsHistoryEntry[]> {
+  try {
+    return await readData<GlobalSettingsHistoryEntry[]>(STORAGE_KEYS.GLOBAL_SETTINGS_HISTORY, []);
+  } catch (err) {
+    console.error("readSettingsHistory error:", err);
+    return [];
+  }
+}
+
+async function writeSettingsHistory(history: GlobalSettingsHistoryEntry[]): Promise<void> {
+  try {
+    await writeData(STORAGE_KEYS.GLOBAL_SETTINGS_HISTORY, history);
+  } catch (err) {
+    console.error("writeSettingsHistory error:", err);
+    throw err;
+  }
+}
+
+function computeChanges(before: GlobalSettings, after: GlobalSettings) {
+  const allKeys = new Set<string>([...Object.keys(before), ...Object.keys(after)]);
+  const changes: Record<string, { before: any; after: any }> = {};
+
+  allKeys.forEach((key) => {
+    const beforeValue = (before as any)[key];
+    const afterValue = (after as any)[key];
+    const beforeJson = JSON.stringify(beforeValue ?? null);
+    const afterJson = JSON.stringify(afterValue ?? null);
+    if (beforeJson !== afterJson) {
+      changes[key] = {
+        before: beforeValue === undefined ? null : beforeValue,
+        after: afterValue === undefined ? null : afterValue,
+      };
+    }
+  });
+
+  return changes;
+}
+
+async function appendSettingsHistory(entry: GlobalSettingsHistoryEntry): Promise<void> {
+  const history = await readSettingsHistory();
+  history.unshift(entry);
+  await writeSettingsHistory(history);
 }
 
 export async function GET(req: Request) {
@@ -87,6 +141,11 @@ export async function PUT(req: Request) {
     } = body;
     
     const settings = await readSettings();
+    const previousSettings: GlobalSettings = {
+      ...settings,
+      PRIMARY_MODELS: settings.PRIMARY_MODELS ? { ...settings.PRIMARY_MODELS } : undefined,
+      FALLBACK_MODELS: settings.FALLBACK_MODELS ? { ...settings.FALLBACK_MODELS } : undefined,
+    };
 
     if (BLOCKRUN_API_KEY !== undefined) settings.BLOCKRUN_API_KEY = BLOCKRUN_API_KEY;
     if (FALLBACK_API_KEY !== undefined) settings.FALLBACK_API_KEY = FALLBACK_API_KEY;
@@ -97,7 +156,25 @@ export async function PUT(req: Request) {
     if (PRIMARY_MODELS !== undefined) settings.PRIMARY_MODELS = PRIMARY_MODELS;
     if (FALLBACK_MODELS !== undefined) settings.FALLBACK_MODELS = FALLBACK_MODELS;
 
+    const label = typeof body.label === "string" && body.label.trim().length > 0
+      ? body.label.trim()
+      : "Updated global settings";
+    const authHeader = req.headers.get("authorization") ?? "";
+    const changedBy = authHeader.startsWith("Bearer ")
+      ? `admin-${authHeader.slice(7, 11)}...`
+      : "admin";
+
     await writeSettings(settings);
+    await appendSettingsHistory({
+      id: crypto.randomUUID?.() ?? `${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      label,
+      changedBy,
+      before: previousSettings,
+      after: settings,
+      changes: computeChanges(previousSettings, settings),
+    });
+
     return NextResponse.json({ success: true, settings });
   } catch (err) {
     console.error("PUT /api/admin/global-settings error:", err);
