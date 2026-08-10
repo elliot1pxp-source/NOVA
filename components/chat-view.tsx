@@ -191,6 +191,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const [activeNavId, setActiveNavId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
+  const [reasoningLevel, setReasoningLevel] = useState<"low" | "medium" | "high">("medium");
   const [webSearch, setWebSearch] = useState(false);
   const [requestFeatures, setRequestFeatures] = useState({ deepThink: false, webSearch: false });
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -301,6 +302,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     return {
       model,
       deepThink,
+      reasoningLevel,
       webSearch,
       browserDate,
       browserTime,
@@ -310,7 +312,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       clientId,
       chatId,
     };
-  }, [model, deepThink, webSearch, modelSettings, chatId]);
+  }, [model, deepThink, reasoningLevel, webSearch, modelSettings, chatId]);
 
   const clientId = getPaidTierClientId();
   const hasPaidAccess = (() => {
@@ -1403,6 +1405,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               model={model}
               deepThink={deepThink}
               onToggleDeepThink={() => setDeepThink((v) => !v)}
+              reasoningLevel={reasoningLevel}
+              onReasoningLevelChange={setReasoningLevel}
               webSearch={webSearch}
               onToggleWebSearch={() => setWebSearch((v) => !v)}
               webSearchDisabled={attachments.length > 0}
@@ -1518,6 +1522,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 model={model}
                 deepThink={deepThink}
                 onToggleDeepThink={() => setDeepThink((v) => !v)}
+                reasoningLevel={reasoningLevel}
+                onReasoningLevelChange={setReasoningLevel}
                 webSearch={webSearch}
                 onToggleWebSearch={() => setWebSearch((v) => !v)}
                 webSearchDisabled={attachments.length > 0}

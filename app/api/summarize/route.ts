@@ -74,11 +74,13 @@ export async function POST(req: Request) {
   // This provider always returns SSE streaming, even without stream: true,
   // so the text stream is consumed directly. Fails over silently:
   // default -> fallback -> default -> fallback.
+  // Summarization is a background utility call — never reason.
   const summary = await runSubcallWithFallback(providerClients, {
     modelId: MODELS[modelKey] ?? MODELS.instant,
     system: "You maintain long-running conversation memory for NOVA. Summarize the supplied conversation so it can replace older messages as private context. Preserve the user's goals, relevant background, decisions, constraints, unresolved questions, and important facts. Do not address the user, add new information, or mention that a summary was made. Be concise but specific.",
     messages: await convertToModelMessages(messages),
     maxRetries: MODEL_MAX_RETRIES,
+    reasoning: "none",
     onAttemptError: (error, attempt) => {
       console.error(`[summarize] provider attempt ${attempt + 1} failed`, error);
     },

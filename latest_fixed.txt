@@ -421,6 +421,78 @@ Fix (components/chat-input.tsx):
     dropped by Tailwind v4 (only `no-scrollbar` is defined in globals.css).
 
 ────────────────────────────────────────────
+FIX 17: DeepThink uses the model's NATIVE reasoning (no separate planner)
+────────────────────────────────────────────
+
+Problem:
+  DeepThink ran a separate "Planner Agent" sub-call (`MODELS.deepthink`)
+  that produced a structured "handoff plan", injected it into the system
+  prompt as "Deepthink guide response:", then the main model answered.
+  That cost an extra model call and duplicated tokens, and the planner's
+  plan could diverge from the responder's actual reasoning.
+
+Fix (app/api/chat/route.ts + lib/llm-providers.ts):
+  - REMOVED the planner sub-call, the `Deepthink guide response:` prompt
+    injection, and the `deepthink` key from `MODELS` / `PRIMARY_MODELS` /
+    `FALLBACK_MODELS` entirely.
+  - DeepThink now sends the chat model's OWN native reasoning: the top-level
+    `reasoning` option maps to `reasoning_effort` on the wire (both
+    endpoints advertise effort tiers none/low/medium/high/xhigh).
+  - The AI SDK's chat-completions parser DISCARDS `reasoning_content`
+    (verified: not in its chunk schema), so `createProviderClients(apiKey,
+    { onReasoningDelta })` tees the raw SSE response body through a
+    TransformStream and extracts `choices[0].delta.reasoning_content`.
+    The tee is enabled ONLY on a second client set (`responseClients`)
+    created for the final response when deepThink is on — sub-calls never
+    flood the thought block.
+  - `streamTextWithFallback` gained `onFirstText` (fires once before the
+    first answer text-delta): the route flips `data-thought` from
+    "thinking" to "done" at the exact moment the answer starts, so the
+    thought block shows "Thought for Ns".
+  - Thought block now streams the model's LIVE reasoning text (throttled
+    150ms) instead of waiting for the full planner plan.
+  - Fetch wrappers (`createCustomFetch` / `createReasoningTeeFetch`) now
+    set `duplex: "half"` (Node undici requirement when re-sending a
+    streamed request body). This fixed two runtime errors found during
+    the rewrite:
+      a) "RequestInit: duplex option is required when sending a body."
+      b) "Invalid state: The ReadableStream is locked" — the tee must use
+         `pipeThrough` WITHOUT a manual `getReader()` (pipeThrough reads
+         the source itself; getReader locks the stream first).
+  - `onAttemptStart` resets the reasoning accumulator so a failed attempt
+    switched to the other endpoint never leaks stale thinking text.
+
+────────────────────────────────────────────
+FIX 18: Reasoning level selector + reasoning never enabled accidentally
+────────────────────────────────────────────
+
+Problem:
+  There was no way to pick reasoning strength, and the endpoints reason BY
+  DEFAULT even when no reasoning parameter is sent — so web search / file
+  analysis sub-calls and plain chat (DeepThink off) all burned hidden
+  reasoning tokens.
+
+Fix (components/chat-input.tsx, components/chat-view.tsx,
+      app/api/chat/route.ts, app/api/summarize/route.ts):
+  - UI: the DeepThink pill is the master toggle. When ON, a
+    Low / Medium / High segmented selector appears (default Medium); when
+    OFF, no reasoning options are shown at all. The chosen level rides in
+    the request body as `reasoningLevel`.
+  - Server (chat route): `resolvedReasoning = deepThink ? (validated level
+    ?? "medium") : "none"`. "none" is sent EXPLICITLY because these
+    endpoints think by default — sending nothing would leave hidden
+    reasoning running (verified: a bare "say hi" consumed 26+ reasoning
+    tokens; `reasoning_effort: "none"` used 2).
+  - Web-search query generation, file analysis, and summarization
+    sub-calls ALWAYS send `reasoning: "none"` — they are utility calls and
+    must never reason.
+  - The route logs `[chat] reasoning: none|low|medium|high` per request.
+  - Verified at the wire level via fetch interception:
+      reasoning "none"  -> reasoning_effort "none"
+      reasoning "low"   -> reasoning_effort "low"
+      reasoning "high"  -> reasoning_effort "high"
+
+────────────────────────────────────────────
 Summary of behavior after all fixes
 ────────────────────────────────────────────
 
@@ -464,6 +536,16 @@ Empty chat restoration:
   2. The active chat id is never derived from message existence — a chat
      with zero messages is still a valid, restorable chat
 
+Native DeepThink / reasoning:
+  1. DeepThink ON → the main chat model thinks natively at the chosen
+     level (low/medium/high), and its LIVE reasoning text streams into the
+     Thought block, ending with "Thought for Ns"
+  2. DeepThink OFF → explicit reasoning_effort "none" is sent — no hidden
+     thinking, no wasted reasoning tokens
+  3. Web search, file analysis, and summarization NEVER reason
+  4. The reasoning-level selector appears only while DeepThink is ON
+
 No duplicate key errors, no disappearing messages, no orphaned branches,
 no stale retry markers, no crashes, no oversized bubbles, no lost
-generations, no lost empty chats, no invisible input textarea.
+generations, no lost empty chats, no invisible input textarea, no hidden
+reasoning, no planner round-trip.

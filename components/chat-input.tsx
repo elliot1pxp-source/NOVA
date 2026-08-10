@@ -26,6 +26,9 @@ type FreeTierStatus = {
   blockedUntil?: string;
 };
 
+export type ReasoningLevel = "low" | "medium" | "high";
+const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high"];
+
 type ChatInputProps = {
   input: string;
   onInputChange: (value: string) => void;
@@ -35,6 +38,9 @@ type ChatInputProps = {
   model: "instant" | "expert";
   deepThink: boolean;
   onToggleDeepThink: () => void;
+  /** Selected native reasoning strength — only meaningful while DeepThink is on. */
+  reasoningLevel: ReasoningLevel;
+  onReasoningLevelChange: (level: ReasoningLevel) => void;
   webSearch: boolean;
   onToggleWebSearch: () => void;
   /** Web search is unavailable while files are attached (files + search cannot run together). */
@@ -58,6 +64,8 @@ export function ChatInput({
   model,
   deepThink,
   onToggleDeepThink,
+  reasoningLevel,
+  onReasoningLevelChange,
   webSearch,
   onToggleWebSearch,
   webSearchDisabled = false,
@@ -171,6 +179,32 @@ export function ChatInput({
                 <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span>DeepThink</span>
               </button>
+
+              {/* Reasoning Level Selector — shown only while DeepThink is ON */}
+              {deepThink && (
+                <div
+                  className="flex items-center gap-0.5 sm:gap-1 rounded-full bg-white/5 border border-white/10 p-0.5 animate-in fade-in slide-in-from-left-1 duration-200"
+                  role="group"
+                  aria-label="Reasoning level"
+                >
+                  {REASONING_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => onReasoningLevelChange(level)}
+                      aria-pressed={reasoningLevel === level}
+                      className={cn(
+                        "px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold capitalize transition-all duration-200 select-none",
+                        reasoningLevel === level
+                          ? "bg-white/20 text-white"
+                          : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
+                      )}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Web Search Switcher Pill */}
               <button

@@ -23,17 +23,15 @@ import { createOpenAI } from "@ai-sdk/openai";
 // unprefixed IDs. Both expose the same logical models.
 
 export const PRIMARY_MODELS: Record<string, string> = {
-  instant: "auto/best-fast",
-  expert: "auto/best-coding-fast",
-  deepthink: "auto/fast",
-  websearch: "auto/fast",
-  fileAnalysis: "auto/best-coding-fast",
+  instant: "oc/deepseek-v4-flash-free",
+  expert: "oc/big-pickle",
+  websearch: "oc/deepseek-v4-flash-free",
+  fileAnalysis: "oc/deepseek-v4-flash-free",
 };
 
 export const FALLBACK_MODELS: Record<string, string> = {
   instant: "deepseek-v4-flash-free",
   expert: "big-pickle",
-  deepthink: "deepseek-v4-flash-free",
   websearch: "deepseek-v4-flash-free",
   fileAnalysis: "nemotron-3-ultra-free",
 };
@@ -43,7 +41,6 @@ export const FALLBACK_MODELS: Record<string, string> = {
 export const MODELS: Record<string, string> = {
   instant: "instant",
   expert: "expert",
-  deepthink: "deepthink",
   websearch: "websearch",
   // Dedicated model used for per-file analysis sub-calls, decoupled from
   // whichever chat model the user has selected.
@@ -97,7 +94,80 @@ function parseAuthHeaderTemplate(
   return { [name]: value };
 }
 
-function createCustomFetch(customHeaders: Record<string, string>) {
+/**
+ * Extracts `reasoning_content` deltas from an SSE chat-completions stream so
+ * the caller can surface the model's native reasoning text. The AI SDK's
+ * chat-completions parser discards that field entirely, so the tee taps the
+ * raw response body while the original bytes still flow through untouched.
+ * Non-SSE bodies (e.g. JSON errors) pass through unchanged.
+ */
+function teeSseEvents(
+  response: Response,
+  onReasoningDelta: (text: string) => void
+): Response {
+  if (!response.body) return response;
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const findEventBoundary = (buf: string): number => {
+    const doubleLf = buf.indexOf("\n\n");
+    const crlf = buf.indexOf("\r\n\r\n");
+    if (doubleLf < 0) return crlf;
+    if (crlf < 0) return doubleLf;
+    return Math.min(doubleLf, crlf);
+  };
+
+  const processEvent = (rawEvent: string) => {
+    for (const line of rawEvent.split("\n")) {
+      const trimmed = line.replace(/\r$/, "");
+      if (!trimmed.startsWith("data:")) continue;
+      const payload = trimmed.slice(5).trimStart();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(payload) as {
+          choices?: Array<{ delta?: { reasoning_content?: string | null } }>;
+        };
+        const reasoningText = parsed.choices?.[0]?.delta?.reasoning_content;
+        if (typeof reasoningText === "string" && reasoningText.length > 0) {
+          onReasoningDelta(reasoningText);
+        }
+      } catch {
+        // Not a chat-completions SSE payload — ignore.
+      }
+    }
+  };
+
+  const transformer = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      buffer += decoder.decode(chunk, { stream: true });
+      let boundary = findEventBoundary(buffer);
+      while (boundary >= 0) {
+        processEvent(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary).replace(/^(\r?\n)+/, "");
+        boundary = findEventBoundary(buffer);
+      }
+      controller.enqueue(chunk);
+    },
+    flush(controller) {
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        processEvent(buffer.replace(/^(\r?\n)+/, ""));
+      }
+    },
+  });
+
+  return new Response(response.body.pipeThrough(transformer), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+function createCustomFetch(
+  customHeaders: Record<string, string>,
+  onReasoningDelta?: (text: string) => void
+) {
   return async (input: string | Request | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const headers = new Headers(request.headers);
@@ -107,15 +177,37 @@ function createCustomFetch(customHeaders: Record<string, string>) {
       headers.set(key, value);
     }
 
-    const requestInit: RequestInit = {
+    const requestInit: NodeFetchRequestInit = {
       ...init,
       headers,
       body: request.body,
       method: request.method,
       signal: request.signal,
+      // request.body is always a ReadableStream; Node's fetch requires the
+      // duplex option when re-sending a streamed body.
+      duplex: "half",
     };
 
-    return fetch(request.url, requestInit);
+    const response = await fetch(request.url, requestInit as RequestInit);
+    if (!onReasoningDelta) return response;
+    return teeSseEvents(response, onReasoningDelta);
+  };
+}
+
+/** Fetch wrapper that only taps reasoning deltas (no auth header changes). */
+function createReasoningTeeFetch(onReasoningDelta: (text: string) => void) {
+  return async (input: string | Request | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const response = await fetch(request.url, {
+      ...init,
+      body: request.body,
+      method: request.method,
+      signal: request.signal,
+      // request.body is always a ReadableStream; Node's fetch requires the
+      // duplex option when re-sending a streamed body.
+      duplex: "half",
+    } as NodeFetchRequestInit as RequestInit);
+    return teeSseEvents(response, onReasoningDelta);
   };
 }
 
@@ -128,13 +220,26 @@ export type ProviderClients = {
   hasFallback: boolean;
 };
 
+// Node's fetch (undici) requires `duplex: "half"` when re-sending a streamed
+// request body; the DOM RequestInit type doesn't include it.
+type NodeFetchRequestInit = RequestInit & { duplex?: "half" };
+
 /**
  * Builds both provider clients from environment configuration.
  *
  * AUTH_HEADER templates like "Authorization: Bearer {API_KEY}" are supported
  * for the primary endpoint; the fallback always uses a plain Bearer token.
+ *
+ * Pass `onReasoningDelta` to receive the model's native reasoning text
+ * (`reasoning_content` SSE deltas) as it streams — the AI SDK discards it.
+ * Only enable it on the client(s) serving the main response so progress parts
+ * are not flooded by sub-calls.
  */
-export function createProviderClients(apiKey?: string): ProviderClients {
+export function createProviderClients(
+  apiKey?: string,
+  options?: { onReasoningDelta?: (text: string) => void }
+): ProviderClients {
+  const onReasoningDelta = options?.onReasoningDelta;
   const primaryBaseURL = getServerEnvValue(
     "BASED_URL",
     "BASE_URL",
@@ -150,14 +255,28 @@ export function createProviderClients(apiKey?: string): ProviderClients {
     primaryAuthHeader && apiKey
       ? parseAuthHeaderTemplate(primaryAuthHeader, apiKey)
       : undefined;
-  const primaryFetch = customPrimaryHeaders
-    ? createCustomFetch(customPrimaryHeaders)
-    : undefined;
+  // When no real key is configured, strip the Authorization header entirely
+  // instead of letting the SDK send an empty/placeholder bearer. Proxies that
+  // run REQUIRE_API_KEY=false then treat the request as intentionally
+  // anonymous (no "invalid bearer" noise), and a future REQUIRE_API_KEY=true
+  // fails loudly either way.
+  let primaryFetch: ((input: string | Request | URL, init?: RequestInit) => Promise<Response>) | undefined;
+  if (customPrimaryHeaders) {
+    primaryFetch = createCustomFetch(customPrimaryHeaders, onReasoningDelta);
+  } else if (!apiKey) {
+    primaryFetch = createCustomFetch({}, onReasoningDelta);
+  } else if (onReasoningDelta) {
+    // Real key, no custom auth template, but reasoning tee requested — wrap
+    // without touching the SDK's Authorization header.
+    primaryFetch = createReasoningTeeFetch(onReasoningDelta);
+  }
 
   const primary = createOpenAI({
     baseURL: primaryBaseURL,
     headers: customPrimaryHeaders,
     fetch: primaryFetch,
+    // The SDK requires a string here; the custom fetch above strips it from
+    // the wire when there is no real key.
     apiKey: customPrimaryHeaders ? undefined : apiKey ?? "blockrun",
   });
 
@@ -170,6 +289,9 @@ export function createProviderClients(apiKey?: string): ProviderClients {
     ? createOpenAI({
         baseURL: fallbackBaseURL,
         apiKey: fallbackApiKey ?? "fallback",
+        ...(onReasoningDelta
+          ? { fetch: createReasoningTeeFetch(onReasoningDelta) }
+          : {}),
       })
     : primary;
 
@@ -204,8 +326,22 @@ type StreamWithFallbackOptions = {
   modelSettings?: { temperature?: number; topK?: number; maxTokens?: number };
   /** Per-attempt internal retries (AI SDK maxRetries). */
   maxRetries?: number;
+  /**
+   * Native reasoning effort for the model. Maps to the standard
+   * `reasoning_effort` body parameter on OpenAI-compatible endpoints (which
+   * this provider layer targets). When set to a value other than "none", the
+   * model uses its own built-in thinking instead of an external planner
+   * sub-call. Accepted values follow the effort tiers the endpoints advertise.
+   */
+  reasoning?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
   /** Called for every text delta so the caller can filter content. */
   onTextDelta?: (text: string) => string;
+  /**
+   * Called exactly once, when the first non-empty text delta of the final
+   * answer arrives (after any reasoning phase). Lets callers flip progress
+   * parts from "thinking" to "done" at the right moment.
+   */
+  onFirstText?: () => void;
   /** Called with an Error whenever an attempt fails (for diagnostics only). */
   onAttemptError?: (error: unknown, attempt: number) => void;
   /** Called when the provider switches over (diagnostics only). */
@@ -231,7 +367,9 @@ export function streamTextWithFallback(
     messages,
     modelSettings,
     maxRetries = MODEL_MAX_RETRIES,
+    reasoning,
     onTextDelta,
+    onFirstText,
     onAttemptError,
     onProviderSwitch,
     onAttemptStart,
@@ -257,6 +395,7 @@ export function streamTextWithFallback(
         const modelMap = useFallback ? FALLBACK_MODELS : PRIMARY_MODELS;
         const resolvedModelId = modelMap[modelId] ?? modelMap.instant;
         let receivedText = false;
+        let firstTextFired = false;
         if (onAttemptStart) onAttemptStart(attempt);
 
         try {
@@ -265,6 +404,7 @@ export function streamTextWithFallback(
             system,
             messages,
             ...getStreamingModelOptions(modelSettings),
+            ...(reasoning ? { reasoning } : {}),
             maxRetries,
             abortSignal,
             onChunk: onTextDelta
@@ -286,6 +426,10 @@ export function streamTextWithFallback(
             }
             if (value.type === "text-delta" && value.text.length > 0) {
               receivedText = true;
+              if (onFirstText && !firstTextFired) {
+                firstTextFired = true;
+                onFirstText();
+              }
             }
             controller.enqueue(value);
           }
@@ -346,6 +490,7 @@ export async function runSubcallWithFallback(
         system: options.system,
         messages: options.messages,
         maxRetries: options.maxRetries ?? MODEL_MAX_RETRIES,
+        ...(options.reasoning ? { reasoning: options.reasoning } : {}),
         abortSignal: options.abortSignal,
       });
 
