@@ -48,11 +48,6 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [codes, setCodes] = useState<PaidCode[]>([]);
   const [settings, setSettings] = useState<GlobalSettings>({
-    BLOCKRUN_API_KEY: "",
-    FALLBACK_API_KEY: "",
-    SERPER_API_KEY: "",
-    BASED_URL: "",
-    FALLBACK_BASED_URL: "",
     useFallbackAsPrimary: false,
     PRIMARY_MODELS: PRIMARY_MODELS,
     FALLBACK_MODELS: FALLBACK_MODELS,
@@ -144,11 +139,7 @@ export default function AdminPage() {
       if (codesData.codes) setCodes(codesData.codes);
       if (settingsData.settings) {
         setSettings({
-          BLOCKRUN_API_KEY: settingsData.settings.BLOCKRUN_API_KEY ?? "",
-          FALLBACK_API_KEY: settingsData.settings.FALLBACK_API_KEY ?? "",
-          SERPER_API_KEY: settingsData.settings.SERPER_API_KEY ?? "",
-          BASED_URL: settingsData.settings.BASED_URL ?? "",
-          FALLBACK_BASED_URL: settingsData.settings.FALLBACK_BASED_URL ?? "",
+          ...settingsData.settings,
           useFallbackAsPrimary: Boolean(settingsData.settings.useFallbackAsPrimary),
           PRIMARY_MODELS: settingsData.settings.PRIMARY_MODELS ?? PRIMARY_MODELS,
           FALLBACK_MODELS: settingsData.settings.FALLBACK_MODELS ?? FALLBACK_MODELS,
@@ -274,9 +265,9 @@ export default function AdminPage() {
   };
 
   const handleSetCurrentCodeTokens = () => {
-    setNewBlockrunApiKey(settings.BLOCKRUN_API_KEY ?? "");
-    setNewFallbackApiKey(settings.FALLBACK_API_KEY ?? "");
-    setNewSerper(settings.SERPER_API_KEY ?? "");
+    setNewBlockrunApiKey(currentSettingsValues.BLOCKRUN_API_KEY);
+    setNewFallbackApiKey(currentSettingsValues.FALLBACK_API_KEY);
+    setNewSerper(currentSettingsValues.SERPER_API_KEY);
   };
 
   const effectivePrimaryBaseURL = settings.useFallbackAsPrimary
@@ -295,9 +286,9 @@ export default function AdminPage() {
   const handleSetCurrentEditTokens = () => {
     if (!editTokens) return;
     setEditTokens({
-      BLOCKRUN_API_KEY: settings.BLOCKRUN_API_KEY ?? editTokens.BLOCKRUN_API_KEY,
-      FALLBACK_API_KEY: settings.FALLBACK_API_KEY ?? editTokens.FALLBACK_API_KEY,
-      SERPER_API_KEY: settings.SERPER_API_KEY || editTokens.SERPER_API_KEY || "",
+      BLOCKRUN_API_KEY: currentSettingsValues.BLOCKRUN_API_KEY || editTokens.BLOCKRUN_API_KEY,
+      FALLBACK_API_KEY: currentSettingsValues.FALLBACK_API_KEY || editTokens.FALLBACK_API_KEY,
+      SERPER_API_KEY: currentSettingsValues.SERPER_API_KEY || editTokens.SERPER_API_KEY || "",
     });
   };
 
@@ -333,6 +324,14 @@ export default function AdminPage() {
     );
   };
 
+  const handleSerperApiKeyChange = (value: string) => {
+    setSettings((current) => ({ ...current, SERPER_API_KEY: value }));
+  };
+
+  const handleAdminKeyChange = (value: string) => {
+    setEnvValues((current) => ({ ...current, ADMIN_KEY: value }));
+  };
+
   const MODEL_KEYS = ["instant", "expert", "websearch", "fileAnalysis"] as const;
   type ModelKey = (typeof MODEL_KEYS)[number];
 
@@ -343,13 +342,21 @@ export default function AdminPage() {
     ? settings.PRIMARY_MODELS ?? PRIMARY_MODELS
     : settings.FALLBACK_MODELS ?? FALLBACK_MODELS;
 
-  const effectiveEnvValues = {
+  const currentSettingsValues = {
     ADMIN_KEY: envValues.ADMIN_KEY,
-    SERPER_API_KEY: envValues.SERPER_API_KEY,
-    BLOCKRUN_API_KEY: settings.useFallbackAsPrimary ? envValues.FALLBACK_API_KEY : envValues.BLOCKRUN_API_KEY,
-    FALLBACK_API_KEY: settings.useFallbackAsPrimary ? envValues.BLOCKRUN_API_KEY : envValues.FALLBACK_API_KEY,
-    BASED_URL: settings.useFallbackAsPrimary ? envValues.FALLBACK_BASED_URL : envValues.BASED_URL,
-    FALLBACK_BASED_URL: settings.useFallbackAsPrimary ? envValues.BASED_URL : envValues.FALLBACK_BASED_URL,
+    SERPER_API_KEY: settings.SERPER_API_KEY || envValues.SERPER_API_KEY || "",
+    BLOCKRUN_API_KEY: settings.useFallbackAsPrimary
+      ? settings.FALLBACK_API_KEY || envValues.FALLBACK_API_KEY || ""
+      : settings.BLOCKRUN_API_KEY || envValues.BLOCKRUN_API_KEY || "",
+    FALLBACK_API_KEY: settings.useFallbackAsPrimary
+      ? settings.BLOCKRUN_API_KEY || envValues.BLOCKRUN_API_KEY || ""
+      : settings.FALLBACK_API_KEY || envValues.FALLBACK_API_KEY || "",
+    BASED_URL: settings.useFallbackAsPrimary
+      ? settings.FALLBACK_BASED_URL || envValues.FALLBACK_BASED_URL || ""
+      : settings.BASED_URL || envValues.BASED_URL || "",
+    FALLBACK_BASED_URL: settings.useFallbackAsPrimary
+      ? settings.BASED_URL || envValues.BASED_URL || ""
+      : settings.FALLBACK_BASED_URL || envValues.FALLBACK_BASED_URL || "",
   };
 
   const setEffectivePrimaryModel = (key: ModelKey, value: string) => {
@@ -709,17 +716,18 @@ export default function AdminPage() {
                     <input
                       type="text"
                       value={envValues.ADMIN_KEY}
-                      readOnly
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      onChange={(e) => handleAdminKeyChange(e.target.value)}
+                      className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                      placeholder="Admin key (local display only)"
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-medium text-[#8c8f9c]">SERPER_API_KEY</label>
                     <input
                       type="text"
-                      value={envValues.SERPER_API_KEY ?? ""}
-                      readOnly
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      value={currentSettingsValues.SERPER_API_KEY}
+                      onChange={(e) => handleSerperApiKeyChange(e.target.value)}
+                      className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
                       placeholder="Global Serper API key"
                     />
                   </div>
@@ -727,9 +735,9 @@ export default function AdminPage() {
                     <label className="block text-[10px] font-medium text-[#8c8f9c]">PRIMARY_KEY</label>
                     <input
                       type="text"
-                      value={effectiveEnvValues.BLOCKRUN_API_KEY ?? ""}
-                      readOnly
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      value={currentSettingsValues.BLOCKRUN_API_KEY}
+                      onChange={(e) => handlePrimaryApiKeyChange(e.target.value)}
+                      className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
                       placeholder="Primary API key"
                     />
                   </div>
@@ -737,9 +745,9 @@ export default function AdminPage() {
                     <label className="block text-[10px] font-medium text-[#8c8f9c]">FALLBACK_KEY</label>
                     <input
                       type="text"
-                      value={effectiveEnvValues.FALLBACK_API_KEY ?? ""}
-                      readOnly
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      value={currentSettingsValues.FALLBACK_API_KEY}
+                      onChange={(e) => handleFallbackApiKeyChange(e.target.value)}
+                      className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
                       placeholder="Fallback API key"
                     />
                   </div>
@@ -747,9 +755,9 @@ export default function AdminPage() {
                     <label className="block text-[10px] font-medium text-[#8c8f9c]">PRIMARY_ENDPOINT</label>
                     <input
                       type="text"
-                      value={effectiveEnvValues.BASED_URL ?? ""}
-                      readOnly
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      value={currentSettingsValues.BASED_URL}
+                      onChange={(e) => handlePrimaryBaseURLChange(e.target.value)}
+                      className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
                       placeholder="Primary endpoint URL"
                     />
                   </div>
@@ -757,9 +765,9 @@ export default function AdminPage() {
                     <label className="block text-[10px] font-medium text-[#8c8f9c]">FALLBACK_ENDPOINT</label>
                     <input
                       type="text"
-                      value={effectiveEnvValues.FALLBACK_BASED_URL ?? ""}
-                      readOnly
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#c1c5d0] font-mono placeholder-[#5e616e] focus:outline-none"
+                      value={currentSettingsValues.FALLBACK_BASED_URL}
+                      onChange={(e) => handleFallbackBaseURLChange(e.target.value)}
+                      className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
                       placeholder="Fallback endpoint URL"
                     />
                   </div>
@@ -906,6 +914,34 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="space-y-3 mb-3">
+              <div>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">BLOCKRUN_API_KEY (for this code)</label>
+                <input
+                  type="text"
+                  value={newBlockrunApiKey}
+                  onChange={(e) => setNewBlockrunApiKey(e.target.value)}
+                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                  placeholder="Enter primary API key for this code..."
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">FALLBACK_API_KEY (for this code)</label>
+                <input
+                  type="text"
+                  value={newFallbackApiKey}
+                  onChange={(e) => setNewFallbackApiKey(e.target.value)}
+                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                  placeholder="Enter fallback API key for this code..."
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSetCurrentCodeTokens}
+                disabled={loading}
+                className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+              >
+                Use current global key values
+              </button>
               <div>
                 <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">SERPER_API_KEY (for this code)</label>
                 <input
