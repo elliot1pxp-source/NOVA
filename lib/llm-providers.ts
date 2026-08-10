@@ -237,15 +237,22 @@ type NodeFetchRequestInit = RequestInit & { duplex?: "half" };
  */
 export function createProviderClients(
   apiKey?: string,
-  options?: { onReasoningDelta?: (text: string) => void }
+  options?: {
+    onReasoningDelta?: (text: string) => void;
+    primaryBaseURL?: string;
+    fallbackBaseURL?: string;
+    fallbackApiKey?: string;
+  }
 ): ProviderClients {
   const onReasoningDelta = options?.onReasoningDelta;
-  const primaryBaseURL = getServerEnvValue(
-    "BASED_URL",
-    "BASE_URL",
-    "BLOCKRUN_BASE_URL",
-    "OPENAI_BASE_URL"
-  );
+  const primaryBaseURL =
+    options?.primaryBaseURL ||
+    getServerEnvValue(
+      "BASED_URL",
+      "BASE_URL",
+      "BLOCKRUN_BASE_URL",
+      "OPENAI_BASE_URL"
+    );
   const primaryAuthHeader = getServerEnvValue(
     "BLOCKRUN_AUTH_HEADER",
     "OPENAI_AUTH_HEADER",
@@ -280,8 +287,10 @@ export function createProviderClients(
     apiKey: customPrimaryHeaders ? undefined : apiKey ?? "blockrun",
   });
 
-  const fallbackBaseURL = getServerEnvValue("FALLBACK_BASED_URL");
-  const fallbackApiKey = getServerEnvValue("FALLBACK_API_KEY");
+  const fallbackBaseURL =
+    options?.fallbackBaseURL || getServerEnvValue("FALLBACK_BASED_URL");
+  const fallbackApiKey =
+    options?.fallbackApiKey || getServerEnvValue("FALLBACK_API_KEY");
   const hasFallback =
     Boolean(fallbackBaseURL && fallbackApiKey) && fallbackBaseURL !== primaryBaseURL;
 
@@ -336,6 +345,9 @@ type StreamWithFallbackOptions = {
   reasoning?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
   /** Called for every text delta so the caller can filter content. */
   onTextDelta?: (text: string) => string;
+  /** Optional runtime model map overrides for admin-configurable models. */
+  primaryModels?: Record<string, string>;
+  fallbackModels?: Record<string, string>;
   /**
    * Called exactly once, when the first non-empty text delta of the final
    * answer arrives (after any reasoning phase). Lets callers flip progress
@@ -378,6 +390,8 @@ export function streamTextWithFallback(
   } = options;
 
   const attempts = MAX_FALLBACK_ATTEMPTS;
+  const primaryModelMap = options.primaryModels ?? PRIMARY_MODELS;
+  const fallbackModelMap = options.fallbackModels ?? FALLBACK_MODELS;
   // When startProvider is "fallback", flip which parity of attempt uses the
   // fallback endpoint so the very first attempt goes to fallback instead of
   // primary, while attempts still alternate afterwards.
@@ -392,7 +406,7 @@ export function streamTextWithFallback(
       while (attempt < attempts) {
         const useFallback = clients.hasFallback && attempt % 2 === fallbackParity;
         const client = useFallback ? clients.fallback : clients.primary;
-        const modelMap = useFallback ? FALLBACK_MODELS : PRIMARY_MODELS;
+        const modelMap = useFallback ? fallbackModelMap : primaryModelMap;
         const resolvedModelId = modelMap[modelId] ?? modelMap.instant;
         let receivedText = false;
         let firstTextFired = false;
@@ -476,12 +490,14 @@ export async function runSubcallWithFallback(
   options: StreamWithFallbackOptions & { system?: string }
 ): Promise<string> {
   let lastError: unknown;
+  const primaryModelMap = options.primaryModels ?? PRIMARY_MODELS;
+  const fallbackModelMap = options.fallbackModels ?? FALLBACK_MODELS;
   const fallbackParity = options.startProvider === "fallback" ? 0 : 1;
 
   for (let attempt = 0; attempt < MAX_FALLBACK_ATTEMPTS; attempt++) {
     const useFallback = clients.hasFallback && attempt % 2 === fallbackParity;
     const client = useFallback ? clients.fallback : clients.primary;
-    const modelMap = useFallback ? FALLBACK_MODELS : PRIMARY_MODELS;
+    const modelMap = useFallback ? fallbackModelMap : primaryModelMap;
     const resolvedModelId = modelMap[options.modelId] ?? modelMap.instant;
     if (options.onAttemptStart) options.onAttemptStart(attempt);
     try {

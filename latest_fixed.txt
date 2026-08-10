@@ -585,3 +585,72 @@ No duplicate key errors, no disappearing messages, no orphaned branches,
 no stale retry markers, no crashes, no oversized bubbles, no lost
 generations, no lost empty chats, no invisible input textarea, no hidden
 reasoning, no planner round-trip, no free-tier access to high/xhigh.
+
+────────────────────────────────────────────
+FIX 20: Paid Tier dialog — full feature breakdown + opens on gated clicks
+────────────────────────────────────────────
+
+Problem:
+  The Paid Tier dialog was a small, undersized card (max-w-md) with a
+  single-line pitch ("Unlock unlimited chatting with Paid Tier...") and an
+  undersized layout. Free users tapping a paid-gated feature (High / Extra
+  High reasoning) got a dead, disabled button with no path to purchase —
+  nothing told them how the paid tier actually works or how to get a code.
+
+Fix (components/paid-tier-dialog.tsx, components/chat-input.tsx,
+      components/nova-sidebar.tsx, lib/paid-tier.ts):
+
+  Dialog content (paid-tier-dialog.tsx):
+    - The one-line pitch is replaced with full marketing copy rendered as
+      proper markdown via `react-markdown` + `remark-gfm`. A module-level
+      `PAID_TIER_MARKDOWN` string covers every section the product asked
+      for:
+        · Header pitch ("Unlock all the NOVA's features...")
+        · How the paid tier works — one-time codes, not a subscription
+        · How codes work — admin-created, duration in minutes, max
+          redemptions; timer starts on first redemption (shared across
+          all users of that code); expires back to free tier (20 msgs/chat)
+        · What you get — no 20-message limit, dedicated API keys, no
+          per-chat caps
+        · What there is no — no recurring billing, no credit card signup,
+          no auto-renewal
+        · Pricing — $30 / 7 days, $60 / 30 days
+        · Contact — Telegram link t.me/elliotpxp
+    - A custom `paidTierMarkdownComponents` map styles the rendered
+      markdown: paragraphs, bold (white), bullet lists with amber dot
+      markers, and the Telegram anchor (amber, opens in a new tab).
+
+  Dialog sizing (paid-tier-dialog.tsx):
+    - Container widened from `max-w-md` → `max-w-2xl` so the longer copy
+      fits comfortably.
+    - Container is now a flex column: `max-h-[88vh]`, `overflow-hidden`,
+      with a scrollable content wrapper (`flex-1 min-h-0 overflow-y-auto
+      space-y-4`) so long content scrolls and never overflows the screen.
+    - Fixed footer: `flex-shrink-0`, `mt-5 pt-4 border-t border-white/5`,
+      visually separated from the scrollable area.
+    - Header subtitle changed to "One-time codes · No subscription".
+
+  Opens on gated clicks (lib/paid-tier.ts + chat-input.tsx +
+  nova-sidebar.tsx):
+    - Added a global event helper in lib/paid-tier.ts:
+        export const PAID_TIER_DIALOG_EVENT = "nova:open-paid-tier-dialog";
+        export function openPaidTierDialog() {
+          window.dispatchEvent(new CustomEvent(PAID_TIER_DIALOG_EVENT));
+        }
+    - chat-input.tsx: the restricted High / Extra High reasoning buttons
+      now call `openPaidTierDialog()` on click (instead of doing nothing).
+      `isRestricted` now stays non-aria-disabled — it becomes clickable to
+      surface the dialog, with a hover hint (`hover:text-amber-400/70`)
+      and tooltip "Requires paid tier — click to unlock".
+    - nova-sidebar.tsx: listens for `PAID_TIER_DIALOG_EVENT` on mount and
+      opens its `PaidTierDialog` on the event. Dispatches are safe because
+      the sidebar is always mounted (part of the SPA shell).
+
+Result:
+  - Free users who try to tap High / Extra High reasoning now get the paid
+    tier dialog surfaced with a full explanation and a path to a code.
+  - The dialog clearly explains what paid tier is, how one-time codes work,
+    what you get, what you don't pay for, the two price plans, and the
+    Telegram contact — all in readable markdown.
+  - The dialog is sized for the longer content and scrolls instead of
+    overflowing.

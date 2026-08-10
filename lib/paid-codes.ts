@@ -1,5 +1,6 @@
 export type PaidCodeTokens = {
   BLOCKRUN_API_KEY?: string;
+  FALLBACK_API_KEY?: string;
   SERPER_API_KEY: string;
 };
 

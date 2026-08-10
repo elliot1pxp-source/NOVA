@@ -191,7 +191,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const [activeNavId, setActiveNavId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
-  const [reasoningLevel, setReasoningLevel] = useState<"low" | "medium" | "high">("medium");
+  const [reasoningLevel, setReasoningLevel] = useState<"low" | "medium" | "high" | "xhigh">("medium");
   const [webSearch, setWebSearch] = useState(false);
   const [requestFeatures, setRequestFeatures] = useState({ deepThink: false, webSearch: false });
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -320,8 +320,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     const serverMode = getServerMode();
     return (
       serverMode === "paid" &&
-      paidData &&
-      new Date(paidData.expiresAt) > new Date()
+      Boolean(paidData) &&
+      new Date(paidData!.expiresAt) > new Date()
     );
   })();
 

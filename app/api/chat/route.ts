@@ -129,7 +129,9 @@ function cleanSearchQuery(raw: string): string {
 async function generateSearchQuery(
   clients: ProviderClients,
   modelMessages: any[],
-  systemPrompt: string
+  systemPrompt: string,
+  primaryModels?: Record<string, string>,
+  fallbackModels?: Record<string, string>
 ): Promise<string> {
   // Prepend the system prompt to the search-query instruction
   const searchQueryPrompt = `Your role is a search query generator tool. You are not a chatbot. You do not converse with the user. You do not answer questions. You are a pure function: input -> output query.
@@ -166,6 +168,8 @@ DO NOT OVER THINK THIS`;
       maxRetries: SUBCALL_MAX_RETRIES,
       // Web-search query generation is a tiny utility call — never reason.
       reasoning: NO_REASONING,
+      primaryModels,
+      fallbackModels,
       onAttemptError: (error, attempt) => {
         console.error(`[chat] search query generation attempt ${attempt + 1} failed`, error);
       },
@@ -182,7 +186,13 @@ DO NOT OVER THINK THIS`;
 
 type GlobalSettings = {
   BLOCKRUN_API_KEY?: string;
+  FALLBACK_API_KEY?: string;
   SERPER_API_KEY?: string;
+  BASED_URL?: string;
+  FALLBACK_BASED_URL?: string;
+  useFallbackAsPrimary?: boolean;
+  PRIMARY_MODELS?: Record<string, string>;
+  FALLBACK_MODELS?: Record<string, string>;
 };
 
 async function readGlobalSettings(): Promise<GlobalSettings> {
@@ -308,25 +318,46 @@ export async function POST(req: Request) {
     // 2. Fall back to global settings (admin-controlled).
     // 3. Fall back to environment variables.
     let apiKey = getServerEnvValue("BLOCKRUN_API_KEY", "BLOCKRUN_TOKEN", "OPENAI_API_KEY");
+    let fallbackApiKey = getServerEnvValue("FALLBACK_API_KEY");
     let serperApiKey = getServerEnvValue("SERPER_API_KEY");
+    let primaryBaseURL = getServerEnvValue("BASED_URL", "BASE_URL", "BLOCKRUN_BASE_URL", "OPENAI_BASE_URL");
+    let fallbackBaseURL = getServerEnvValue("FALLBACK_BASED_URL");
+    let useFallbackAsPrimary = false;
+    let runtimePrimaryModels: Record<string, string> | undefined;
+    let runtimeFallbackModels: Record<string, string> | undefined;
 
     if (paidCode) {
       if (paidCode.expiresAt) {
         const expiresAt = new Date(paidCode.expiresAt);
         if (expiresAt > new Date()) {
           if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
+          if (paidCode.tokens.FALLBACK_API_KEY) fallbackApiKey = paidCode.tokens.FALLBACK_API_KEY;
           if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
         }
       }
     } else {
-      // Use global settings for free users / expired users
       const globalSettings = await readGlobalSettings();
       if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
+      if (globalSettings.FALLBACK_API_KEY) fallbackApiKey = globalSettings.FALLBACK_API_KEY;
       if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
+      if (globalSettings.BASED_URL) primaryBaseURL = globalSettings.BASED_URL;
+      if (globalSettings.FALLBACK_BASED_URL) fallbackBaseURL = globalSettings.FALLBACK_BASED_URL;
+      useFallbackAsPrimary = Boolean(globalSettings.useFallbackAsPrimary);
+      runtimePrimaryModels = globalSettings.PRIMARY_MODELS;
+      runtimeFallbackModels = globalSettings.FALLBACK_MODELS;
     }
 
-    // Primary + fallback endpoint clients with silent fail-over between them.
-    const providerClients = createProviderClients(apiKey);
+    if (useFallbackAsPrimary) {
+      [primaryBaseURL, fallbackBaseURL] = [fallbackBaseURL, primaryBaseURL];
+      [apiKey, fallbackApiKey] = [fallbackApiKey, apiKey];
+      [runtimePrimaryModels, runtimeFallbackModels] = [runtimeFallbackModels, runtimePrimaryModels];
+    }
+
+    const providerClients = createProviderClients(apiKey, {
+      primaryBaseURL,
+      fallbackBaseURL,
+      fallbackApiKey,
+    });
 
     // Normalize any file attachment MIME types before sending them to the model provider so
     // browser-reported variants like text/x-go are converted to a supported type.
@@ -460,6 +491,8 @@ export async function POST(req: Request) {
                 maxRetries: SUBCALL_MAX_RETRIES,
                 // File extraction is a utility sub-call — never reason.
                 reasoning: NO_REASONING,
+                primaryModels: runtimePrimaryModels,
+                fallbackModels: runtimeFallbackModels,
               });
               const trimmed = filterResponseText(extracted).trim();
               if (trimmed) {
@@ -529,7 +562,13 @@ export async function POST(req: Request) {
 
           try {
             // Pass the base system prompt to the query generator
-            query = await generateSearchQuery(providerClients, modelMessages, baseSystemPrompt);
+            query = await generateSearchQuery(
+              providerClients,
+              modelMessages,
+              baseSystemPrompt,
+              runtimePrimaryModels,
+              runtimeFallbackModels
+            );
             // Last-resort fallback: only if AI generation truly produced nothing.
             if (!query || query.length < 3) {
               console.warn("[chat] search query generation returned nothing - using user text as fallback");
@@ -618,6 +657,8 @@ export async function POST(req: Request) {
             // otherwise), or the user-selected low/medium/high level.
             reasoning: resolvedReasoning,
             maxRetries: MODEL_MAX_RETRIES,
+            primaryModels: runtimePrimaryModels,
+            fallbackModels: runtimeFallbackModels,
             onTextDelta: (text) => filterResponseText(text),
             onAttemptStart: () => {
               // A failed attempt is retried on the other endpoint — discard
