@@ -654,3 +654,136 @@ Result:
     Telegram contact — all in readable markdown.
   - The dialog is sized for the longer content and scrolls instead of
     overflowing.
+
+────────────────────────────────────────────
+FIX 21: Admin panel — "Current Environment Values" editable in-place
+────────────────────────────────────────────
+
+Problem (reported by user):
+  The "Current Environment Values" section in the admin panel
+  (app/gihreheiedjvdkvhdkjpp1/page.tsx) was a read-only display of the
+  server env vars. The user wanted a SINGLE editable interface that shows
+  the current runtime values AND lets them override them in the same
+  input — so a saved override persists (global settings) while a blank
+  field falls back to the actual env value.
+
+Fix (app/gihreheiedjvdkvhdkjpp1/page.tsx):
+  - Added dedicated editable state `currentEnvironmentInputs`
+    ({ ADMIN_KEY, SERPER_API_KEY, PRIMARY_KEY, FALLBACK_KEY,
+    PRIMARY_ENDPOINT, FALLBACK_ENDPOINT }).
+  - `buildCurrentEnvironmentInputs(settings, env)` computes the display
+    values with fallback precedence: saved global setting first, env value
+    second, "" last. The `useFallbackAsPrimary` toggle swaps which saved
+    field / env value feeds PRIMARY vs FALLBACK labels.
+  - All inputs in the section are now live (`value` + `onChange`), each
+    wired to a handler that updates BOTH `settings` (persisted on Apply)
+    and `currentEnvironmentInputs` (the controlled input value) —
+    typing never snaps back.
+  - "Apply Global Settings" sends `...settings` to
+    `PUT /api/admin/global-settings`, so overrides persist server-side and
+    become the runtime baseline (order: paid code → global settings →
+    env).
+  - The "Use current global key values" button on the paid-code forms now
+    copies from the effective current values (respecting
+    useFallbackAsPrimary).
+
+────────────────────────────────────────────
+FIX 22: Admin panel — inputs snapped back to saved values while typing
+────────────────────────────────────────────
+
+Problem (reported by user):
+  "I still can't edit those input, I can touch it but when I delete or
+  edit it got back to normal." Every keystroke reverted the field to the
+  previously saved value.
+
+Root Cause:
+  `loadData` (the fetch that populates settings + env values) had
+  `[envValues]` in its `useCallback` dependency array. Editing the
+  ADMIN_KEY field called `setEnvValues`, which created a NEW `loadData`
+  function, which re-triggered the `useEffect(() => { void loadData() },
+  [authenticated, loadData])` — reloading the data and overwriting every
+  input with the stored values on every keystroke.
+
+Fix (app/gihreheiedjvdkvhdkjpp1/page.tsx):
+  - Removed `envValues` from `loadData`'s dependencies → `[]`. `loadData`
+    now runs exactly once per authentication; the effect no longer
+    re-fires while typing.
+  - `buildCurrentEnvironmentInputs` is called with the freshly fetched
+    `settingsData.env` (fallback to a blank env object), never the
+    mutable `envValues` state.
+  - Result: typing in any current-environment field persists in the
+    controlled input until "Apply Global Settings" is clicked.
+
+────────────────────────────────────────────
+FIX 23: Paid codes — custom per-code API keys + endpoints (create & edit)
+────────────────────────────────────────────
+
+Problem (reported by user):
+  "For paid code, it should be able to edit custom api key for creating a
+  code or editing a code" and "Also add BASED_URL and FALLBACK_BASED_URL
+  in Code Creation and Editing the code." Each paid code needed its own
+  keys AND its own primary/fallback endpoints, settable both when creating
+  a code and when editing an existing code — and those values must be
+  applied at runtime for paid users.
+
+Fix:
+  - lib/paid-codes.ts — `PaidCodeTokens` extended with `BASED_URL?` and
+    `FALLBACK_BASED_URL?` (besides `BLOCKRUN_API_KEY?`, `FALLBACK_API_KEY?`,
+    `SERPER_API_KEY`).
+  - app/api/admin/codes/route.ts — POST persists all five token fields;
+    PUT updates each token field when present in the body.
+  - app/gihreheiedjvdkvhdkjpp1/page.tsx — the "Create New Code" form now
+    has BLOCKRUN_API_KEY, FALLBACK_API_KEY, SERPER_API_KEY, BASED_URL and
+    FALLBACK_BASED_URL inputs; the edit-code form has the same five
+    fields; both are cleared/reset correctly after create and wired into
+    `handleAddCode` / `handleEditCode`.
+  - app/api/chat/route.ts + app/api/summarize/route.ts — a valid redeemed
+    paid code now overrides API keys AND endpoints:
+        paidCode.tokens.BLOCKRUN_API_KEY    -> apiKey
+        paidCode.tokens.FALLBACK_API_KEY    -> fallbackApiKey
+        paidCode.tokens.SERPER_API_KEY      -> serperApiKey
+        paidCode.tokens.BASED_URL           -> primaryBaseURL
+        paidCode.tokens.FALLBACK_BASED_URL  -> fallbackBaseURL
+    (still gated on `expiresAt` being unexpired; `useFallbackAsPrimary`
+    swapping applies after the overrides).
+  - lib/paid-tier.ts — `PaidTierData.tokens` widened to carry the new
+    fields so the client-stored paid payload matches the server payload.
+  - The paid-tier verify/status routes return `found.tokens` wholesale, so
+    the new fields flow to the client automatically.
+
+────────────────────────────────────────────
+FIX 24: Web search — Serper Scrape API for top 3 page contents
+────────────────────────────────────────────
+
+Problem:
+  `searchWithPageContent` fetched every result page itself with raw
+  `fetch` + regex HTML stripping. Many sites block scrapers, return
+  heavy JS shells, or rate-limit — leaving result content empty and the
+  search context thin. The user asked to add the Serper Scrape API
+  (https://scrape.serper.dev) to scrape the top 3 results.
+
+How the API works (per user requirements):
+  - POST https://scrape.serper.dev
+  - Headers: X-API-KEY (Serper key), Content-Type: application/json
+  - Body: { url, includeMarkdown? } — the service fetches the page,
+    extracts the main content, returns { text, markdown, metadata, jsonld }.
+
+Fix (app/api/search/route.ts):
+  - `scrapeSerperPage(url, apiKey)` — POSTs to scrape.serper.dev (15s
+    AbortSignal timeout), returns `data.text || data.markdown` capped at
+    MAX_PAGE_TEXT_LENGTH; undefined on any failure.
+  - `scrapeTopResultsWithSerper(results, apiKey)` — scrapes the FIRST 3
+    results with URLs in parallel and returns merged results
+    (scraped top 3 + untouched rest).
+  - `searchWithPageContent(query, serperApiKey?)` — when a Serper key is
+    available, the top 3 results get content from the Scrape API and
+    results 4+ still fall back to the raw HTML fetch; when no key is set,
+    ALL results use the raw HTML fetch (previous behavior).
+  - The manual GET /api/search route is unchanged (no page fetch).
+
+Result:
+  - Top 3 search results now carry real extracted page content via the
+    Serper Scrape API, dramatically improving the quality of the search
+    context fed to the model.
+  - No extra cost when no SERPER_API_KEY is configured, and no regression
+    for results beyond the top 3.
