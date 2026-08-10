@@ -25,8 +25,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 export const PRIMARY_MODELS: Record<string, string> = {
   instant: "auto/best-fast",
   expert: "auto/best-coding-fast",
-  deepthink: "auto/best-fast",
-  websearch: "oc/deepseek-v4-flash-free",
+  deepthink: "auto/fast",
+  websearch: "auto/fast",
   fileAnalysis: "auto/best-coding-fast",
 };
 
