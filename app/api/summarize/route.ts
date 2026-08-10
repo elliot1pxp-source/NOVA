@@ -60,7 +60,8 @@ export async function POST(req: Request) {
   }
 
   // Resolve the API key and endpoint mapping the same way the chat route does:
-  // 1. Redeemed paid tier code tokens -> 2. Global settings -> 3. Environment.
+  // Global settings (admin-controlled) are the runtime baseline for everyone;
+  // redeemed paid code tokens override API keys only; env vars fill the rest.
   let apiKey = getServerEnvValue("BLOCKRUN_API_KEY", "BLOCKRUN_TOKEN", "OPENAI_API_KEY");
   let fallbackApiKey = getServerEnvValue("FALLBACK_API_KEY");
   let primaryBaseURL = getServerEnvValue("BASED_URL", "BASE_URL", "BLOCKRUN_BASE_URL", "OPENAI_BASE_URL");
@@ -73,18 +74,19 @@ export async function POST(req: Request) {
     paidTierCode && paidTierClientId
       ? await readPaidCodeByRedeemedCode(paidTierCode, paidTierClientId)
       : null;
+
+  const globalSettings = await readGlobalSettings();
+  if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
+  if (globalSettings.FALLBACK_API_KEY) fallbackApiKey = globalSettings.FALLBACK_API_KEY;
+  if (globalSettings.BASED_URL) primaryBaseURL = globalSettings.BASED_URL;
+  if (globalSettings.FALLBACK_BASED_URL) fallbackBaseURL = globalSettings.FALLBACK_BASED_URL;
+  useFallbackAsPrimary = Boolean(globalSettings.useFallbackAsPrimary);
+  runtimePrimaryModels = globalSettings.PRIMARY_MODELS;
+  runtimeFallbackModels = globalSettings.FALLBACK_MODELS;
+
   if (paidCode?.expiresAt && new Date(paidCode.expiresAt) > new Date()) {
     if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
     if (paidCode.tokens.FALLBACK_API_KEY) fallbackApiKey = paidCode.tokens.FALLBACK_API_KEY;
-  } else {
-    const globalSettings = await readGlobalSettings();
-    if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
-    if (globalSettings.FALLBACK_API_KEY) fallbackApiKey = globalSettings.FALLBACK_API_KEY;
-    if (globalSettings.BASED_URL) primaryBaseURL = globalSettings.BASED_URL;
-    if (globalSettings.FALLBACK_BASED_URL) fallbackBaseURL = globalSettings.FALLBACK_BASED_URL;
-    useFallbackAsPrimary = Boolean(globalSettings.useFallbackAsPrimary);
-    runtimePrimaryModels = globalSettings.PRIMARY_MODELS;
-    runtimeFallbackModels = globalSettings.FALLBACK_MODELS;
   }
 
   if (useFallbackAsPrimary) {

@@ -165,15 +165,18 @@ export async function PUT(req: Request) {
       : "admin";
 
     await writeSettings(settings);
-    await appendSettingsHistory({
-      id: crypto.randomUUID?.() ?? `${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      label,
-      changedBy,
-      before: previousSettings,
-      after: settings,
-      changes: computeChanges(previousSettings, settings),
-    });
+    const changes = computeChanges(previousSettings, settings);
+    if (Object.keys(changes).length > 0) {
+      await appendSettingsHistory({
+        id: crypto.randomUUID?.() ?? `${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        label,
+        changedBy,
+        before: previousSettings,
+        after: settings,
+        changes,
+      });
+    }
 
     return NextResponse.json({ success: true, settings });
   } catch (err) {

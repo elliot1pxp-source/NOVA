@@ -314,9 +314,11 @@ export async function POST(req: Request) {
       .join("\n\n");
 
     // Determine which API keys to use:
-    // 1. If a redeemed paid tier code is provided, use its server-stored tokens.
-    // 2. Fall back to global settings (admin-controlled).
-    // 3. Fall back to environment variables.
+    // 1. Global settings (admin-controlled) are the runtime baseline for
+    //    EVERYONE — endpoints, models, and keys.
+    // 2. A redeemed paid tier code overrides API keys only (its dedicated
+    //    tokens); it never replaces the endpoint/model configuration.
+    // 3. Environment variables are the final fallback for anything unset.
     let apiKey = getServerEnvValue("BLOCKRUN_API_KEY", "BLOCKRUN_TOKEN", "OPENAI_API_KEY");
     let fallbackApiKey = getServerEnvValue("FALLBACK_API_KEY");
     let serperApiKey = getServerEnvValue("SERPER_API_KEY");
@@ -326,25 +328,20 @@ export async function POST(req: Request) {
     let runtimePrimaryModels: Record<string, string> | undefined;
     let runtimeFallbackModels: Record<string, string> | undefined;
 
-    if (paidCode) {
-      if (paidCode.expiresAt) {
-        const expiresAt = new Date(paidCode.expiresAt);
-        if (expiresAt > new Date()) {
-          if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
-          if (paidCode.tokens.FALLBACK_API_KEY) fallbackApiKey = paidCode.tokens.FALLBACK_API_KEY;
-          if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
-        }
-      }
-    } else {
-      const globalSettings = await readGlobalSettings();
-      if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
-      if (globalSettings.FALLBACK_API_KEY) fallbackApiKey = globalSettings.FALLBACK_API_KEY;
-      if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
-      if (globalSettings.BASED_URL) primaryBaseURL = globalSettings.BASED_URL;
-      if (globalSettings.FALLBACK_BASED_URL) fallbackBaseURL = globalSettings.FALLBACK_BASED_URL;
-      useFallbackAsPrimary = Boolean(globalSettings.useFallbackAsPrimary);
-      runtimePrimaryModels = globalSettings.PRIMARY_MODELS;
-      runtimeFallbackModels = globalSettings.FALLBACK_MODELS;
+    const globalSettings = await readGlobalSettings();
+    if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
+    if (globalSettings.FALLBACK_API_KEY) fallbackApiKey = globalSettings.FALLBACK_API_KEY;
+    if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
+    if (globalSettings.BASED_URL) primaryBaseURL = globalSettings.BASED_URL;
+    if (globalSettings.FALLBACK_BASED_URL) fallbackBaseURL = globalSettings.FALLBACK_BASED_URL;
+    useFallbackAsPrimary = Boolean(globalSettings.useFallbackAsPrimary);
+    runtimePrimaryModels = globalSettings.PRIMARY_MODELS;
+    runtimeFallbackModels = globalSettings.FALLBACK_MODELS;
+
+    if (paidCode?.expiresAt && new Date(paidCode.expiresAt) > new Date()) {
+      if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
+      if (paidCode.tokens.FALLBACK_API_KEY) fallbackApiKey = paidCode.tokens.FALLBACK_API_KEY;
+      if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
     }
 
     if (useFallbackAsPrimary) {
@@ -626,6 +623,13 @@ export async function POST(req: Request) {
         const thought = { startedAt: 0, accumulated: "", lastWrite: 0, done: false };
         const responseClients = deepThink
           ? createProviderClients(apiKey, {
+              // Must mirror the resolved endpoint/key configuration of
+              // providerClients (including the useFallbackAsPrimary swap and
+              // global-settings endpoints), or the final answer would hit the
+              // raw env endpoints with swapped keys/models.
+              primaryBaseURL,
+              fallbackBaseURL,
+              fallbackApiKey,
               onReasoningDelta: (delta) => {
                 if (thought.done) return;
                 thought.accumulated += delta;

@@ -29,6 +29,13 @@ type GlobalSettingsHistoryEntry = {
   changes: Record<string, { before: any; after: any }>;
 };
 
+const formatHistoryValue = (value: any): string => {
+  if (value === null || value === undefined) return "(not set)";
+  if (typeof value === "string") return value || "(empty)";
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  return JSON.stringify(value, null, 2);
+};
+
 export default function GlobalSettingsHistoryPage() {
   const [history, setHistory] = useState<GlobalSettingsHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,11 +126,11 @@ export default function GlobalSettingsHistoryPage() {
                       <div className="mt-2 grid gap-2 md:grid-cols-2">
                         <div className="rounded-xl bg-[#111217] p-3 text-[11px] text-[#c1c5d0]">
                           <div className="font-semibold text-[#8c8f9c] mb-1">Before</div>
-                          <pre className="whitespace-pre-wrap break-words text-[11px] leading-5">{typeof change.before === "string" ? change.before || "(empty)" : JSON.stringify(change.before, null, 2)}</pre>
+                          <pre className="whitespace-pre-wrap break-words text-[11px] leading-5">{formatHistoryValue(change.before)}</pre>
                         </div>
                         <div className="rounded-xl bg-[#111217] p-3 text-[11px] text-[#c1c5d0]">
                           <div className="font-semibold text-[#8c8f9c] mb-1">After</div>
-                          <pre className="whitespace-pre-wrap break-words text-[11px] leading-5">{typeof change.after === "string" ? change.after || "(empty)" : JSON.stringify(change.after, null, 2)}</pre>
+                          <pre className="whitespace-pre-wrap break-words text-[11px] leading-5">{formatHistoryValue(change.after)}</pre>
                         </div>
                       </div>
                     </div>
