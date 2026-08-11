@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type TouchEvent, type WheelEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type TouchEvent, type WheelEvent } from "react";
 import Image from "next/image";
 import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
@@ -266,74 +266,80 @@ function createMarkdownComponents(isStreaming = false) {
 
 const markdownComponents = createMarkdownComponents();
 
+// Settled portion of a streaming message, rendered as markdown. Memoized on
+// its text prop so it is only re-parsed (a full micromark run) when the
+// committed prefix actually advances — NOT on every stream token. react-markdown
+// does not memoize internally, so without this wrapper a 50k-char message would
+// be re-parsed ~5x/sec while streaming, freezing the main thread.
+const SettledMarkdown = memo(function SettledMarkdown({
+  text,
+  isStreaming,
+}: {
+  text: string;
+  isStreaming: boolean;
+}) {
+  const components = useMemo(() => createMarkdownComponents(isStreaming), [isStreaming]);
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {text}
+    </ReactMarkdown>
+  );
+});
+
+// Chars of the streaming tail committed to the settled markdown per cycle.
+const MARKDOWN_COMMIT_CHUNK = 1600;
+// Minimum settled delta required to force a commit — avoids re-parsing for
+// tiny increments. The remaining tail renders as cheap plain text + cursor.
+const MARKDOWN_COMMIT_MIN = 300;
+
 function StreamingMarkdown({ text, isStreaming }: { text: string; isStreaming: boolean }) {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [cursorPosition, setCursorPosition] = useState<{ left: number; top: number } | null>(null);
-  const streamingMarkdownComponents = useMemo(
-    () => createMarkdownComponents(isStreaming),
-    [isStreaming]
+  // Length of `text` already rendered as (settled, memoized) markdown.
+  const [committedLen, setCommittedLen] = useState(() =>
+    isStreaming ? 0 : text.length
   );
 
-  useLayoutEffect(() => {
-    const container = contentRef.current;
-    if (!isStreaming || !container) {
-      setCursorPosition(null);
+  // Commit the settled prefix in bounded chunks while streaming. Runs after
+  // paint (useEffect, not useLayoutEffect) so a heavy re-parse never blocks
+  // the browser from painting the freshly streamed tail.
+  useEffect(() => {
+    if (!isStreaming) {
+      // Stream finished — render the whole message as markdown once.
+      setCommittedLen(text.length);
       return;
     }
-
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-    let lastTextNode: Text | null = null;
-    let currentNode = walker.nextNode();
-    while (currentNode) {
-      if (currentNode.textContent?.trim()) lastTextNode = currentNode as Text;
-      currentNode = walker.nextNode();
-    }
-
-    if (!lastTextNode) {
-      setCursorPosition(null);
-      return;
-    }
-
-    // Code blocks render their own inline trailing cursor (see CodeBlock)
-    // and auto-scroll themselves on a separate effect that runs after this
-    // one, so measuring a position here would race that scroll and land the
-    // dot in a stale spot — often past the visible, clipped edge of the
-    // code box. Defer entirely to the code block's own cursor in that case.
-    const parentElement = lastTextNode.parentElement;
-    if (parentElement?.closest("[data-code-scroll]")) {
-      setCursorPosition(null);
-      return;
-    }
-
-    const lastCharacterIndex = lastTextNode.textContent?.trimEnd().length ?? 0;
-    if (lastCharacterIndex === 0) {
-      setCursorPosition(null);
-      return;
-    }
-
-    const range = document.createRange();
-    range.setStart(lastTextNode, lastCharacterIndex - 1);
-    range.setEnd(lastTextNode, lastCharacterIndex);
-    const characterRect = range.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-
-    setCursorPosition({
-      left: characterRect.right - containerRect.left + 3,
-      top: characterRect.top - containerRect.top + characterRect.height / 2 - 3,
+    setCommittedLen((prev) => {
+      if (prev >= text.length) return prev;
+      let next = Math.min(text.length, prev + MARKDOWN_COMMIT_CHUNK);
+      // Try to end the chunk at a line break so markdown blocks (lists, code
+      // fences) aren't cut mid-block in the settled view. Fall back to the raw
+      // chunk boundary if there's no break far enough into the segment.
+      const segment = text.slice(prev, next);
+      const lastBreak = segment.lastIndexOf("\n");
+      if (lastBreak >= MARKDOWN_COMMIT_MIN) {
+        next = prev + lastBreak + 1;
+      }
+      // Don't force a commit for negligible growth — let the tail absorb it.
+      return next - prev >= MARKDOWN_COMMIT_MIN ? next : prev;
     });
   }, [isStreaming, text]);
 
+  const settledText = text.slice(0, committedLen);
+  const tailText = text.slice(committedLen);
+  const showTail = tailText.length > 0;
+
   return (
-    <div ref={contentRef} className="relative">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={streamingMarkdownComponents}>
-        {text}
-      </ReactMarkdown>
-      {isStreaming && cursorPosition && (
-        <span
-          aria-hidden="true"
-          className="absolute w-1.5 h-1.5 rounded-full bg-white animate-pulse pointer-events-none"
-          style={{ left: cursorPosition.left, top: cursorPosition.top }}
-        />
+    <div className="relative">
+      <SettledMarkdown text={settledText} isStreaming={isStreaming} />
+      {showTail && (
+        <span className="whitespace-pre-wrap break-words text-[#ddd]">
+          {tailText}
+          {isStreaming && (
+            <span
+              aria-hidden="true"
+              className="inline-block w-1.5 h-3.5 ml-0.5 bg-white/80 animate-pulse align-middle rounded-sm"
+            />
+          )}
+        </span>
       )}
     </div>
   );
@@ -350,6 +356,33 @@ function ThoughtBlock({ data }: { data: any }) {
       setOpen(true);
     }
   }, [isThinking]);
+
+  // Incremental markdown: the thought text streams in at 150ms throttled
+  // deltas. Re-parsing the whole growing thought as markdown on every delta
+  // (react-markdown does not memoize) would freeze the page for long
+  // thinking phases. Commit the settled prefix in chunks and render the tail
+  // as cheap plain text, exactly like StreamingMarkdown.
+  const [committedLen, setCommittedLen] = useState(0);
+  const thoughtText = data?.text ?? "";
+  useEffect(() => {
+    if (!isThinking || thoughtText.length === 0) {
+      setCommittedLen(thoughtText.length);
+      return;
+    }
+    setCommittedLen((prev) => {
+      if (prev >= thoughtText.length) return prev;
+      let next = Math.min(thoughtText.length, prev + MARKDOWN_COMMIT_CHUNK);
+      const segment = thoughtText.slice(prev, next);
+      const lastBreak = segment.lastIndexOf("\n");
+      if (lastBreak >= MARKDOWN_COMMIT_MIN) {
+        next = prev + lastBreak + 1;
+      }
+      return next - prev >= MARKDOWN_COMMIT_MIN ? next : prev;
+    });
+  }, [isThinking, thoughtText]);
+
+  const settledThought = thoughtText.slice(0, committedLen);
+  const thoughtTail = thoughtText.slice(committedLen);
 
   return (
     <div
@@ -389,11 +422,12 @@ function ThoughtBlock({ data }: { data: any }) {
       {/* Thought content with Markdown */}
       {open && (
         <div className="mt-2 sm:mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-2.5 sm:pl-3 text-[11px] sm:text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
-          {data?.text ? (
+          {thoughtText ? (
             <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {data.text}
-              </ReactMarkdown>
+              <SettledMarkdown text={settledThought} isStreaming={isThinking} />
+              {thoughtTail.length > 0 && (
+                <span className="whitespace-pre-wrap break-words text-[#999]">{thoughtTail}</span>
+              )}
               {isThinking && (
                 <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#4a6cf7] animate-pulse align-middle rounded-sm" />
               )}

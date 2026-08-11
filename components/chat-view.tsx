@@ -401,12 +401,18 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
     if (!lastAssistantMessage) return;
 
-    const activityKey = `${lastAssistantMessage.id}:${lastAssistantMessage.parts
-      .map((part) => {
-        const value = "data" in part ? part.data : "text" in part ? (part as any).text : "";
-        return `${part.type}:${JSON.stringify(value)}`;
-      })
-      .join("|")}`;
+    // Cheap O(1) activity fingerprint: message id + part count + total text
+    // length + the tail of the last text part. The previous implementation
+    // JSON.stringify'd every part on every chunk — with a long streaming
+    // message that is O(n) work ~5x/sec and contributes to UI freezes.
+    const lastTextPart = [...lastAssistantMessage.parts]
+      .reverse()
+      .find((part): part is { type: "text"; text: string } => part.type === "text");
+    const tail =
+      lastTextPart && lastTextPart.text.length > 0
+        ? lastTextPart.text.slice(Math.max(0, lastTextPart.text.length - 64))
+        : "";
+    const activityKey = `${lastAssistantMessage.id}:${lastAssistantMessage.parts.length}:${lastTextPart?.text.length ?? 0}:${tail}`;
 
     if (activityKey !== lastAssistantActivityKeyRef.current) {
       lastAssistantActivityKeyRef.current = activityKey;

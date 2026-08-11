@@ -787,3 +787,81 @@ Result:
     context fed to the model.
   - No extra cost when no SERPER_API_KEY is configured, and no regression
     for results beyond the top 3.
+
+────────────────────────────────────────────
+FIX 25: Streaming freeze + "Maximum update depth exceeded" on long output
+────────────────────────────────────────────
+
+Problem (reported by user):
+  With a LOT of output in one message, the site freezes while streaming
+  ("when streaming became very long context, the site freezes"), and
+  intermittently crashes mid-think or mid-respond with:
+    "Maximum update depth exceeded. This can happen when a component
+     repeatedly calls setState inside componentWillUpdate or
+     componentDidUpdate. React limits the number of nested updates to
+     prevent infinite loops."
+
+Root Cause (both symptoms share ONE root cause):
+  1. react-markdown v10 does NOT memoize. `${ReactMarkdown}` re-ran a full
+     micromark parse + element build on EVERY render. With useChat's
+     200ms throttle and a 50k-char streaming message, that meant the whole
+     document was re-parsed ~5x/sec — saturating the main thread →
+     FREEZE.
+  2. Simultaneously, `StreamingMarkdown`'s `useLayoutEffect` ran on every
+     text change: walked the ENTIRE DOM with a TreeWalker, called
+     `getBoundingClientRect` (forces layout), then `setCursorPosition`
+     synchronously in the layout phase. Combined with the SDK's throttled
+     `replaceMessage → structuredClone` store writes, this class of
+     render-phase setState on huge trees is exactly what trips React's
+     "Maximum update depth exceeded" guard (the crash is surfaced into
+     useChat's `error` state by the SDK's stream-catch handler, so it
+     renders in the error banner).
+  3. The messages-watcher effect recomputed an activity key by
+     `JSON.stringify`-ing EVERY part of the last assistant message on
+     every `messages` change — another O(n) cost per chunk.
+
+Fix (components/chat-message.tsx, components/chat-view.tsx):
+
+  Incremental markdown committing (chat-message.tsx):
+    - New `SettledMarkdown` component: a `React.memo` wrapper around
+      `ReactMarkdown`. Because memo compares the `text` prop, the settled
+      prefix is only re-parsed (a full micromark run) when the committed
+      length actually advances — NOT on every stream token.
+    - `StreamingMarkdown` now splits the message into:
+        * a SETTLED prefix (`text.slice(0, committedLen)`) rendered by
+          `SettledMarkdown` (memoized markdown), and
+        * a streaming TAIL (`text.slice(committedLen)`) rendered as cheap
+          plain text with an INLINE pulsing cursor — no DOM tree-walk, no
+          layout measurement, no `useLayoutEffect`.
+    - The commit loop runs in `useEffect` (after paint, so a heavy re-parse
+      never blocks painting) and advances `committedLen` in chunks of
+      `MARKDOWN_COMMIT_CHUNK = 1600` chars, snapping to the previous
+      newline so markdown blocks (lists/code fences) aren't cut mid-block.
+      It skips negligible growth below `MARKDOWN_COMMIT_MIN = 300`.
+    - When the stream ends (`isStreaming` false), it commits the full text
+      in one final markdown render.
+    - The same incremental pattern is applied to `ThoughtBlock`'s
+      streaming thought text (previously re-parsed as markdown every
+      150ms delta during long DeepThink phases).
+
+  Cheap activity key (chat-view.tsx):
+    - The retry-watchdog watcher no longer JSON.stringify's the whole
+      message. It now builds an O(1) fingerprint from the last text part's
+      length + a 64-char tail + part count — enough to detect "content
+      changed" without copying tens of thousands of chars per stream chunk.
+
+  Removed the dangerous measurement entirely:
+    - The old absolute-positioned cursor (`cursorPosition` state + TreeWalker
+      + getBoundingClientRect in useLayoutEffect) is gone. The tail now
+      renders the cursor as an inline block right after the plain text.
+
+Result (verified live):
+  - A ~90k-char DeepThink response streamed with NO "Maximum update depth"
+    error and no error banner.
+  - A responsiveness probe (requestAnimationFrame) over ~6,300 frames
+    during streaming showed only 6 short stalls (>200ms, mostly ~250ms
+    during 1600-char commits) vs a hard freeze before — the page stayed
+    interactive while streaming.
+  - The settled markdown fully committed after the stream (headings,
+    tables, code blocks all rendered; zero leftover tail spans).
+  - Typecheck passes.
