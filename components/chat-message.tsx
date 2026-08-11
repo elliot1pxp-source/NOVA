@@ -1,6 +1,16 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState, type TouchEvent, type WheelEvent } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type TouchEvent,
+  type WheelEvent,
+} from "react";
 import Image from "next/image";
 import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
@@ -46,15 +56,13 @@ function messageText(message: UIMessage) {
 
 const SCROLL_BOTTOM_THRESHOLD = 24;
 
-function CodeBlock({
-  children,
-  className,
-  isStreaming = false,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  isStreaming?: boolean;
-}) {
+// Streaming state flows through context (instead of being baked into the
+// per-stream components object) so the components map can be created once and
+// memoized segments never re-parse when the stream starts/stops.
+const StreamingContext = createContext(false);
+
+function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+  const isStreaming = useContext(StreamingContext);
   const [copied, setCopied] = useState(false);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const shouldFollowCodeRef = useRef(true);
@@ -171,7 +179,7 @@ function CodeBlock({
   );
 }
 
-function createMarkdownComponents(isStreaming = false) {
+function createMarkdownComponents() {
   return {
   pre({ children }: any) {
     return <div className="max-w-full overflow-hidden my-1.5 sm:my-2">{children}</div>;
@@ -191,10 +199,13 @@ function createMarkdownComponents(isStreaming = false) {
       );
     }
 
-    return <CodeBlock className={className} isStreaming={isStreaming}>{children}</CodeBlock>;
+    return <CodeBlock className={className}>{children}</CodeBlock>;
   },
   p({ children }: any) {
-    return <p className="mb-2 sm:mb-3 last:mb-0 text-[#ccc] leading-relaxed">{children}</p>;
+    // No `last:mb-0` — the message is rendered as several adjacent markdown
+    // trees (segments), and a zeroed bottom margin on the last paragraph of a
+    // tree would collapse the paragraph spacing at every segment seam.
+    return <p className="mb-2 sm:mb-3 text-[#ccc] leading-relaxed">{children}</p>;
   },
   ul({ children }: any) {
     return <ul className="list-disc pl-4 sm:pl-5 mb-2 sm:mb-3 space-y-1 text-[#ccc]">{children}</ul>;
@@ -264,21 +275,121 @@ function createMarkdownComponents(isStreaming = false) {
   };
 }
 
+// Static for the lifetime of the module — CodeBlock reads the streaming flag
+// from context, so this map never needs to change and memoized segments never
+// re-parse when a stream starts or stops.
 const markdownComponents = createMarkdownComponents();
 
-// Settled portion of a streaming message, rendered as markdown. Memoized on
-// its text prop so it is only re-parsed (a full micromark run) when the
-// committed prefix actually advances — NOT on every stream token. react-markdown
-// does not memoize internally, so without this wrapper a 50k-char message would
-// be re-parsed ~5x/sec while streaming, freezing the main thread.
-const SettledMarkdown = memo(function SettledMarkdown({
+// ---------------------------------------------------------------------------
+// Incremental markdown rendering
+//
+// react-markdown re-parses its whole input synchronously on the main thread
+// and memoizes nothing internally. Streaming a long answer into a single
+// <ReactMarkdown> therefore re-runs a full micromark parse on every stream
+// chunk — with a lot of context that freezes the page.
+//
+// Instead the message is split into fence-aware segments of a bounded size,
+// each rendered by its own memoized <ReactMarkdown>. Only the segment that
+// actually grew is re-parsed per chunk; older segments are never touched
+// again. While streaming, the last ~1k chars are kept as a small markdown
+// tail so the parse work per chunk stays constant no matter how long the
+// message becomes.
+// ---------------------------------------------------------------------------
+
+// Maximum size of one settled markdown segment.
+const MARKDOWN_SEGMENT_CHARS = 1400;
+// While streaming, keep roughly this many trailing chars out of the settled
+// segments (they render as a small markdown tail instead).
+const MARKDOWN_TAIL_TARGET = 1000;
+
+const FENCE_LINE = /^(`{3,}|~{3,})/;
+
+function isFenceLine(line: string) {
+  return FENCE_LINE.test(line.trimStart());
+}
+
+function countFenceLines(text: string) {
+  let count = 0;
+  for (const line of text.split("\n")) {
+    if (isFenceLine(line)) count++;
+  }
+  return count;
+}
+
+// Split `text` into segments of at most MARKDOWN_SEGMENT_CHARS, breaking at
+// line boundaries and never inside a ``` code fence (a fence opener starts a
+// fresh segment, so every fence lives in exactly one segment).
+function splitMarkdownSegments(text: string): string[] {
+  if (text.length <= MARKDOWN_SEGMENT_CHARS) return [text];
+
+  const lines = text.split("\n");
+  const segments: string[] = [];
+  let buffer = "";
+  let bufferLen = 0;
+  let inFence = false;
+
+  const flush = () => {
+    if (buffer.length > 0) {
+      segments.push(buffer);
+      buffer = "";
+      bufferLen = 0;
+    }
+  };
+
+  const addLine = (line: string, withNewline: boolean) => {
+    const len = line.length + (withNewline ? 1 : 0);
+    if (!inFence && bufferLen > 0 && bufferLen + len > MARKDOWN_SEGMENT_CHARS) {
+      flush();
+    }
+    buffer += line + (withNewline ? "\n" : "");
+    bufferLen += len;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const withNewline = i < lines.length - 1;
+    const isFence = isFenceLine(line);
+
+    if (isFence) {
+      addLine(line, withNewline);
+      inFence = !inFence;
+      continue;
+    }
+
+    if (inFence || line.length <= MARKDOWN_SEGMENT_CHARS * 2) {
+      addLine(line, withNewline);
+      continue;
+    }
+
+    // Pathological over-long line outside a fence: hard-split at whitespace so
+    // a wall of text can't pin the whole message to the streaming tail forever.
+    flush();
+    let rest = line;
+    while (rest.length > MARKDOWN_SEGMENT_CHARS) {
+      const space = rest.lastIndexOf(" ", MARKDOWN_SEGMENT_CHARS);
+      const at = space > MARKDOWN_SEGMENT_CHARS / 2 ? space : MARKDOWN_SEGMENT_CHARS;
+      buffer += rest.slice(0, at) + "\n";
+      flush();
+      rest = rest.slice(at);
+    }
+    if (rest.length > 0) addLine(rest, withNewline);
+  }
+
+  flush();
+  return segments;
+}
+
+// One settled segment — memoized on its exact text, so a segment is parsed
+// once and never again, no matter how many times the message above it
+// re-renders.
+const MarkdownSegment = memo(function MarkdownSegment({
   text,
-  isStreaming,
+  components,
 }: {
   text: string;
-  isStreaming: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  components: any;
 }) {
-  const components = useMemo(() => createMarkdownComponents(isStreaming), [isStreaming]);
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
       {text}
@@ -286,78 +397,85 @@ const SettledMarkdown = memo(function SettledMarkdown({
   );
 });
 
-// Streaming tail of a message, rendered as markdown so `**bold**`, `##`
-// headings and ``` code fences appear formatted as soon as the model writes
-// them — not as literal text. The tail is bounded (it is committed into the
-// memoized SettledMarkdown prefix every ~1600 chars), so re-parsing just this
-// small chunk on every stream token is cheap.
-function TailMarkdown({ text, isStreaming }: { text: string; isStreaming: boolean }) {
-  const components = useMemo(() => createMarkdownComponents(isStreaming), [isStreaming]);
-  return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-      {text}
-    </ReactMarkdown>
-  );
-}
+function StreamingMarkdown({
+  text,
+  isStreaming,
+  caretClassName = "w-1.5 h-3.5 ml-0.5 bg-white/80",
+}: {
+  text: string;
+  isStreaming: boolean;
+  caretClassName?: string;
+}) {
+  // Fully derived from props (no state, no effects — nothing to sync after
+  // paint, so streaming can't double-render or fall behind).
+  const { segments, tail, tailIsPlainText, caretHidden } = useMemo(() => {
+    const all = splitMarkdownSegments(text);
 
-// Chars of the streaming tail committed to the settled markdown per cycle.
-const MARKDOWN_COMMIT_CHUNK = 1600;
-// Minimum settled delta required to force a commit — avoids re-parsing for
-// tiny increments. The remaining tail renders as markdown (TailMarkdown) so
-// freshly-written syntax is already formatted.
-const MARKDOWN_COMMIT_MIN = 300;
-
-function StreamingMarkdown({ text, isStreaming }: { text: string; isStreaming: boolean }) {
-  // Length of `text` already rendered as (settled, memoized) markdown.
-  const [committedLen, setCommittedLen] = useState(() =>
-    isStreaming ? 0 : text.length
-  );
-
-  // Commit the settled prefix in bounded chunks while streaming. Runs after
-  // paint (useEffect, not useLayoutEffect) so a heavy re-parse never blocks
-  // the browser from painting the freshly streamed tail.
-  useEffect(() => {
     if (!isStreaming) {
-      // Stream finished — render the whole message as markdown once.
-      setCommittedLen(text.length);
-      return;
+      return { segments: all, tail: "", tailIsPlainText: false, caretHidden: true };
     }
-    setCommittedLen((prev) => {
-      if (prev >= text.length) return prev;
-      let next = Math.min(text.length, prev + MARKDOWN_COMMIT_CHUNK);
-      // Try to end the chunk at a line break so markdown blocks (lists, code
-      // fences) aren't cut mid-block in the settled view. Fall back to the raw
-      // chunk boundary if there's no break far enough into the segment.
-      const segment = text.slice(prev, next);
-      const lastBreak = segment.lastIndexOf("\n");
-      if (lastBreak >= MARKDOWN_COMMIT_MIN) {
-        next = prev + lastBreak + 1;
-      }
-      // Don't force a commit for negligible growth — let the tail absorb it.
-      return next - prev >= MARKDOWN_COMMIT_MIN ? next : prev;
-    });
-  }, [isStreaming, text]);
 
-  const settledText = text.slice(0, committedLen);
-  const tailText = text.slice(committedLen);
-  const showTail = tailText.length > 0;
-  // If the tail ends inside an unclosed code fence, the CodeBlock renders its
-  // own streaming caret — skip the inline cursor to avoid a duplicate.
-  const endsInCodeFence = (tailText.match(/```/g) || []).length % 2 === 1;
+    // Short messages render fully as markdown (the parse is bounded); once the
+    // message is long enough, keep the trailing ~TAIL_TARGET chars as a
+    // separate tail so a chunk only ever re-parses the segment that grew.
+    let end = 0;
+    let count = 0;
+    if (text.length > MARKDOWN_TAIL_TARGET + MARKDOWN_SEGMENT_CHARS) {
+      for (const segment of all) {
+        const nextEnd = end + segment.length;
+        if (text.length - nextEnd < MARKDOWN_TAIL_TARGET) break;
+        end = nextEnd;
+        count++;
+      }
+    } else {
+      count = all.length;
+      end = text.length;
+    }
+
+    const committed = count > 0 ? all.slice(0, count) : [];
+    const tailText = text.slice(end);
+
+    // A fence opened in the settled region means the tail starts inside a code
+    // block → render it as plain text (markdown would mis-format it). The
+    // caret is hidden whenever a CodeBlock is on screen (fence opened in the
+    // settled region, or the tail itself ends inside an open fence) — that
+    // block already draws its own streaming caret.
+    // (Segments are fence-contained, so scanning the committed region once is
+    // equivalent to XOR-ing every segment's parity.)
+    const settledFenceOpen = countFenceLines(text.slice(0, end)) % 2 === 1;
+    const tailFenceOpen = countFenceLines(tailText) % 2 === 1;
+
+    return {
+      segments: committed,
+      tail: tailText,
+      tailIsPlainText: settledFenceOpen,
+      caretHidden: settledFenceOpen || tailFenceOpen,
+    };
+  }, [text, isStreaming]);
 
   return (
-    <div className="relative">
-      <SettledMarkdown text={settledText} isStreaming={isStreaming} />
-      {showTail && (
-        <TailMarkdown text={tailText} isStreaming={isStreaming} />
-      )}
-      {isStreaming && !endsInCodeFence && (
-        <span
-          aria-hidden="true"
-          className="inline-block w-1.5 h-3.5 ml-0.5 bg-white/80 animate-pulse align-middle rounded-sm"
-        />
-      )}
-    </div>
+    <StreamingContext.Provider value={isStreaming}>
+      <div className="relative">
+        {segments.map((segment, index) => (
+          <MarkdownSegment key={index} text={segment} components={markdownComponents} />
+        ))}
+        {tail && !tailIsPlainText && (
+          <MarkdownSegment text={tail} components={markdownComponents} />
+        )}
+        {tail && tailIsPlainText && (
+          <span className="whitespace-pre-wrap break-words">{tail}</span>
+        )}
+        {isStreaming && !caretHidden && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "inline-block animate-pulse align-middle rounded-sm",
+              caretClassName
+            )}
+          />
+        )}
+      </div>
+    </StreamingContext.Provider>
   );
 }
 
@@ -366,39 +484,13 @@ function ThoughtBlock({ data }: { data: any }) {
   const seconds = data?.seconds;
   const isThinking = status === "thinking";
   const [open, setOpen] = useState(isThinking);
+  const thoughtText = data?.text ?? "";
 
   useEffect(() => {
     if (isThinking) {
       setOpen(true);
     }
   }, [isThinking]);
-
-  // Incremental markdown: the thought text streams in at 150ms throttled
-  // deltas. Re-parsing the whole growing thought as markdown on every delta
-  // (react-markdown does not memoize) would freeze the page for long
-  // thinking phases. Commit the settled prefix in chunks and render the tail
-  // as cheap plain text, exactly like StreamingMarkdown.
-  const [committedLen, setCommittedLen] = useState(0);
-  const thoughtText = data?.text ?? "";
-  useEffect(() => {
-    if (!isThinking || thoughtText.length === 0) {
-      setCommittedLen(thoughtText.length);
-      return;
-    }
-    setCommittedLen((prev) => {
-      if (prev >= thoughtText.length) return prev;
-      let next = Math.min(thoughtText.length, prev + MARKDOWN_COMMIT_CHUNK);
-      const segment = thoughtText.slice(prev, next);
-      const lastBreak = segment.lastIndexOf("\n");
-      if (lastBreak >= MARKDOWN_COMMIT_MIN) {
-        next = prev + lastBreak + 1;
-      }
-      return next - prev >= MARKDOWN_COMMIT_MIN ? next : prev;
-    });
-  }, [isThinking, thoughtText]);
-
-  const settledThought = thoughtText.slice(0, committedLen);
-  const thoughtTail = thoughtText.slice(committedLen);
 
   return (
     <div
@@ -440,13 +532,11 @@ function ThoughtBlock({ data }: { data: any }) {
         <div className="mt-2 sm:mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-2.5 sm:pl-3 text-[11px] sm:text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
           {thoughtText ? (
             <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
-              <SettledMarkdown text={settledThought} isStreaming={isThinking} />
-              {thoughtTail.length > 0 && (
-                <TailMarkdown text={thoughtTail} isStreaming={isThinking} />
-              )}
-              {isThinking && (
-                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#4a6cf7] animate-pulse align-middle rounded-sm" />
-              )}
+              <StreamingMarkdown
+                text={thoughtText}
+                isStreaming={isThinking}
+                caretClassName="w-1.5 h-3.5 ml-1 bg-[#4a6cf7]"
+              />
             </div>
           ) : isThinking ? (
             <div className="flex items-center gap-2 text-[#777] italic py-1">
@@ -695,7 +785,16 @@ function Attachment({ part }: { part: any }) {
   );
 }
 
-export function ChatMessage({ message, onRegenerate, onEdit, isStreaming, disableActions, animateIn = true, branchInfo, onBranchNav }: Props) {
+export function ChatMessage({
+  message,
+  onRegenerate,
+  onEdit,
+  isStreaming,
+  disableActions,
+  animateIn = true,
+  branchInfo,
+  onBranchNav,
+}: Props) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);

@@ -339,7 +339,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     id: chatId,
     messages: initialMessages as never,
     transport,
-    throttle: 200,
+    // The SDK pushes a fresh `messages` array on every stream tick, which
+    // re-renders the whole conversation. Markdown is already rendered
+    // incrementally (only the growing segment is re-parsed), so 300ms keeps
+    // updates fluid while cutting main-thread re-render load on long chats.
+    throttle: 300,
   });
 
   // Retry controller refs and helpers
