@@ -49,8 +49,8 @@ You redeem a code once — it's not a recurring subscription.
 
 **Pricing:**
 
-- **$30** — 7 days
-- **$60** — 30 days
+- **$15** — 7 days
+- **$35** — 30 days
 
 Unlock all features and unlimited chatting for either plan!
 
