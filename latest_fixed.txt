@@ -865,3 +865,39 @@ Result (verified live):
   - The settled markdown fully committed after the stream (headings,
     tables, code blocks all rendered; zero leftover tail spans).
   - Typecheck passes.
+
+────────────────────────────────────────────
+FIX 26: Markdown renders live in the streaming tail (not as raw text)
+────────────────────────────────────────────
+
+Problem (reported by user):
+  "When streaming, the code block should already show the code block when
+  ``` this already wrote, same for other markdown too when first ** ## etc
+  already wrote." The streaming TAIL described in FIX 25 was rendered as a
+  plain-text <span>, so freshly-written markdown syntax appeared literally:
+    ```python / **bold** / ## heading / - list
+  showed as raw characters until the commit loop folded the text into the
+  memoized SettledMarkdown prefix a few instants later.
+
+Fix (components/chat-message.tsx):
+  - New `TailMarkdown` component — a small `ReactMarkdown` (with
+    `createMarkdownComponents(isStreaming)`) that renders the streaming tail
+    as real markdown. The tail is BOUNDED (it gets committed into the
+    memoized SettledMarkdown prefix every ~1600 chars), so re-parsing just
+    this small chunk on every stream token is cheap — it does not reintroduce
+    the FIX 25 freeze.
+  - `StreamingMarkdown` and `ThoughtBlock` now render their tails with
+    `TailMarkdown` instead of the plain-text span.
+  - A code block inside the tail gets the full CodeBlock treatment (language
+    label, auto-scroll, streaming caret) as soon as the opening ``` arrives.
+  - The inline pulsing cursor is kept ONLY when the tail is NOT ending inside
+    an unclosed code fence (an odd count of ``` in the tail) — otherwise the
+    CodeBlock's own caret covers it and the inline dot would duplicate.
+
+Result (verified live):
+  - A message streamed with ## heading, **bold**, - lists and ```python code
+    blocks: all rendered as REAL markdown (h2/strong/ul/pre with language
+    labels) in the final DOM, with zero literal ``` or ** markers anywhere.
+  - No comment about re-acting — the small tail parse keeps streaming
+    responsive.
+  - Typecheck passes.

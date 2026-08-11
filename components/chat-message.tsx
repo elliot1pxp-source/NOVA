@@ -286,10 +286,25 @@ const SettledMarkdown = memo(function SettledMarkdown({
   );
 });
 
+// Streaming tail of a message, rendered as markdown so `**bold**`, `##`
+// headings and ``` code fences appear formatted as soon as the model writes
+// them — not as literal text. The tail is bounded (it is committed into the
+// memoized SettledMarkdown prefix every ~1600 chars), so re-parsing just this
+// small chunk on every stream token is cheap.
+function TailMarkdown({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+  const components = useMemo(() => createMarkdownComponents(isStreaming), [isStreaming]);
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {text}
+    </ReactMarkdown>
+  );
+}
+
 // Chars of the streaming tail committed to the settled markdown per cycle.
 const MARKDOWN_COMMIT_CHUNK = 1600;
 // Minimum settled delta required to force a commit — avoids re-parsing for
-// tiny increments. The remaining tail renders as cheap plain text + cursor.
+// tiny increments. The remaining tail renders as markdown (TailMarkdown) so
+// freshly-written syntax is already formatted.
 const MARKDOWN_COMMIT_MIN = 300;
 
 function StreamingMarkdown({ text, isStreaming }: { text: string; isStreaming: boolean }) {
@@ -326,20 +341,21 @@ function StreamingMarkdown({ text, isStreaming }: { text: string; isStreaming: b
   const settledText = text.slice(0, committedLen);
   const tailText = text.slice(committedLen);
   const showTail = tailText.length > 0;
+  // If the tail ends inside an unclosed code fence, the CodeBlock renders its
+  // own streaming caret — skip the inline cursor to avoid a duplicate.
+  const endsInCodeFence = (tailText.match(/```/g) || []).length % 2 === 1;
 
   return (
     <div className="relative">
       <SettledMarkdown text={settledText} isStreaming={isStreaming} />
       {showTail && (
-        <span className="whitespace-pre-wrap break-words text-[#ddd]">
-          {tailText}
-          {isStreaming && (
-            <span
-              aria-hidden="true"
-              className="inline-block w-1.5 h-3.5 ml-0.5 bg-white/80 animate-pulse align-middle rounded-sm"
-            />
-          )}
-        </span>
+        <TailMarkdown text={tailText} isStreaming={isStreaming} />
+      )}
+      {isStreaming && !endsInCodeFence && (
+        <span
+          aria-hidden="true"
+          className="inline-block w-1.5 h-3.5 ml-0.5 bg-white/80 animate-pulse align-middle rounded-sm"
+        />
       )}
     </div>
   );
@@ -426,7 +442,7 @@ function ThoughtBlock({ data }: { data: any }) {
             <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
               <SettledMarkdown text={settledThought} isStreaming={isThinking} />
               {thoughtTail.length > 0 && (
-                <span className="whitespace-pre-wrap break-words text-[#999]">{thoughtTail}</span>
+                <TailMarkdown text={thoughtTail} isStreaming={isThinking} />
               )}
               {isThinking && (
                 <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#4a6cf7] animate-pulse align-middle rounded-sm" />
