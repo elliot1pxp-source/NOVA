@@ -393,7 +393,7 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
               </div>
               <h3 className="text-lg font-bold text-rose-400 mb-1">YOUR PAID TIER IS EXPIRED</h3>
               <p className="text-xs text-[#8c8f9c] mb-4">
-                Your private server access has ended. You are now on the free tier.
+                Your Paid Tier access has ended. You are now on the free tier.
               </p>
               <button
                 type="button"
