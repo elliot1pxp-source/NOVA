@@ -61,6 +61,33 @@ const SCROLL_BOTTOM_THRESHOLD = 24;
 // memoized segments never re-parse when the stream starts/stops.
 const StreamingContext = createContext(false);
 
+// Citation results (from the web-search tool) flow through context for the
+// same reason: markdownComponents is built once at module scope, so the `a`
+// renderer can't take the current message's results as a prop. Keyed by
+// citation number (1-based, matching the "[1]", "[2]"… markers the model is
+// instructed to emit).
+type CitationEntry = { url?: string; title?: string };
+const CitationsContext = createContext<Record<number, CitationEntry>>({});
+
+// Turns a bare "[2]" citation marker in the model's raw markdown into a real
+// link the `a` component below can recognize, without disturbing genuine
+// markdown links ("[text](url)") or reference-style definitions. Runs before
+// the text is handed to react-markdown, so it only ever sees valid syntax.
+// Skips fenced/inline code so citation-shaped text inside a code sample is
+// never rewritten.
+const CITATION_MARKER = /\[(\d{1,3})\](?!\()/g;
+function linkifyCitations(text: string): string {
+  if (!text.includes("[")) return text;
+  const chunks = text.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
+  return chunks
+    .map((chunk, i) =>
+      // Odd indices are the code chunks captured by the split regex above —
+      // leave those untouched.
+      i % 2 === 1 ? chunk : chunk.replace(CITATION_MARKER, (_m, n) => `[[${n}]](#cite-${n})`)
+    )
+    .join("");
+}
+
 function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
   const isStreaming = useContext(StreamingContext);
   const [copied, setCopied] = useState(false);
@@ -233,6 +260,38 @@ function createMarkdownComponents() {
     return <strong className="font-semibold text-white">{children}</strong>;
   },
   a({ href, children }: any) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const citations = useContext(CitationsContext);
+    const citationMatch = typeof href === "string" && href.match(/^#cite-(\d+)$/);
+
+    if (citationMatch) {
+      const num = Number(citationMatch[1]);
+      const result = citations[num];
+
+      if (result?.url) {
+        return (
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={result.title}
+            className="inline-flex items-center justify-center align-super mx-0.5 h-3.5 min-w-[1.1rem] px-1 rounded-full bg-[#4a6cf7]/15 text-[#7a9bff] text-[9px] sm:text-[10px] font-medium leading-none no-underline hover:bg-[#4a6cf7]/30 hover:text-white transition-colors"
+          >
+            {num}
+          </a>
+        );
+      }
+
+      // Model emitted a citation before results are known (or the number
+      // doesn't match anything returned) — show it as plain text instead of
+      // a dead link.
+      return (
+        <span className="inline-flex items-center justify-center align-super mx-0.5 h-3.5 min-w-[1.1rem] px-1 rounded-full bg-white/5 text-[#777] text-[9px] sm:text-[10px] font-medium leading-none">
+          {num}
+        </span>
+      );
+    }
+
     return (
       <a
         href={href}
@@ -579,13 +638,98 @@ function SearchBlock({ data }: { data: any }) {
           )}
         />
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
-          {isGenerating
-            ? "Generating search query…"
-            : isSearching
-            ? `Searching web for "${data?.query || "information"}"…`
+          {isGenerating || isSearching
+            ? "Searching the web..."
             : status === "error"
             ? "Web search unavailable"
-            : `Searched web (${results.length} result${results.length === 1 ? "" : "s"})`}
+            : "Searched the web"}
+        </span>
+        <ChevronDown
+          className={cn(
+            "w-3 h-3 sm:w-3.5 sm:h-3.5 ml-auto transition-transform duration-200 text-[#666]",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {open && results.length > 0 && (
+        <div className="mt-1.5 sm:mt-2 border-l-2 border-[#2a2a2a] pl-2.5 sm:pl-3 space-y-1.5 sm:space-y-2 animate-in fade-in duration-200">
+          {results.map((r: any, i: number) => (
+            <div key={i} className="text-[11px] sm:text-xs">
+              {r.url ? (
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#4a6cf7] hover:underline"
+                >
+                  [{i + 1}] {r.title}
+                </a>
+              ) : (
+                <span className="text-[#aaa] font-medium">
+                  [{i + 1}] {r.title}
+                </span>
+              )}
+              <p className="text-[#777] mt-0.5">{r.snippet}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isWebSearchToolPart(part: any): boolean {
+  if (!part || typeof part.type !== "string") return false;
+  return (
+    part.type === "tool-webSearch" ||
+    (part.type === "dynamic-tool" && part.toolName === "webSearch")
+  );
+}
+
+// Renders the live state of the native `webSearch` tool call: the model
+// streaming the query, the search running, and the final results. Mirrors the
+// look of SearchBlock so "tool calling" and "web searching" are visible
+// without duplicating the results list.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ToolSearchBlock({ part }: { part: any }) {
+  const state = part?.state;
+  const input = part?.input ?? {};
+  const query = typeof input?.query === "string" ? input.query : "";
+  const output = part?.output;
+  const results = Array.isArray(output?.results) ? output.results : [];
+  const isSearching =
+    state === "input-streaming" || state === "input-available";
+  const isError = state === "output-error";
+  const [open, setOpen] = useState(isSearching);
+
+  useEffect(() => {
+    if (isSearching) setOpen(true);
+  }, [isSearching]);
+
+  return (
+    <div className="mb-2.5 sm:mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#888] hover:text-[#bbb] transition-colors select-none group w-full text-left"
+      >
+        <Search
+          className={cn(
+            "w-3 h-3 sm:w-3.5 sm:h-3.5 transition-all duration-300",
+            isSearching
+              ? query
+                ? "text-[#4a6cf7] animate-spin"
+                : "text-[#4a6cf7] animate-pulse"
+              : "text-[#888]"
+          )}
+        />
+        <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
+          {isSearching
+            ? "Searching the web..."
+            : isError
+            ? "Web search unavailable"
+            : "Searched the web"}
         </span>
         <ChevronDown
           className={cn(
@@ -810,6 +954,24 @@ export function ChatMessage({
   const scanParts = message.parts.filter((p) => p.type === "data-file");
   const thoughtParts = message.parts.filter((p) => p.type === "data-thought").slice(-1);
   const searchParts = message.parts.filter((p) => p.type === "data-search").slice(-1);
+  const toolParts = message.parts.filter(isWebSearchToolPart);
+
+  // Which "search" representation is live for this message — the native
+  // tool part when webSearch ran as a tool call, otherwise the legacy
+  // data-search progress part. Used to build the citation map below.
+  const activeToolPart = toolParts[toolParts.length - 1] as any;
+  const activeSearchPart = searchParts[searchParts.length - 1] as any;
+
+  const citationResults = useMemo(() => {
+    const results = activeToolPart?.output?.results ?? activeSearchPart?.data?.results ?? [];
+    const map: Record<number, CitationEntry> = {};
+    if (Array.isArray(results)) {
+      results.forEach((r: any, i: number) => {
+        map[i + 1] = { url: r?.url, title: r?.title };
+      });
+    }
+    return map;
+  }, [activeToolPart, activeSearchPart]);
 
   const handleCopy = async () => {
     try {
@@ -864,7 +1026,14 @@ export function ChatMessage({
         {!isUser && scanParts.length > 0 && (
           <FileScanBlock parts={scanParts} isStreaming={Boolean(isStreaming)} />
         )}
-        {!isUser && searchParts.map((p, i) => <SearchBlock key={`s-${i}`} data={(p as any).data} />)}
+        {!isUser &&
+          (toolParts.length > 0
+            ? toolParts.map((p, i) => (
+                <ToolSearchBlock key={`tool-${i}`} part={p as any} />
+              ))
+            : searchParts.map((p, i) => (
+                <SearchBlock key={`s-${i}`} data={(p as any).data} />
+              )))}
         {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
 
         {isUser && isEditing ? (
@@ -919,11 +1088,12 @@ export function ChatMessage({
                   );
                 }
                 return (
-                  <StreamingMarkdown
-                    key={index}
-                    text={part.text}
-                    isStreaming={Boolean(isStreaming)}
-                  />
+                  <CitationsContext.Provider key={index} value={citationResults}>
+                    <StreamingMarkdown
+                      text={linkifyCitations(part.text)}
+                      isStreaming={Boolean(isStreaming)}
+                    />
+                  </CitationsContext.Provider>
                 );
               }
               return null;

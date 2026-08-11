@@ -102,8 +102,14 @@ function getCurrentResponseProgressStatus(
   return undefined;
 }
 
-function isCompletedPreprocessingStatus(status: string | undefined) {
-  return status === "done" || status === "error";
+// A preprocessing phase (search / DeepThink / file scan) only needs to
+// suppress the generic typing dots while it's ACTIVELY showing its own
+// indicator. `status === undefined` means that phase never started for this
+// turn (e.g. web search was enabled but the model chose not to call the
+// tool) — that must NOT be treated the same as "still in progress", or the
+// dots never get permission to show at all.
+function isPreprocessingActive(status: string | undefined) {
+  return status !== undefined && status !== "done" && status !== "error";
 }
 
 function createConversationSummary(text: string) {
@@ -623,17 +629,31 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const dedupedVisibleMessages = visibleMessages.filter(
     (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i
   );
-  const searchComplete =
-    !requestFeatures.webSearch ||
-    isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-search"));
-  const deepThinkComplete =
-    !requestFeatures.deepThink ||
-    isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-thought"));
-  const filesComplete =
-    !attachments.length ||
-    isCompletedPreprocessingStatus(getCurrentResponseProgressStatus(messages, "data-file"));
+  const searchActive =
+    requestFeatures.webSearch &&
+    isPreprocessingActive(getCurrentResponseProgressStatus(messages, "data-search"));
+  const deepThinkActive =
+    requestFeatures.deepThink &&
+    isPreprocessingActive(getCurrentResponseProgressStatus(messages, "data-thought"));
+  const filesActive =
+    attachments.length > 0 &&
+    isPreprocessingActive(getCurrentResponseProgressStatus(messages, "data-file"));
+  // Once the in-progress assistant message actually has text, it renders
+  // itself — the separate dots row below the message list would otherwise
+  // sit there for the entire remainder of the stream.
+  const lastVisibleMessage = dedupedVisibleMessages[dedupedVisibleMessages.length - 1];
+  const lastAssistantHasText =
+    lastVisibleMessage?.role === "assistant" &&
+    lastVisibleMessage.parts.some(
+      (part) => part.type === "text" && (part as { text: string }).text.trim().length > 0
+    );
   const showTypingIndicator =
-    status !== "ready" && status !== "error" && searchComplete && deepThinkComplete && filesComplete;
+    status !== "ready" &&
+    status !== "error" &&
+    !searchActive &&
+    !deepThinkActive &&
+    !filesActive &&
+    !lastAssistantHasText;
 
   useEffect(() => {
     if (isLoading && !wasLoadingRef.current) {

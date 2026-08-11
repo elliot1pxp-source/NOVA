@@ -15,6 +15,7 @@
 import {
   streamText,
   type TextStreamPart,
+  type ToolSet,
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 
@@ -388,6 +389,20 @@ type StreamWithFallbackOptions = {
    * sub-call. Accepted values follow the effort tiers the endpoints advertise.
    */
   reasoning?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  /**
+   * Tools exposed to the model for native tool calling. Executed server-side
+   * by the AI SDK and fed back to the model; the resulting tool-call /
+   * tool-result parts flow through the stream to the client.
+   */
+  tools?: ToolSet;
+  /** Force (or forbid) a tool call. Defaults to the model's choice. */
+  toolChoice?: "auto" | "required" | "none" | { type: "tool"; toolName: string };
+  /**
+   * Stop conditions for the tool-calling loop. Required when `tools` is set,
+   * otherwise the SDK stops after a single generation step and never runs the
+   * tool result. Accepts any condition the AI SDK's `streamText` supports.
+   */
+  stopWhen?: any;
   /** Called for every text delta so the caller can filter content. */
   onTextDelta?: (text: string) => string;
   /** Optional runtime model map overrides for admin-configurable models. */
@@ -425,6 +440,9 @@ export function streamTextWithFallback(
     modelSettings,
     maxRetries = MODEL_MAX_RETRIES,
     reasoning,
+    tools,
+    toolChoice,
+    stopWhen,
     onTextDelta,
     onFirstText,
     onAttemptError,
@@ -453,6 +471,9 @@ export function streamTextWithFallback(
         const client = useFallback ? clients.fallback : clients.primary;
         const modelMap = useFallback ? fallbackModelMap : primaryModelMap;
         const resolvedModelId = modelMap[modelId] ?? modelMap.instant;
+        console.info(
+          `[llm] ${useFallback ? "fallback" : "primary"} endpoint -> model: ${resolvedModelId} (attempt ${attempt + 1})`
+        );
         let receivedText = false;
         let firstTextFired = false;
         if (onAttemptStart) onAttemptStart(attempt);
@@ -464,6 +485,9 @@ export function streamTextWithFallback(
             messages,
             ...getStreamingModelOptions(modelSettings, resolvedModelId),
             ...(reasoning ? { reasoning } : {}),
+            ...(tools ? { tools } : {}),
+            ...(toolChoice ? { toolChoice } : {}),
+            ...(stopWhen ? { stopWhen } : {}),
             maxRetries,
             abortSignal,
             onChunk: onTextDelta
@@ -544,6 +568,9 @@ export async function runSubcallWithFallback(
     const client = useFallback ? clients.fallback : clients.primary;
     const modelMap = useFallback ? fallbackModelMap : primaryModelMap;
     const resolvedModelId = modelMap[options.modelId] ?? modelMap.instant;
+    console.info(
+      `[llm] ${useFallback ? "fallback" : "primary"} endpoint -> model: ${resolvedModelId} (attempt ${attempt + 1})`
+    );
     if (options.onAttemptStart) options.onAttemptStart(attempt);
     try {
       const result = streamText({

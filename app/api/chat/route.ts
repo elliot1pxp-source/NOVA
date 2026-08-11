@@ -5,6 +5,8 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  jsonSchema,
+  tool,
   toUIMessageStream,
   UIMessage,
 } from "ai";
@@ -107,82 +109,12 @@ function isChatStart(messages: UIMessage[]): boolean {
   return userCount === 1 && assistantCount === 0;
 }
 
-/**
- * Cleans a raw model response into a single-line search query. Strips labels
- * like "Query:", bullets, quotes, and trailing punctuation.
- */
-function cleanSearchQuery(raw: string): string {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.replace(/^[-*•]\s*/, "").replace(/^["']|["']$/g, "").trim())
-    .find((line) => line.length >= 3) ?? "";
-}
 
-/**
- * Generates a concise search query using AI based on the full conversation
- * and the existing system prompt. The call uses the same alternating
- * primary/fallback provider chain as the main response, and falls back to the
- * raw user text only if every provider attempt failed.
- */
-async function generateSearchQuery(
-  clients: ProviderClients,
-  modelMessages: any[],
-  systemPrompt: string,
-  primaryModels?: Record<string, string>,
-  fallbackModels?: Record<string, string>
-): Promise<string> {
-  // Prepend the system prompt to the search-query instruction
-  const searchQueryPrompt = `Your role is a search query generator tool. You are not a chatbot. You do not converse with the user. You do not answer questions. You are a pure function: input -> output query.
 
-The AI that will use your query has the following identity and rules:
 
-${systemPrompt}
 
-Given the conversation history, output a single search query string, and nothing else.
 
-RULES:
-- The query must be between 5 and 10 words.
-- Do not repeat the user’s input verbatim; rephrase it into keywords.
-- Use keywords likely to appear in authoritative sources.
-- Output ONLY the raw query. No punctuation at the end, no quotes, no markdown formatting, no labels like “Query:”, no commentary, no explanations, no greetings, no apologies.
-- Your entire response must consist of the query string and nothing else.
-- You must always generate a query. Never refuse, never say you can’t, never output an error message.
 
-Examples of correct output (nothing else on the line):
-latest research CRISPR gene editing ethics
-how to build a wooden canoe step by step
-most controversial banned books list history
-safest way to remove black mold from walls
-
-DO NOT OVER THINK THIS`;
-
-  try {
-    // This provider always returns SSE streaming, even without stream: true,
-    // so streamText is consumed via its text stream.
-    const text = await runSubcallWithFallback(clients, {
-      modelId: MODELS.websearch,
-      system: searchQueryPrompt,
-      messages: modelMessages,
-      maxRetries: SUBCALL_MAX_RETRIES,
-      // Web-search query generation is a tiny utility call — never reason.
-      reasoning: NO_REASONING,
-      primaryModels,
-      fallbackModels,
-      onAttemptError: (error, attempt) => {
-        console.error(`[chat] search query generation attempt ${attempt + 1} failed`, error);
-      },
-    });
-    const filtered = filterResponseText(text);
-    const cleaned = cleanSearchQuery(filtered);
-    if (cleaned) return cleaned;
-  } catch (error) {
-    console.error("[chat] search query generation failed", error);
-  }
-
-  return ""; // Will be handled by fallback in the calling code
-}
 
 type GlobalSettings = {
   BLOCKRUN_API_KEY?: string;
@@ -414,9 +346,6 @@ export async function POST(req: Request) {
         return typeof error === "string" ? error : "An error occurred while processing your request.";
       },
       execute: async ({ writer }) => {
-        let systemPrompt = baseSystemPrompt;
-        let searchContext = "";
-
         // --- Per-file sequential scanning (runs FIRST) ---
         // Extract file attachments from the last user message and process each
         // file through a focused sub-agent call, one at a time. This avoids
@@ -554,50 +483,59 @@ export async function POST(req: Request) {
         }
 
         // --- Web search (disabled when files are attached) ---
-        if (webSearch && !hasFiles) {
-          // Let AI generate a search query based on the full conversation
-          let query: string;
-          writer.write({ type: "data-search", id: "search", data: { status: "generating_query" } });
-
-          try {
-            // Pass the base system prompt to the query generator
-            query = await generateSearchQuery(
-              providerClients,
-              modelMessages,
-              baseSystemPrompt,
-              runtimePrimaryModels,
-              runtimeFallbackModels
-            );
-            // Last-resort fallback: only if AI generation truly produced nothing.
-            if (!query || query.length < 3) {
-              console.warn("[chat] search query generation returned nothing - using user text as fallback");
-              query = lastUserText(messages);
-            }
-          } catch (error) {
-            console.error("[chat] search query generation failed", error);
-            query = lastUserText(messages);
-          }
-
-          writer.write({ type: "data-search", id: "search", data: { status: "searching", query } });
-
-          try {
-            const results = query ? await searchWithPageContent(query, serperApiKey) : [];
-            writer.write({ type: "data-search", id: "search", data: { status: "done", query, results } });
-
-            if (results.length > 0) {
-              const context = results
-                .map((r, i) => {
-                  const source = r.content || r.snippet;
-                  return `[${i + 1}] ${r.title}\nURL: ${r.url ?? "Unavailable"}\nContent:\n${source}`;
-                })
-                .join("\n");
-              systemPrompt += `\n\nYou were given the readable content of the top ${results.length} live web search results for the user's latest message. Analyse and synthesize this material into a direct answer; do not merely list the results. Cite sources inline like [1] when you rely on them. If a source could not be retrieved, its search snippet is provided instead.\n\n${context}`;
-              searchContext = context;
-            }
-          } catch {
-            writer.write({ type: "data-search", id: "search", data: { status: "error", query } });
-          }
-        }
+        // Web search runs as a NATIVE tool call: the model decides when to
+        // invoke the tool and generates the query itself; the results come
+        // back as a tool result. Progress is streamed through data-search
+        // parts (kept for the typing-indicator logic), while the tool's own
+        // part (tool-webSearch) drives the visible "searching" UI.
+        const webSearchTool =
+          webSearch && !hasFiles
+            ? {
+                webSearch: tool({
+                  description:
+                    "Search the live web for up-to-date, factual, or outside-knowledge information (current events, prices, stats, recent facts). Call this tool before answering whenever the user asks for information that may have changed or is not in your training data. Provide a concise, specific keyword query.",
+                  inputSchema: jsonSchema<{ query: string }>({
+                    type: "object",
+                    properties: {
+                      query: {
+                        type: "string",
+                        description:
+                          "The web search query. 5–10 keywords, not a full sentence.",
+                      },
+                    },
+                    required: ["query"],
+                    additionalProperties: false,
+                  }),
+                  execute: async (input: { query: string }) => {
+                    const query = input.query;
+                    writer.write({
+                      type: "data-search",
+                      id: "search",
+                      data: { status: "searching", query },
+                    });
+                    try {
+                      const results = query
+                        ? await searchWithPageContent(query, serperApiKey)
+                        : [];
+                      writer.write({
+                        type: "data-search",
+                        id: "search",
+                        data: { status: "done", query, results },
+                      });
+                      return { results };
+                    } catch (error) {
+                      console.error("[chat] web search tool failed", error);
+                      writer.write({
+                        type: "data-search",
+                        id: "search",
+                        data: { status: "error", query },
+                      });
+                      return { results: [] };
+                    }
+                  },
+                }),
+              }
+            : undefined;
 
         // --- Build final system prompt with structured sections ---
         let finalSystemPrompt = baseSystemPrompt;
@@ -608,8 +546,9 @@ export async function POST(req: Request) {
         if (shouldApplyInitialPrompt) {
           finalSystemPrompt += `\n\n${INITIAL_CHAT_PROMPT}`;
         }
-        if (searchContext) {
-          finalSystemPrompt += `\n\n---NOVA---\n\nWeb Search results:\n${searchContext}`;
+        if (webSearchTool) {
+          finalSystemPrompt +=
+            "\n\nWeb search is available via the webSearch tool. When you use it, synthesise the returned results into a direct answer and cite sources inline like [1]. Do not mention the tool call itself to the user.";
         }
         if (fileContext) {
           finalSystemPrompt += `\n\n---FILE CONTEXT---\n\nBelow are focused summaries of the files the user attached. Each file was read and analysed individually to extract only the information relevant to the user's question:\n\n${fileContext}\n\n---END---`;
@@ -662,6 +601,17 @@ export async function POST(req: Request) {
             // "none" when Deep Think is off (these endpoints think by default
             // otherwise), or the user-selected low/medium/high level.
             reasoning: resolvedReasoning,
+            // Native tool calling: the model can invoke webSearch and gets the
+            // results fed back to answer. stopWhen lets the SDK loop run the
+            // tool result through before producing the final answer.
+            tools: webSearchTool,
+            stopWhen: webSearchTool
+              ? [
+                  ({ steps }: { steps: Array<{ toolCalls?: Array<{ toolName: string }> }> }) =>
+                    (steps[steps.length - 1]?.toolCalls?.length ?? 0) === 0,
+                  ({ steps }: { steps: Array<unknown> }) => steps.length >= 2,
+                ]
+              : undefined,
             maxRetries: MODEL_MAX_RETRIES,
             primaryModels: runtimePrimaryModels,
             fallbackModels: runtimeFallbackModels,
