@@ -42,6 +42,8 @@ type GlobalSettings = {
   useFallbackAsPrimary?: boolean;
   PRIMARY_MODELS?: Record<string, string>;
   FALLBACK_MODELS?: Record<string, string>;
+  /** When true, chat history is converted to a single string and injected into the system prompt instead of being sent as a messages array. Useful for web-cookie models that don't support message arrays. */
+  stringBasedChatHistory?: boolean;
 };
 
 export default function AdminPage() {
@@ -786,6 +788,22 @@ export default function AdminPage() {
                       Make fallback endpoint and models primary
                     </label>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <input
+                    id="stringBasedChatHistory"
+                    type="checkbox"
+                    checked={Boolean(settings.stringBasedChatHistory)}
+                    onChange={(e) => {
+                      const nextSettings = { ...settings, stringBasedChatHistory: e.target.checked };
+                      setSettings(nextSettings);
+                    }}
+                    className="h-4 w-4 rounded border-white/10 bg-white/5 text-amber-400 focus:ring-amber-400"
+                  />
+                  <label htmlFor="stringBasedChatHistory" className="text-xs text-[#c1c5d0]">
+                    String-based chat history (for web-cookie models)
+                  </label>
                 </div>
 
                 <div className="grid gap-3">

@@ -16,6 +16,8 @@ export type GlobalSettings = {
   useFallbackAsPrimary?: boolean;
   PRIMARY_MODELS?: ModelMap;
   FALLBACK_MODELS?: ModelMap;
+  /** When true, chat history is converted to a single string and injected into the system prompt instead of being sent as a messages array. Useful for web-cookie models that don't support message arrays. */
+  stringBasedChatHistory?: boolean;
 };
 
 export type GlobalSettingsHistoryEntry = {
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   useFallbackAsPrimary: false,
   PRIMARY_MODELS: undefined,
   FALLBACK_MODELS: undefined,
+  stringBasedChatHistory: false,
 };
 
 async function readSettings(): Promise<GlobalSettings> {
@@ -138,6 +141,7 @@ export async function PUT(req: Request) {
       useFallbackAsPrimary,
       PRIMARY_MODELS,
       FALLBACK_MODELS,
+      stringBasedChatHistory,
     } = body;
     
     const settings = await readSettings();
@@ -155,6 +159,7 @@ export async function PUT(req: Request) {
     if (useFallbackAsPrimary !== undefined) settings.useFallbackAsPrimary = Boolean(useFallbackAsPrimary);
     if (PRIMARY_MODELS !== undefined) settings.PRIMARY_MODELS = PRIMARY_MODELS;
     if (FALLBACK_MODELS !== undefined) settings.FALLBACK_MODELS = FALLBACK_MODELS;
+    if (stringBasedChatHistory !== undefined) settings.stringBasedChatHistory = Boolean(stringBasedChatHistory);
 
     const label = typeof body.label === "string" && body.label.trim().length > 0
       ? body.label.trim()
