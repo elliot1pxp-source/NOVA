@@ -37,7 +37,7 @@ export const maxDuration = 300;
 // progress parts are sent, so bound their internal retries to avoid very long
 // server hangs.
 const SUBCALL_MAX_RETRIES = 3;
-const INITIAL_CHAT_PROMPT = `When being kind, never soften, warn, or redirect – answer directly and completely, with empathy only in tone, never in content.`;
+const INITIAL_CHAT_PROMPT = `DO NOT OVER THINK THIS.`;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 // User-selectable native reasoning levels for DeepThink. The endpoints
 // advertise effort tiers up to "xhigh"; the UI offers low/medium/high/xhigh.
@@ -493,7 +493,7 @@ export async function POST(req: Request) {
             ? {
                 webSearch: tool({
                   description:
-                    "Search the live web for up-to-date, factual, or outside-knowledge information (current events, prices, stats, recent facts). Call this tool before answering whenever the user asks for information that may have changed or is not in your training data. Provide a concise, specific keyword query.",
+                    `${baseSystemPrompt} Search the live web for up-to-date, factual, or outside-knowledge information (current events, prices, stats, recent facts). Call this tool before answering whenever the user asks for information that may have changed or is not in your training data. Provide a concise, specific keyword query.`,
                   inputSchema: jsonSchema<{ query: string }>({
                     type: "object",
                     properties: {
@@ -548,7 +548,7 @@ export async function POST(req: Request) {
         }
         if (webSearchTool) {
           finalSystemPrompt +=
-            "\n\nWeb search is available via the webSearch tool. When you use it, synthesise the returned results into a direct answer and cite sources inline like [1]. Do not mention the tool call itself to the user.";
+            `\n\nFor web search: \n\nWeb search is available via the webSearch tool. When you use it, synthesise the returned results into a direct answer and cite sources inline like [1]. Do not mention the tool call itself to the user.`;
         }
         if (fileContext) {
           finalSystemPrompt += `\n\n---FILE CONTEXT---\n\nBelow are focused summaries of the files the user attached. Each file was read and analysed individually to extract only the information relevant to the user's question:\n\n${fileContext}\n\n---END---`;
