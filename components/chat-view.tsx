@@ -4,12 +4,14 @@ import { useRef, useEffect, useState, useCallback, useMemo, type TouchEvent, typ
 import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Zap, Shield } from "lucide-react";
+import { Zap, Shield, Redo2 } from "lucide-react";
 import { ChatInput, PendingAttachment } from "./chat-input";
 import { ChatMessage, TypingIndicator } from "./chat-message";
 import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
+import { isUnfinishedText } from "@/lib/continue-helper";
+import { backupNow, flushBackup, restoreFromServer } from "@/lib/history-backup";
 import { getSupportedAttachmentMimeType, isImageMimeType, normalizeDataUrl, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
 import { getPaidTierClientId, getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
@@ -18,6 +20,14 @@ type Model = "instant" | "expert";
 const MESSAGE_LIMIT = 200;
 const RECENT_MESSAGES_TO_KEEP = 180;
 const SCROLL_BOTTOM_THRESHOLD = 24;
+
+import {
+  CONTINUE_INSTRUCTION,
+  buildContinueInstruction,
+  findContinuation,
+  isContinueInstruction,
+  mergeAssistantText,
+} from "@/lib/continue-helper";
 
 // Retry policy for transient provider failures ("capacity busy" etc.).
 // The server already retries internally (MODEL_MAX_RETRIES), but if a whole
@@ -194,6 +204,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const notifiedRef = useRef(false);
   const summarizingHistoryRef = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const messagesRef = useRef<UIMessage[]>([]);
   const [activeNavId, setActiveNavId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
@@ -217,6 +228,25 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const regeneratingAssistantIdRef = useRef<string | null>(null);
 
   const initialMessages = useRef(loadMessages(chatId)).current;
+
+  // If this chat has no local history but the server backup does (WebView
+  // evicted localStorage), restore it before the conversation is rendered.
+  useEffect(() => {
+    if (initialMessages.length > 0) return;
+    let cancelled = false;
+    void restoreFromServer().then((restored) => {
+      if (cancelled || !restored) return;
+      const remoteMessages = restored.messages?.[chatId];
+      if (Array.isArray(remoteMessages) && remoteMessages.length > 0) {
+        saveMessages(chatId, remoteMessages);
+        setMessages(remoteMessages as never);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId]);
   // Message ids that should render flat, without the slide/fade entrance
   // animation: history loaded on mount, plus anything swapped into view by
   // editing a message or navigating between its versions. handleEditMessage
@@ -352,6 +382,65 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     throttle: 300,
   });
 
+  // Keep a live ref of the latest messages for the unload/hide flush handler.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Once the continuation finishes (or errors/stops), merge it into the
+  // original reply and drop the invisible instruction from history. Also
+  // cleans up the instruction alone if the continuation never started.
+  useEffect(() => {
+    if (status !== "ready" && status !== "error") return;
+    const idx = messages.findIndex(isContinueInstruction);
+    if (idx === -1) return;
+    const instruction = messages[idx];
+    const source = messages[idx - 1];
+    const continuation = messages[idx + 1];
+
+    if (!source || source.role !== "assistant" || !continuation || continuation.role !== "assistant") {
+      // Continuation never produced an assistant reply (error before stream).
+      // Drop the invisible instruction so it can't linger in history.
+      setMessages((prev) => prev.filter((m) => m.id !== instruction.id));
+      return;
+    }
+
+    setMessages((prev) => {
+      const mergedList: UIMessage[] = [];
+      for (const m of prev) {
+        if (m.id === instruction.id || m.id === continuation.id) continue;
+        if (m.id === source.id) {
+          // The stream was stopped mid-thought/search/scan, so its progress
+          // parts never received a final status and would spin forever inside
+          // the merged bubble. Settle them to "error" (interrupted) instead.
+          const settledSource = {
+            ...m,
+            parts: m.parts.map((part: any) => {
+              if (part.type === "data-thought" && part.data?.status === "thinking") {
+                return { ...part, data: { ...part.data, status: "error" } };
+              }
+              if (
+                part.type === "data-search" &&
+                (part.data?.status === "searching" || part.data?.status === "generating_query")
+              ) {
+                return { ...part, data: { ...part.data, status: "error" } };
+              }
+              if (part.type === "data-file" && part.data?.status === "reading") {
+                return { ...part, data: { ...part.data, status: "error" } };
+              }
+              return part;
+            }),
+          };
+          mergedList.push(mergeAssistantText(settledSource, continuation));
+          continue;
+        }
+        mergedList.push(m);
+      }
+      return mergedList;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, messages, setMessages]);
+
   // Retry controller refs and helpers
   // `lastOutgoingRef` describes the CURRENT in-flight request. The retry
   // watchdog only auto-retries requests that were issued for a user message
@@ -373,6 +462,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const streamTimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstTokenReceivedRef = useRef(false);
   const lastAssistantActivityKeyRef = useRef<string | null>(null);
+  // Set when the user presses Stop. A manual stop means the last reply is
+  // unfinished BY DEFINITION, no matter how the text happens to end (mid-word,
+  // em-dash, closing quote, emoji, …) — the text heuristic alone can miss
+  // those and silently hide the Continue button. Cleared whenever a new
+  // request (send, edit, regenerate, continue) starts.
+  const stoppedMidGenerationRef = useRef(false);
   // While true, transient errors are hidden from the UI because a retry is
   // already scheduled. Only the final failed attempt surfaces its error.
   const suppressingErrorRef = useRef(false);
@@ -502,6 +597,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     retryAttemptRef.current = 0;
     suppressingErrorRef.current = false;
     lastAssistantActivityKeyRef.current = null;
+    stoppedMidGenerationRef.current = false;
     sendMessage(payload);
   }, [sendMessage]);
 
@@ -523,6 +619,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       retryAttemptRef.current = 0;
       suppressingErrorRef.current = false;
       lastAssistantActivityKeyRef.current = null;
+      stoppedMidGenerationRef.current = false;
       regenerate(payload);
       if (retryable) {
         // start watcher for initial 5s
@@ -541,6 +638,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     lastOutgoingRef.current = null;
     retryAttemptRef.current = 0;
     suppressingErrorRef.current = false;
+    stoppedMidGenerationRef.current = true;
     stop();
   }, [clearStreamTimer, stop]);
 
@@ -610,12 +708,24 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   // substituting by activeIndex would corrupt restored snapshots. We only
   // hide system messages and progress-only assistant messages.
   const computeVisibleMessages = useCallback((): UIMessage[] => {
+    const continuation = findContinuation(messages);
     const result: UIMessage[] = [];
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
       if (message.role === "system") continue;
       const nextMessage = messages[i + 1];
       if (isProgressOnlyAssistantMessage(message) && nextMessage?.role === "assistant") {
+        continue;
+      }
+      // The Continue instruction is internal — never render it as a bubble.
+      if (isContinueInstruction(message)) continue;
+      // While the continuation streams, show it as part of the original
+      // truncated reply so the bubble keeps growing in place.
+      if (continuation && message.id === continuation.continuation.id) {
+        const sourceIdx = result.findIndex((r) => r.id === continuation.source.id);
+        if (sourceIdx !== -1 && result[sourceIdx].role === "assistant") {
+          result[sourceIdx] = mergeAssistantText(result[sourceIdx], message);
+        }
         continue;
       }
       result.push(message);
@@ -638,22 +748,65 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const filesActive =
     attachments.length > 0 &&
     isPreprocessingActive(getCurrentResponseProgressStatus(messages, "data-file"));
-  // Once the in-progress assistant message actually has text, it renders
-  // itself — the separate dots row below the message list would otherwise
-  // sit there for the entire remainder of the stream.
   const lastVisibleMessage = dedupedVisibleMessages[dedupedVisibleMessages.length - 1];
-  const lastAssistantHasText =
-    lastVisibleMessage?.role === "assistant" &&
-    lastVisibleMessage.parts.some(
-      (part) => part.type === "text" && (part as { text: string }).text.trim().length > 0
-    );
   const showTypingIndicator =
     status !== "ready" &&
     status !== "error" &&
     !searchActive &&
     !deepThinkActive &&
-    !filesActive &&
-    !lastAssistantHasText;
+    !filesActive;
+
+  // Rounded Continue pill under the final assistant reply when it looks
+  // unfinished (cut off mid-sentence / hanging code fence / stopped stream).
+  const lastAssistantText =
+    lastVisibleMessage?.role === "assistant"
+      ? lastVisibleMessage.parts
+          .filter((part) => part.type === "text")
+          .map((part) => (part as { text: string }).text)
+          .join("")
+      : "";
+  // A reply that was stopped while it was still thinking / searching / file-
+  // scanning has no text yet, but the process was interrupted just the same.
+  // DeepThink gets the "Stopped" state + Continue; web search / file scan
+  // terminates the whole response with "The response was interrupted".
+  const lastAssistantHasThinking =
+    lastVisibleMessage?.role === "assistant" &&
+    lastVisibleMessage.parts.some(
+      (part) => part.type === "data-thought" && (part as any).data?.status === "thinking"
+    );
+  const lastAssistantHasSearch =
+    lastVisibleMessage?.role === "assistant" &&
+    lastVisibleMessage.parts.some(
+      (part) =>
+        part.type === "data-search" ||
+        part.type === "data-file" ||
+        part.type === "tool-webSearch" ||
+        (part.type === "dynamic-tool" && (part as any).toolName === "webSearch")
+    );
+  const hasTextInterruption =
+    status === "ready" &&
+    lastVisibleMessage?.role === "assistant" &&
+    lastAssistantText.trim().length >= 10 &&
+    (stoppedMidGenerationRef.current || isUnfinishedText(lastAssistantText));
+  const hasProcessInterruption =
+    status === "ready" &&
+    stoppedMidGenerationRef.current &&
+    lastVisibleMessage?.role === "assistant" &&
+    lastAssistantText.trim().length < 10 &&
+    (lastAssistantHasThinking || lastAssistantHasSearch);
+
+  // "text": stopped/cut off mid-answer → red hint + Continue.
+  // "thinking": stopped while DeepThink was running → "Stopped" + Continue.
+  // "search": stopped while web-searching / file-scanning → terminate.
+  const interruptedKind: "text" | "thinking" | "search" | undefined = hasTextInterruption
+    ? "text"
+    : hasProcessInterruption
+    ? lastAssistantHasSearch
+      ? "search"
+      : "thinking"
+    : undefined;
+
+  const showContinueButton = interruptedKind === "text" || interruptedKind === "thinking";
 
   useEffect(() => {
     if (isLoading && !wasLoadingRef.current) {
@@ -805,18 +958,57 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     return () => cancelAnimationFrame(frame);
   }, [isActive, status]);
 
+  // Persist messages continuously: debounced during streaming so a tab kill
+  // mid-generation (e.g. switching to Telegram) never loses the conversation,
+  // and immediately once generation stops.
   useEffect(() => {
+    if (messages.length === 0) return;
+
     if (isLoading) {
-      // Don't save during streaming; clear any pending save
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        saveTimeoutRef.current = null;
+        saveMessages(chatId, messages as unknown[]);
+      }, 600);
       return;
     }
 
-    // After streaming stops, save immediately
-    if (messages.length > 0) {
-      saveMessages(chatId, messages as unknown[]);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
     }
+    saveMessages(chatId, messages as unknown[]);
+    // Generation finished — make sure the completed conversation also reaches
+    // the server backup (debounced), not only when the page is hidden.
+    backupNow({ messages: { [chatId]: messages as unknown[] } });
   }, [messages, chatId, isLoading]);
+
+  // Flush the pending save and push the server backup when the page is
+  // hidden / unloaded (the exact moment a WebView gets frozen or killed).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const flush = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      if (messagesRef.current.length > 0) {
+        saveMessages(chatId, messagesRef.current);
+      }
+      flushBackup({ messages: { [chatId]: messagesRef.current } });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [chatId]);
 
   useEffect(() => {
     const conversationMessages = messages.filter((message) => message.role !== "system");
@@ -1011,6 +1203,43 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       return combined;
     });
   }, []);
+
+  const handleContinue = useCallback(() => {
+    if (isLoading) return;
+    stoppedMidGenerationRef.current = false;
+    // The instruction is an internal user message: it tells the model to keep
+    // writing from the exact cutoff point. It is hidden from the UI and
+    // removed from history once the continuation is merged into the original
+    // reply — the user never sees a "Continue" prompt bubble.
+    // The exact ending of the reply is quoted inside so the model anchors on
+    // where to resume without re-typing the tail (the usual cause of
+    // duplicated text after a Continue). messagesRef is always current.
+    const lastAssistant = [...messagesRef.current]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    const tailText = lastAssistant
+      ? lastAssistant.parts
+          .filter((p) => p.type === "text")
+          .map((p) => (p as { text: string }).text)
+          .join("")
+      : "";
+    // When the reply was stopped while DeepThink was running, resume the same
+    // way: re-enable reasoning so the "Thinking…" phase picks up again.
+    const resumeThinking = lastAssistant?.parts.some(
+      (p) => p.type === "data-thought" && (p as any).data?.status === "thinking"
+    );
+    sendMessage(
+      { text: buildContinueInstruction(tailText) },
+      {
+        // Continue runs without web search / tool calling. DeepThink is kept
+        // only when the reply was interrupted mid-thought, so "Thinking…"
+        // resumes exactly where it stopped; otherwise it stays off. The full
+        // history (with the exact ending quoted above) is sent just like a
+        // normal message, so the model resumes from where it left off.
+        body: { deepThink: Boolean(resumeThinking), webSearch: false },
+      }
+    );
+  }, [isLoading, sendMessage]);
 
   const handleSubmit = async () => {
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
@@ -1493,7 +1722,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             <div className="max-w-3xl mx-auto animate-in fade-in duration-300">
               {dedupedVisibleMessages.map((message, i) => {
                 const isLastAssistant = i === dedupedVisibleMessages.length - 1 && message.role === "assistant";
-                const isCurrentStreamingAssistant = isLastAssistant && status === "streaming";
+                const isCurrentStreamingAssistant = isLastAssistant && isLoading;
                 return (
                   <div key={message.id} data-message-id={message.id}>
                     <ChatMessage
@@ -1511,6 +1740,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                           : undefined
                       }
                       isStreaming={isCurrentStreamingAssistant}
+                      interrupted={isLastAssistant ? interruptedKind : undefined}
                       disableActions={isLoading}
                       animateIn={!noAnimateIdsRef.has(message.id)}
                     />
@@ -1518,6 +1748,18 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 );
               })}
               {showTypingIndicator && <TypingIndicator />}
+              {showContinueButton && (
+                <div className="flex w-full max-w-3xl mx-auto pl-12 sm:pl-14 py-1">
+                  <button
+                    onClick={handleContinue}
+                    disabled={isLoading}
+                    className="flex items-center gap-1.5 rounded-full bg-[#1a1a1c] hover:bg-[#242428] border border-white/10 text-[#ccc] hover:text-white text-xs font-medium px-3.5 py-1.5 transition-colors duration-200 select-none disabled:opacity-50"
+                  >
+                    <Redo2 className="w-3.5 h-3.5" />
+                    Continue
+                  </button>
+                </div>
+              )}
               {displayError && (
                 <div className="flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-3 sm:py-4">
                   <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1">

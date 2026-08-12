@@ -37,6 +37,14 @@ type Props = {
   onEdit?: (messageId: string, newText: string) => void;
   /** true while this specific assistant message is still being generated */
   isStreaming?: boolean;
+  /** how this reply was interrupted:
+      - "text": stopped/cut off mid-answer — red "Response was interrupted"
+        hint next to the retry button
+      - "thinking": stopped while DeepThink was running — thought block shows
+        "Stopped" and a Continue pill is available (no red hint)
+      - "search": stopped while web-searching / file-scanning — the progress
+        UI is terminated and only "The response was interrupted" + retry show */
+  interrupted?: "text" | "thinking" | "search";
   /** true while any response is in flight (disables edit/retry to avoid overlap) */
   disableActions?: boolean;
   /** false for messages already present when the chat loaded, so history doesn't replay its entrance animation */
@@ -194,12 +202,6 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
       >
         <pre className="m-0 font-mono text-[11px] sm:text-xs leading-relaxed text-[#e8e8e8] whitespace-pre">
           <code className={className}>{codeString}</code>
-          {isStreaming && (
-            <span
-              aria-hidden="true"
-              className="inline-block w-[2px] h-3 sm:h-3.5 -mb-0.5 ml-0.5 bg-white/80 animate-pulse align-middle"
-            />
-          )}
         </pre>
       </div>
     </div>
@@ -459,19 +461,17 @@ const MarkdownSegment = memo(function MarkdownSegment({
 function StreamingMarkdown({
   text,
   isStreaming,
-  caretClassName = "w-1.5 h-3.5 ml-0.5 bg-white/80",
 }: {
   text: string;
   isStreaming: boolean;
-  caretClassName?: string;
 }) {
   // Fully derived from props (no state, no effects — nothing to sync after
   // paint, so streaming can't double-render or fall behind).
-  const { segments, tail, tailIsPlainText, caretHidden } = useMemo(() => {
+  const { segments, tail, tailIsPlainText } = useMemo(() => {
     const all = splitMarkdownSegments(text);
 
     if (!isStreaming) {
-      return { segments: all, tail: "", tailIsPlainText: false, caretHidden: true };
+      return { segments: all, tail: "", tailIsPlainText: false };
     }
 
     // Short messages render fully as markdown (the parse is bounded); once the
@@ -495,20 +495,15 @@ function StreamingMarkdown({
     const tailText = text.slice(end);
 
     // A fence opened in the settled region means the tail starts inside a code
-    // block → render it as plain text (markdown would mis-format it). The
-    // caret is hidden whenever a CodeBlock is on screen (fence opened in the
-    // settled region, or the tail itself ends inside an open fence) — that
-    // block already draws its own streaming caret.
+    // block → render it as plain text (markdown would mis-format it).
     // (Segments are fence-contained, so scanning the committed region once is
     // equivalent to XOR-ing every segment's parity.)
     const settledFenceOpen = countFenceLines(text.slice(0, end)) % 2 === 1;
-    const tailFenceOpen = countFenceLines(tailText) % 2 === 1;
 
     return {
       segments: committed,
       tail: tailText,
       tailIsPlainText: settledFenceOpen,
-      caretHidden: settledFenceOpen || tailFenceOpen,
     };
   }, [text, isStreaming]);
 
@@ -524,24 +519,15 @@ function StreamingMarkdown({
         {tail && tailIsPlainText && (
           <span className="whitespace-pre-wrap break-words">{tail}</span>
         )}
-        {isStreaming && !caretHidden && (
-          <span
-            aria-hidden="true"
-            className={cn(
-              "inline-block animate-pulse align-middle rounded-sm",
-              caretClassName
-            )}
-          />
-        )}
       </div>
     </StreamingContext.Provider>
   );
 }
 
-function ThoughtBlock({ data }: { data: any }) {
+function ThoughtBlock({ data, stopped }: { data: any; stopped?: boolean }) {
   const status = data?.status;
   const seconds = data?.seconds;
-  const isThinking = status === "thinking";
+  const isThinking = status === "thinking" && !stopped;
   const [open, setOpen] = useState(isThinking);
   const thoughtText = data?.text ?? "";
 
@@ -574,6 +560,8 @@ function ThoughtBlock({ data }: { data: any }) {
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
           {isThinking
             ? "Thinking…"
+            : stopped
+            ? "Stopped"
             : status === "error"
             ? "Thinking (unavailable)"
             : `Thought for ${seconds ?? 1} second${seconds === 1 ? "" : "s"}`}
@@ -594,7 +582,6 @@ function ThoughtBlock({ data }: { data: any }) {
               <StreamingMarkdown
                 text={thoughtText}
                 isStreaming={isThinking}
-                caretClassName="w-1.5 h-3.5 ml-1 bg-[#4a6cf7]"
               />
             </div>
           ) : isThinking ? (
@@ -934,6 +921,7 @@ export function ChatMessage({
   onRegenerate,
   onEdit,
   isStreaming,
+  interrupted,
   disableActions,
   animateIn = true,
   branchInfo,
@@ -1023,10 +1011,10 @@ export function ChatMessage({
           </div>
         )}
 
-        {!isUser && scanParts.length > 0 && (
+        {!isUser && interrupted !== "search" && scanParts.length > 0 && (
           <FileScanBlock parts={scanParts} isStreaming={Boolean(isStreaming)} />
         )}
-        {!isUser &&
+        {!isUser && interrupted !== "search" &&
           (toolParts.length > 0
             ? toolParts.map((p, i) => (
                 <ToolSearchBlock key={`tool-${i}`} part={p as any} />
@@ -1034,7 +1022,15 @@ export function ChatMessage({
             : searchParts.map((p, i) => (
                 <SearchBlock key={`s-${i}`} data={(p as any).data} />
               )))}
-        {!isUser && thoughtParts.map((p, i) => <ThoughtBlock key={`t-${i}`} data={(p as any).data} />)}
+        {!isUser && interrupted !== "search" && thoughtParts.map((p, i) => (
+          <ThoughtBlock key={`t-${i}`} data={(p as any).data} stopped={interrupted === "thinking"} />
+        ))}
+
+        {!isUser && interrupted === "search" && (
+          <div className="text-xs sm:text-sm text-rose-400 font-medium animate-in fade-in duration-200">
+            The response was interrupted
+          </div>
+        )}
 
         {isUser && isEditing ? (
           <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3 py-2 sm:px-4 sm:py-3 text-white w-full min-w-[200px] sm:min-w-[240px] shadow-lg animate-in fade-in duration-200">
@@ -1104,13 +1100,15 @@ export function ChatMessage({
         {/* Action row */}
         {!isEditing && showActions && (
           <div className={cn("flex items-center gap-1 text-[#666] animate-in fade-in duration-200", isUser ? "justify-end" : "justify-start")}>
-            <button
-              onClick={handleCopy}
-              className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90"
-              aria-label="Copy message"
-            >
-              {copied ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4a6cf7] scale-110 transition-transform" /> : <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
-            </button>
+            {interrupted !== "search" && (
+              <button
+                onClick={handleCopy}
+                className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90"
+                aria-label="Copy message"
+              >
+                {copied ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4a6cf7] scale-110 transition-transform" /> : <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
+              </button>
+            )}
 
             {isUser && onEdit && (
               <button
@@ -1132,6 +1130,12 @@ export function ChatMessage({
               >
                 <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
+            )}
+
+            {!isUser && interrupted === "text" && (
+              <span className="ml-1 text-[11px] sm:text-xs text-rose-400 font-medium select-none animate-in fade-in duration-200">
+                Response was interrupted
+              </span>
             )}
 
             {branchInfo && branchInfo.total > 1 && (
@@ -1168,9 +1172,9 @@ export function TypingIndicator() {
   return (
     <div className="flex w-full max-w-3xl mx-auto mt-1 sm:mt-2 py-1 animate-in fade-in duration-300">
       <div className="flex items-center gap-1 py-1">
-        <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:0ms]" />
-        <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:150ms]" />
-        <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:300ms]" />
+        <span className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:0ms]" />
+        <span className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:150ms]" />
+        <span className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:300ms]" />
       </div>
     </div>
   );

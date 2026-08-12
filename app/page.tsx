@@ -17,6 +17,7 @@ import {
   saveModelSettings,
 } from "@/lib/storage";
 import { refreshPaidTierStatus } from "@/lib/paid-tier";
+import { backupNow, clearBackup, flushBackup, restoreFromServer } from "@/lib/history-backup";
 
 type Model = "instant" | "expert";
 
@@ -90,6 +91,28 @@ export default function Home() {
     // back to an older chat just because the current one has no messages.
     const urlChatId = getChatIdFromUrl();
     const lastChatId = loadLastChatId();
+
+    // WebViews (Telegram's in-app browser, etc.) can evict localStorage. When
+    // the local store is empty, pull the server-side backup so the user does
+    // not see their chats "disappear".
+    if (uniqueChats.length === 0) {
+      void restoreFromServer().then((restored) => {
+        if (!restored || restored.chats.length === 0) return;
+        const restoredChats = dedupeChats(restored.chats.map(toChat));
+        setChats(restoredChats);
+        const restoredLastId = restored.lastChatId ?? loadLastChatId();
+        if (restoredLastId) {
+          saveLastChatId(restoredLastId);
+          if (restoredChats.some((c) => c.id === restoredLastId)) {
+            setActiveChatId(restoredLastId);
+            updateChatUrl(restoredLastId, true);
+          } else {
+            pendingChatIdRef.current = restoredLastId;
+            setPendingChatId(restoredLastId);
+          }
+        }
+      });
+    }
     if (urlChatId && uniqueChats.some((chat) => chat.id === urlChatId)) {
       setActiveChatId(urlChatId);
       saveLastChatId(urlChatId);
@@ -130,6 +153,27 @@ export default function Home() {
     if (!hydratedRef.current) return;
     saveChats(dedupeChats(chats).map(toStored));
   }, [chats]);
+
+  // Push the chat list + message history to the server backup whenever it
+  // changes (debounced), and flush immediately when the page is hidden or
+  // about to be unloaded (user switches to Telegram, tab gets killed, etc.).
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    backupNow();
+  }, [chats]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleHide = () => flushBackup();
+    document.addEventListener("visibilitychange", handleHide);
+    window.addEventListener("pagehide", handleHide);
+    window.addEventListener("beforeunload", handleHide);
+    return () => {
+      document.removeEventListener("visibilitychange", handleHide);
+      window.removeEventListener("pagehide", handleHide);
+      window.removeEventListener("beforeunload", handleHide);
+    };
+  }, []);
 
   const handleUpdateModelSettings = useCallback((newSettings: ModelSettings) => {
     setModelSettings(newSettings);
@@ -187,6 +231,7 @@ export default function Home() {
 
   const handleDeleteChat = useCallback((chatId: string) => {
     deleteChat(chatId);
+    clearBackup(chatId);
     setChats((prev) => prev.filter((chat) => chat.id !== chatId));
     setActiveChatId((current) => {
       if (current === chatId) {
@@ -205,6 +250,7 @@ export default function Home() {
 
   const handleDeleteAllChats = useCallback(() => {
     clearAllChats();
+    clearBackup();
     setChats([]);
     setActiveChatId(null);
     const nextId = generateId();

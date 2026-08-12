@@ -56,6 +56,61 @@ const LAST_CHAT_KEY = "nova_last_chat_v1";
 const messagesKey = (chatId: string) => `${MESSAGES_PREFIX}${chatId}`;
 const filesKey = (chatId: string) => `${FILES_PREFIX}${chatId}`;
 
+// Stable, device-scoped identifier used for server-side history backup. It is
+// written to BOTH a long-lived cookie and localStorage so that a WebView
+// (e.g. Telegram's in-app browser) clearing localStorage cannot orphan the
+// user's backup: the cookie usually survives, and even a full site-data wipe
+// only costs a fresh id for genuinely brand-new visitors.
+const CLIENT_ID_KEY = "nova_client_id_v1";
+const CLIENT_ID_COOKIE = "nova_client_id_v1";
+
+function readCookie(name: string): string | null {
+  if (!isBrowser()) return null;
+  const match = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function writeCookie(name: string, value: string) {
+  if (!isBrowser()) return;
+  // 10-year expiry, available on every path, SameSite=Lax keeps it usable for
+  // top-level navigations (the app is a SPA; no cross-site embedding needed).
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=Fri, 31 Dec 9999 23:59:59 GMT; path=/; SameSite=Lax`;
+}
+
+export function getClientId(): string {
+  if (!isBrowser()) return "";
+
+  const fromCookie = readCookie(CLIENT_ID_COOKIE);
+  if (fromCookie) {
+    // Keep localStorage in sync so the server-mode logic that reads the id
+    // from storage still works even if the cookie is ever stripped.
+    try {
+      if (window.localStorage.getItem(CLIENT_ID_KEY) !== fromCookie) {
+        window.localStorage.setItem(CLIENT_ID_KEY, fromCookie);
+      }
+    } catch {
+      // storage unavailable — the cookie alone is enough
+    }
+    return fromCookie;
+  }
+
+  const fromStorage = window.localStorage.getItem(CLIENT_ID_KEY);
+  if (fromStorage) {
+    writeCookie(CLIENT_ID_COOKIE, fromStorage);
+    return fromStorage;
+  }
+
+  const generated = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  try {
+    window.localStorage.setItem(CLIENT_ID_KEY, generated);
+  } catch {
+    // storage full / disabled — the cookie still carries the id
+  }
+  writeCookie(CLIENT_ID_COOKIE, generated);
+  return generated;
+}
+
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -133,10 +188,30 @@ export function loadMessages<T = unknown>(chatId: string): T[] {
 
 export function saveMessages(chatId: string, messages: unknown[]) {
   if (!isBrowser()) return;
+  const deduped = dedupeById(messages as Array<{ id?: string }>);
+  if (deduped.length === 0) return;
   try {
-    window.localStorage.setItem(messagesKey(chatId), JSON.stringify(dedupeById(messages as Array<{ id?: string }>)));
+    window.localStorage.setItem(messagesKey(chatId), JSON.stringify(deduped));
+    return;
   } catch {
-    // storage full — drop silently rather than crash the chat
+    // Quota exceeded or storage disabled — fall back to a smaller payload
+    // instead of dropping the save entirely: strip heavy data URLs (file
+    // attachments are the main quota hog) and retry once.
+  }
+  try {
+    const slim = deduped.map((m: any) => ({
+      ...m,
+      parts: Array.isArray(m?.parts)
+        ? m.parts.map((part: any) =>
+            part?.type === "file" && typeof part?.url === "string" && part.url.startsWith("data:")
+              ? { ...part, url: "" }
+              : part
+          )
+        : m?.parts,
+    }));
+    window.localStorage.setItem(messagesKey(chatId), JSON.stringify(slim));
+  } catch {
+    // storage truly unavailable — the server-side backup still has the data
   }
 }
 
@@ -154,6 +229,41 @@ export function deleteChat(chatId: string) {
 }
 
 /** Wipes every chat and every chat's message history and files from localStorage. */
+export function exportAllHistory(): { chats: StoredChat[]; messages: Record<string, unknown[]> } {
+  const chats = loadChats();
+  const messages: Record<string, unknown[]> = {};
+  for (const chat of chats) {
+    const stored = loadMessages(chat.id);
+    if (stored.length > 0) messages[chat.id] = stored;
+  }
+  return { chats, messages };
+}
+
+export function importAllHistory(history: { chats: StoredChat[]; messages?: Record<string, unknown[]> }): boolean {
+  if (!isBrowser()) return false;
+  if (!Array.isArray(history?.chats) || history.chats.length === 0) return false;
+  const existing = new Set(loadChats().map((c) => c.id));
+  const toAdd = history.chats.filter((c) => c && typeof c.id === "string" && !existing.has(c.id));
+  let changed = false;
+  if (toAdd.length > 0) {
+    saveChats(dedupeById([...loadChats(), ...toAdd]));
+    changed = true;
+  }
+  const remoteMessages = history.messages ?? {};
+  for (const chatId of Object.keys(remoteMessages)) {
+    const msgs = remoteMessages[chatId];
+    if (!Array.isArray(msgs) || msgs.length === 0) continue;
+    if (loadMessages(chatId).length > 0) continue; // local copy wins
+    try {
+      window.localStorage.setItem(messagesKey(chatId), JSON.stringify(dedupeById(msgs as Array<{ id?: string }>)));
+      changed = true;
+    } catch {
+      // skip — server copy stays available for the next restore attempt
+    }
+  }
+  return changed;
+}
+
 export function clearAllChats() {
   if (!isBrowser()) return;
   try {
