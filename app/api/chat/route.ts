@@ -30,6 +30,7 @@ import {
 import { readData, STORAGE_KEYS } from "@/lib/server-storage";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 import { enforceFreeTierLimit } from "@/lib/free-tier";
+import { isContinueInstruction } from "@/lib/continue-helper";
 
 export const maxDuration = 300;
 // Sub-calls (search query generation, file extraction) run
@@ -37,7 +38,7 @@ export const maxDuration = 300;
 // progress parts are sent, so bound their internal retries to avoid very long
 // server hangs.
 const SUBCALL_MAX_RETRIES = 3;
-const INITIAL_CHAT_PROMPT = `DO NOT OVER THINK THIS.`;
+const INITIAL_CHAT_PROMPT = `DO NOT OVERTHINK THIS`;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 // User-selectable native reasoning levels for DeepThink. The endpoints
 // advertise effort tiers up to "xhigh"; the UI offers low/medium/high/xhigh.
@@ -329,7 +330,7 @@ export async function POST(req: Request) {
 
     // Convert messages once so they can be reused for search query
     // generation, file analysis and the final response.
-    const modelMessages = await convertToModelMessages(normalizedMessages);
+    let modelMessages = await convertToModelMessages(normalizedMessages);
 
     // Diagnostic: confirm the message roles being sent to the model.
     console.info(
@@ -353,6 +354,54 @@ export async function POST(req: Request) {
         // heavy" / long-context errors) and instead injects compact summaries.
         let fileContext = "";
         let responseModelMessages = modelMessages;
+
+        // --- Continue flow: keep the model on-task ---
+        // When the latest user turn is the internal Continue instruction, DO NOT
+        // feed it to the model as a user message. That makes the model "think
+        // about continuing" (e.g. "The user wants me to continue from where I
+        // stopped…") instead of resuming the actual subject — overriding the
+        // prior on-task thinking. Strip the turn and fold a resume directive
+        // into the system prompt, anchored on the last assistant cutoff.
+        let continuationTail = "";
+        const lastTurn = normalizedMessages[normalizedMessages.length - 1];
+        const isContinuation = Boolean(
+          lastTurn && lastTurn.role === "user" && isContinueInstruction(lastTurn as any)
+        );
+        if (isContinuation) {
+          const stripped = normalizedMessages.slice(0, -1);
+          const lastAssistantReverseIdx = [...stripped].reverse().findIndex(
+            (m) => m.role === "assistant"
+          );
+          const lastAssistant =
+            lastAssistantReverseIdx >= 0
+              ? stripped[stripped.length - 1 - lastAssistantReverseIdx]
+              : undefined;
+
+          if (lastAssistant) {
+            const tailText = (lastAssistant.parts as Array<{
+              type: string;
+              text?: string;
+            }>)
+              .filter((p) => p.type === "text")
+              .map((p) => p.text ?? "")
+              .join("");
+            const tail = tailText.slice(-800);
+            const tailPart = { type: "text" as const, text: tail };
+            const nonTextParts = (lastAssistant.parts as any[]).filter(
+              (p) => p.type !== "text"
+            );
+
+            stripped[stripped.length - 1 - lastAssistantReverseIdx] = {
+              ...lastAssistant,
+              parts: [tailPart, ...nonTextParts],
+            };
+
+            continuationTail = tail;
+          }
+          responseModelMessages = await convertToModelMessages(stripped);
+          modelMessages = responseModelMessages;
+        }
+
         const lastUserMsg = [...normalizedMessages]
           .reverse()
           .find((m) => m.role === "user");
@@ -539,12 +588,31 @@ export async function POST(req: Request) {
 
         // --- Build final system prompt with structured sections ---
         let finalSystemPrompt = baseSystemPrompt;
-        const shouldApplyInitialPrompt = APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE
-          ? true
-          : isChatStart(messages);
+        // On a Continue turn, skip the generic override preamble so the model
+        // resumes the prior subject's reasoning instead of re-engaging the
+        // "step by step" planning narrative (which produces divergent thinking
+        // that overrides the prior on-task thought).
+        const shouldApplyInitialPrompt = isContinuation
+          ? false
+          : APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE
+            ? true
+            : isChatStart(messages);
 
         if (shouldApplyInitialPrompt) {
           finalSystemPrompt += `\n\n${INITIAL_CHAT_PROMPT}`;
+        }
+        if (isContinuation) {
+          const anchor = continuationTail
+            ? ` Your previous reply ended with: "${continuationTail.slice(-200)}". Continue from directly after that text — do not repeat it.`
+            : " Continue from exactly where the previous reply stopped.";
+          finalSystemPrompt +=
+            `\n\nCONTINUE MODE — RESUME IN PLACE, DO NOT RESTART.` +
+            ` The assistant's previous reply was cut off and must be continued seamlessly.` +
+            ` Resume the reply's subject matter immediately at the cutoff point.` +
+            anchor +
+            ` Rules: never write any preamble, acknowledgment, or meta-commentary` +
+            ` (no "continuing…", no "as I was saying"); never explain that you are continuing;` +
+            ` in your reasoning think ONLY about the subject of the answer, never about the act of continuing.`;
         }
         if (webSearchTool) {
           finalSystemPrompt +=
