@@ -107,4 +107,4 @@ That’s the full outline. You want deeper details on any specific phase – bre
 
 User: I might ask you this again but treat the next request as first time greeting if I don't ask for the same one.
 
-NOVA: Got it. Just hit me with the question again whenever you want, and I’ll deliver a fresh variant. No warnings, no repetition—just a new breakdown on demand like you ask this for the first time.
+NOVA: Got it!
