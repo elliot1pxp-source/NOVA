@@ -44,6 +44,8 @@ type GlobalSettings = {
   FALLBACK_MODELS?: Record<string, string>;
   /** When true, chat history is converted to a single string and injected into the system prompt instead of being sent as a messages array. Useful for web-cookie models that don't support message arrays. */
   stringBasedChatHistory?: boolean;
+  /** When true, automatically detect web-cookie models (containing "web" in model name) and apply string-based chat history. */
+  autoDetectWebCookieModels?: boolean;
 };
 
 export default function AdminPage() {
@@ -772,39 +774,77 @@ export default function AdminPage() {
                     <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Current Environment Values</p>
                     <p className="text-[11px] text-[#6d7288]">These values are used by the runtime when paid access is not active.</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="useFallbackAsPrimary"
-                      type="checkbox"
-                      checked={Boolean(settings.useFallbackAsPrimary)}
-                      onChange={(e) => {
-                        const nextSettings = { ...settings, useFallbackAsPrimary: e.target.checked };
-                        setSettings(nextSettings);
-                        setCurrentEnvironmentInputs(buildCurrentEnvironmentInputs(nextSettings, envValues));
-                      }}
-                      className="h-4 w-4 rounded border-white/10 bg-white/5 text-amber-400 focus:ring-amber-400"
-                    />
-                    <label htmlFor="useFallbackAsPrimary" className="text-xs text-[#c1c5d0]">
-                      Make fallback endpoint and models primary
-                    </label>
-                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 ml-auto">
-                  <input
-                    id="stringBasedChatHistory"
-                    type="checkbox"
-                    checked={Boolean(settings.stringBasedChatHistory)}
-                    onChange={(e) => {
-                      const nextSettings = { ...settings, stringBasedChatHistory: e.target.checked };
+                {/* Toggle row: fallback primary */}
+                <label className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3 cursor-pointer hover:bg-white/[0.05] transition-colors">
+                  <div className="pr-3">
+                    <span className="text-xs font-medium text-white">Make fallback endpoint primary</span>
+                    <p className="text-[10px] text-[#6d7288] mt-0.5">Swap primary/fallback endpoints and model IDs.</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={Boolean(settings.useFallbackAsPrimary)}
+                    onClick={() => {
+                      const nextSettings = { ...settings, useFallbackAsPrimary: !settings.useFallbackAsPrimary };
+                      setSettings(nextSettings);
+                      setCurrentEnvironmentInputs(buildCurrentEnvironmentInputs(nextSettings, envValues));
+                    }}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+                      Boolean(settings.useFallbackAsPrimary) ? "bg-amber-400" : "bg-white/10"
+                    )}
+                  >
+                    <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", Boolean(settings.useFallbackAsPrimary) ? "translate-x-4" : "translate-x-0.5")} />
+                  </button>
+                </label>
+
+                {/* Toggle row: string-based chat history */}
+                <label className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3 cursor-pointer hover:bg-white/[0.05] transition-colors">
+                  <div className="pr-3">
+                    <span className="text-xs font-medium text-white">String-based chat history</span>
+                    <p className="text-[10px] text-[#6d7288] mt-0.5">Inject history as text (for web-cookie models that reject message arrays).</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={Boolean(settings.stringBasedChatHistory)}
+                    onClick={() => {
+                      const nextSettings = { ...settings, stringBasedChatHistory: !settings.stringBasedChatHistory };
                       setSettings(nextSettings);
                     }}
-                    className="h-4 w-4 rounded border-white/10 bg-white/5 text-amber-400 focus:ring-amber-400"
-                  />
-                  <label htmlFor="stringBasedChatHistory" className="text-xs text-[#c1c5d0]">
-                    String-based chat history (for web-cookie models)
-                  </label>
-                </div>
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+                      Boolean(settings.stringBasedChatHistory) ? "bg-amber-400" : "bg-white/10"
+                    )}
+                  >
+                    <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", Boolean(settings.stringBasedChatHistory) ? "translate-x-4" : "translate-x-0.5")} />
+                  </button>
+                </label>
+
+                {/* Toggle row: auto-detect web cookie models */}
+                <label className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3 cursor-pointer hover:bg-white/[0.05] transition-colors">
+                  <div className="pr-3">
+                    <span className="text-xs font-medium text-white">Auto-detect web-cookie models</span>
+                    <p className="text-[10px] text-[#6d7288] mt-0.5">Auto-apply string history when a model ID contains "web".</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={Boolean(settings.autoDetectWebCookieModels)}
+                    onClick={() => {
+                      const nextSettings = { ...settings, autoDetectWebCookieModels: !settings.autoDetectWebCookieModels };
+                      setSettings(nextSettings);
+                    }}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+                      Boolean(settings.autoDetectWebCookieModels) ? "bg-amber-400" : "bg-white/10"
+                    )}
+                  >
+                    <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", Boolean(settings.autoDetectWebCookieModels) ? "translate-x-4" : "translate-x-0.5")} />
+                  </button>
+                </label>
 
                 <div className="grid gap-3">
                   <div>

@@ -128,6 +128,8 @@ type GlobalSettings = {
   FALLBACK_MODELS?: Record<string, string>;
   /** When true, chat history is converted to a single string and injected into the system prompt instead of being sent as a messages array. Useful for web-cookie models that don't support message arrays. */
   stringBasedChatHistory?: boolean;
+  /** When true, automatically detect web-cookie models (containing "web" in model name) and apply string-based chat history. */
+  autoDetectWebCookieModels?: boolean;
 };
 
 async function readGlobalSettings(): Promise<GlobalSettings> {
@@ -273,6 +275,7 @@ export async function POST(req: Request) {
     runtimePrimaryModels = globalSettings.PRIMARY_MODELS;
     runtimeFallbackModels = globalSettings.FALLBACK_MODELS;
     const stringBasedChatHistory = Boolean(globalSettings.stringBasedChatHistory);
+    const autoDetectWebCookieModels = Boolean(globalSettings.autoDetectWebCookieModels);
 
     if (paidCode?.expiresAt && new Date(paidCode.expiresAt) > new Date()) {
       if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
@@ -287,6 +290,18 @@ export async function POST(req: Request) {
       [apiKey, fallbackApiKey] = [fallbackApiKey, apiKey];
       [runtimePrimaryModels, runtimeFallbackModels] = [runtimeFallbackModels, runtimePrimaryModels];
     }
+
+    // Resolve the actual model ID that will be used and detect web-cookie models
+    // (e.g. "ds-web/deepseek-v4-flash"). When autoDetect is on, a model whose id
+    // contains "web" forces string-based chat history automatically.
+    const resolvedModelId =
+      (useFallbackAsPrimary ? runtimeFallbackModels : runtimePrimaryModels)?.[modelKey] ??
+      runtimePrimaryModels?.[modelKey] ??
+      modelId;
+    const isWebCookieModel = /web/i.test(resolvedModelId);
+
+    const effectiveStringBasedChatHistory =
+      stringBasedChatHistory || (autoDetectWebCookieModels && isWebCookieModel);
 
     const providerClients = createProviderClients(apiKey, {
       primaryBaseURL,
@@ -668,7 +683,7 @@ export async function POST(req: Request) {
           // String-based chat history: inject formatted history into system prompt
           // and only send the last user message. For web-cookie models that don't
           // support message arrays (e.g., ds-web/deepseek-v4-flash).
-          if (stringBasedChatHistory && normalizedMessages.length > 1) {
+          if (effectiveStringBasedChatHistory && normalizedMessages.length > 1) {
             const lastUserMsg = [...normalizedMessages].reverse().find((m) => m.role === "user");
             const historyMessages = normalizedMessages.slice(0, -1);
 
