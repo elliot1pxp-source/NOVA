@@ -14,21 +14,31 @@ import {
 } from "@/lib/paid-tier";
 
 // Renders text with `find` occurrences wrapped in a <mark>, used as a backdrop
-// layer behind a transparent <textarea> to highlight matches. Text is emitted
-// as React nodes (never HTML), so there is no injection risk.
-function HighlightedText({ text, find }: { text: string; find: string }) {
+// layer behind a transparent <textarea> to highlight matches. The active match
+// (the one Find Next/Prev is currently on) is highlighted more strongly. Text
+// is emitted as React nodes (never HTML), so there is no injection risk.
+function HighlightedText({ text, find, activeIndex }: { text: string; find: string; activeIndex?: number }) {
   if (!find) return <>{text}</>;
   const segments: ReactNode[] = [];
   let rest = text;
   let key = 0;
   let pos = rest.indexOf(find);
+  let matchNo = 0;
   while (pos !== -1) {
     if (pos > 0) segments.push(rest.slice(0, pos));
+    const isActive = matchNo === activeIndex;
     segments.push(
-      <mark key={key++} className="rounded-[2px] bg-amber-400/50 text-transparent">
+      <mark
+        key={key++}
+        className={cn(
+          "rounded-[2px] text-transparent",
+          isActive ? "bg-amber-300 ring-1 ring-amber-200" : "bg-amber-400/50"
+        )}
+      >
         {find}
       </mark>
     );
+    matchNo++;
     rest = rest.slice(pos + find.length);
     pos = rest.indexOf(find);
   }
@@ -109,7 +119,7 @@ export default function AdminPage() {
   const [expandScreen, setExpandScreen] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
-  const [goToLine, setGoToLine] = useState("");
+  const [matchIndex, setMatchIndex] = useState(-1);
   const expandedTextareaRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -123,20 +133,43 @@ export default function AdminPage() {
     }
   };
 
-  // Jump the caret to the start of a given 1-based line and scroll it into view.
-  const goToLineInEditor = () => {
+  // All non-overlapping start offsets of the current find term.
+  const promptText = settings.SYSTEM_PROMPT ?? "";
+  const findMatches: number[] = (() => {
+    if (!findText) return [];
+    const out: number[] = [];
+    let from = 0;
+    let p = promptText.indexOf(findText, from);
+    while (p !== -1) {
+      out.push(p);
+      from = p + findText.length;
+      p = promptText.indexOf(findText, from);
+    }
+    return out;
+  })();
+
+  // Step through matches one by one (Find Next / Previous), selecting the match
+  // and scrolling its line into view. `raw` may go out of range — it wraps.
+  const goToMatch = (raw: number) => {
+    if (findMatches.length === 0) return;
+    const idx = ((raw % findMatches.length) + findMatches.length) % findMatches.length;
     const ta = expandedTextareaRef.current;
     if (!ta) return;
-    const text = settings.SYSTEM_PROMPT ?? "";
-    const lines = text.split("\n");
-    const target = Math.max(1, Math.min(parseInt(goToLine, 10) || 1, lines.length));
-    const offset = lines.slice(0, target - 1).reduce((acc, l) => acc + l.length + 1, 0);
+    const start = findMatches[idx];
+    const end = start + findText.length;
     ta.focus();
-    ta.setSelectionRange(offset, offset + (lines[target - 1]?.length ?? 0));
+    ta.setSelectionRange(start, end);
+    const lineNum = promptText.slice(0, start).split("\n").length;
     const lh = parseFloat(getComputedStyle(ta).lineHeight) || 22;
-    ta.scrollTop = Math.max(0, (target - 1) * lh - ta.clientHeight / 2);
+    ta.scrollTop = Math.max(0, (lineNum - 1) * lh - ta.clientHeight / 2);
     syncBackdropScroll();
+    setMatchIndex(idx);
   };
+
+  // Reset the active match whenever the find term changes.
+  useEffect(() => {
+    setMatchIndex(-1);
+  }, [findText]);
 
   // Re-sync the highlight layer after open / content changes.
   useEffect(() => {
@@ -960,29 +993,30 @@ export default function AdminPage() {
                         Replace All
                       </button>
                       <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] font-medium text-[#8c8f9c]">Go to line</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={goToLine}
-                          onChange={(e) => setGoToLine(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") goToLineInEditor(); }}
-                          className="w-20 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1.5 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
-                          placeholder="line #"
-                        />
                         <button
                           type="button"
-                          onClick={goToLineInEditor}
-                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10"
+                          onClick={() => goToMatch(matchIndex - 1)}
+                          disabled={!findText}
+                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+                          aria-label="Previous match"
                         >
-                          Go
+                          Previous
+                        </button>
+                        <span className="text-[10px] text-[#6d7288]">
+                          {findText
+                            ? `match ${findMatches.length ? matchIndex + 1 : 0} of ${findMatches.length}`
+                            : "Enter text to find"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => goToMatch(matchIndex + 1)}
+                          disabled={!findText}
+                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+                          aria-label="Next match"
+                        >
+                          Next
                         </button>
                       </div>
-                      <span className="text-[10px] text-[#6d7288]">
-                        {findText
-                          ? `${(settings.SYSTEM_PROMPT ?? "").split(findText).length - 1} match(es)`
-                          : "Enter text to find"}
-                      </span>
                     </div>
                   </div>
 
@@ -993,7 +1027,7 @@ export default function AdminPage() {
                       aria-hidden="true"
                       className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-4 font-mono text-sm leading-relaxed text-transparent"
                     >
-                      <HighlightedText text={settings.SYSTEM_PROMPT ?? ""} find={findText} />
+                      <HighlightedText text={settings.SYSTEM_PROMPT ?? ""} find={findText} activeIndex={matchIndex} />
                     </div>
                     <textarea
                       ref={expandedTextareaRef}
