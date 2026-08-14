@@ -520,7 +520,16 @@ export function NovaSidebar({
   }, []);
 
   const groups = groupChats(chats);
-  const isPaidTierActive = getServerMode() === "paid" && getPaidTierData() !== null;
+  // Gate paid-tier detection behind a mount flag: the values are read from
+  // localStorage, which is unavailable during SSR. Without this, the server
+  // render (always "Free Tier") diverges from the client's first render
+  // (possibly "Paid Tier") and React throws a hydration mismatch. Both the
+  // server and the client's first render use the SSR-safe default; after mount
+  // the real value is computed. Kept as a derived value so later re-renders
+  // (e.g. after redeeming a code) still reflect the current state.
+  const [sidebarMounted, setSidebarMounted] = useState(false);
+  useEffect(() => setSidebarMounted(true), []);
+  const isPaidTierActive = sidebarMounted && getServerMode() === "paid" && getPaidTierData() !== null;
   const tierLabel = isPaidTierActive ? "Paid Tier" : "Free Tier";
 
   const openHistoryWithSearch = () => {

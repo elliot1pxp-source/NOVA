@@ -98,6 +98,10 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
   const [serverMode, setLocalServerMode] = useState<ServerMode>("global");
   const [verifyingServer, setVerifyingServer] = useState(false);
 
+  // Gate localStorage reads behind mount to avoid SSR hydration mismatch.
+  const [dialogMounted, setDialogMounted] = useState(false);
+  useEffect(() => setDialogMounted(true), []);
+
   // Initialize state based on paid tier data - re-verify with server
   useEffect(() => {
     if (!isOpen) return;
@@ -264,7 +268,7 @@ export function PaidTierDialog({ isOpen, onClose }: Props) {
         {/* Scrollable content */}
         <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
         {/* Server Mode Toggle - always visible when paid user */}
-        {(dialogState === "paid-user" || (getPaidTierData() !== null && getServerMode() === "global")) && (
+        {(dialogState === "paid-user" || (dialogMounted && getPaidTierData() !== null && getServerMode() === "global")) && (
           <div className="mb-4">
             <div className="flex items-center gap-1 bg-white/[0.03] border border-white/10 rounded-2xl p-1">
               <button

@@ -351,7 +351,15 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, [model, deepThink, reasoningLevel, webSearch, modelSettings, chatId]);
 
   const clientId = getPaidTierClientId();
-  const hasPaidAccess = (() => {
+  // Gate paid-tier detection behind a mount flag: getPaidTierData() and
+  // getServerMode() read localStorage, which is unavailable during SSR.
+  // Without this the server render ("Free Tier"/no-paid) diverges from the
+  // client's first render and React throws a hydration mismatch. Both the
+  // server and first client render evaluate the SSR-safe default; after
+  // mount the real value is computed.
+  const [chatMounted, setChatMounted] = useState(false);
+  useEffect(() => setChatMounted(true), []);
+  const hasPaidAccess = chatMounted && (() => {
     const paidData = getPaidTierData();
     const serverMode = getServerMode();
     return (

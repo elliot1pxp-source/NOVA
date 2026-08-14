@@ -24,10 +24,10 @@ import { createOpenAI } from "@ai-sdk/openai";
 // unprefixed IDs. Both expose the same logical models.
 
 export const PRIMARY_MODELS: Record<string, string> = {
-  instant: "oc/deepseek-v4-flash-free",
-  expert: "oc/big-pickle",
-  websearch: "oc/deepseek-v4-flash-free",
-  fileAnalysis: "oc/deepseek-v4-flash-free",
+  instant: "nvidia/nemotron-3.5-lightning:free",
+  expert: "nvidia/nemotron-3-super-120b-a12b:free",
+  websearch: "nvidia/nemotron-3.5-lightning:free",
+  fileAnalysis: "nvidia/nemotron-3.5-lightning:free",
 };
 
 export const FALLBACK_MODELS: Record<string, string> = {
@@ -127,9 +127,12 @@ function teeSseEvents(
       if (!payload || payload === "[DONE]") continue;
       try {
         const parsed = JSON.parse(payload) as {
-          choices?: Array<{ delta?: { reasoning_content?: string | null } }>;
+          choices?: Array<{ delta?: { reasoning_content?: string | null; reasoning?: string | null } }>;
         };
-        const reasoningText = parsed.choices?.[0]?.delta?.reasoning_content;
+        // OpenRouter/kilo gateways may emit thinking in either field: DeepSeek-style
+        // uses `reasoning_content`, while OpenAI/OpenRouter-style uses `reasoning`.
+        const delta = parsed.choices?.[0]?.delta;
+        const reasoningText = delta?.reasoning_content ?? delta?.reasoning;
         if (typeof reasoningText === "string" && reasoningText.length > 0) {
           onReasoningDelta(reasoningText);
         }
@@ -212,6 +215,76 @@ function createReasoningTeeFetch(onReasoningDelta: (text: string) => void) {
   };
 }
 
+// Module-level ref so the gateway-aware fetch can read the active reasoning level
+let activeReasoningLevel: string | undefined;
+let activeReasoningDelta: ((text: string) => void) | undefined;
+
+function isOpenRouterCompatibleBaseURL(baseURL: string): boolean {
+  const u = baseURL.toLowerCase();
+  return u.includes("openrouter.ai") || u.includes("kilo.ai");
+}
+
+function normalizeEffort(level: string): "low" | "medium" | "high" | null {
+  switch (level) {
+    case "low":
+      return "low";
+    case "medium":
+      return "medium";
+    case "high":
+    case "xhigh":
+      return "high";
+    default:
+      return null;
+  }
+}
+
+/** Fetch wrapper that rewrites request body for OpenRouter-compatible gateways
+ *  (injecting reasoning: { effort } and removing reasoning_effort) and
+ *  optionally tees SSE events for reasoning_content deltas. */
+function createOpenRouterAwareFetch(
+  baseURL: string,
+  innerFetch: typeof fetch
+): typeof fetch {
+  const isOpenRouter = isOpenRouterCompatibleBaseURL(baseURL);
+
+  return async (input: string | Request | URL, init?: RequestInit): Promise<Response> => {
+    // For OpenRouter-compatible endpoints, rewrite the request body
+    if (isOpenRouter && init?.body && typeof init.body === "string") {
+      try {
+        const body = JSON.parse(init.body);
+        // Remove OpenAI-style reasoning_effort; inject OpenRouter-style reasoning object
+        if (body.reasoning_effort !== undefined || body.reasoning !== undefined) {
+          delete body.reasoning_effort;
+          const effort = normalizeEffort(activeReasoningLevel ?? "");
+          if (effort) {
+            body.reasoning = { effort, exclude: false };
+            // Ensure the gateway returns the thinking tokens in the stream.
+            body.include_reasoning = true;
+          } else {
+            delete body.reasoning;
+            delete body.include_reasoning;
+          }
+          init = { ...init, body: JSON.stringify(body) };
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    const request = new Request(input, init);
+    const response = await innerFetch(request.url, {
+      ...init,
+      body: request.body,
+      method: request.method,
+      signal: request.signal,
+      duplex: "half",
+    } as NodeFetchRequestInit as RequestInit);
+
+    if (!activeReasoningDelta) return response;
+    return teeSseEvents(response, activeReasoningDelta);
+  };
+}
+
 export type ProviderClients = {
   /** Primary endpoint client (BASED_URL). */
   primary: ReturnType<typeof createOpenAI>;
@@ -246,6 +319,7 @@ export function createProviderClients(
   }
 ): ProviderClients {
   const onReasoningDelta = options?.onReasoningDelta;
+  activeReasoningDelta = onReasoningDelta;
   const primaryBaseURL =
     options?.primaryBaseURL ||
     getServerEnvValue(
@@ -253,7 +327,7 @@ export function createProviderClients(
       "BASE_URL",
       "BLOCKRUN_BASE_URL",
       "OPENAI_BASE_URL"
-    );
+    ) || "https://api.openai.com/v1";
   const primaryAuthHeader = getServerEnvValue(
     "BLOCKRUN_AUTH_HEADER",
     "OPENAI_AUTH_HEADER",
@@ -270,13 +344,22 @@ export function createProviderClients(
   // fails loudly either way.
   let primaryFetch: ((input: string | Request | URL, init?: RequestInit) => Promise<Response>) | undefined;
   if (customPrimaryHeaders) {
-    primaryFetch = createCustomFetch(customPrimaryHeaders, onReasoningDelta);
+    primaryFetch = createOpenRouterAwareFetch(
+      primaryBaseURL,
+      createCustomFetch(customPrimaryHeaders, onReasoningDelta)
+    ) as typeof fetch;
   } else if (!apiKey) {
-    primaryFetch = createCustomFetch({}, onReasoningDelta);
+    primaryFetch = createOpenRouterAwareFetch(
+      primaryBaseURL,
+      createCustomFetch({}, onReasoningDelta)
+    ) as typeof fetch;
   } else if (onReasoningDelta) {
     // Real key, no custom auth template, but reasoning tee requested — wrap
     // without touching the SDK's Authorization header.
-    primaryFetch = createReasoningTeeFetch(onReasoningDelta);
+    primaryFetch = createOpenRouterAwareFetch(
+      primaryBaseURL,
+      fetch
+    ) as typeof fetch;
   }
 
   const primary = createOpenAI({
@@ -289,7 +372,7 @@ export function createProviderClients(
   });
 
   const fallbackBaseURL =
-    options?.fallbackBaseURL || getServerEnvValue("FALLBACK_BASED_URL");
+    options?.fallbackBaseURL || getServerEnvValue("FALLBACK_BASED_URL") || "https://api.openai.com/v1";
   const fallbackApiKey =
     options?.fallbackApiKey || getServerEnvValue("FALLBACK_API_KEY");
   const hasFallback =
@@ -300,7 +383,7 @@ export function createProviderClients(
         baseURL: fallbackBaseURL,
         apiKey: fallbackApiKey ?? "fallback",
         ...(onReasoningDelta
-          ? { fetch: createReasoningTeeFetch(onReasoningDelta) }
+          ? { fetch: createOpenRouterAwareFetch(fallbackBaseURL, fetch) as typeof fetch }
           : {}),
       })
     : primary;
@@ -479,6 +562,9 @@ export function streamTextWithFallback(
         if (onAttemptStart) onAttemptStart(attempt);
 
         try {
+          // Set active reasoning level so the gateway-aware fetch can inject
+          // OpenRouter-compatible reasoning: { effort } instead of reasoning_effort
+          activeReasoningLevel = reasoning;
           const result = streamText({
             model: client.chat(resolvedModelId),
             system,
