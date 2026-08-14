@@ -368,6 +368,10 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       new Date(paidData!.expiresAt) > new Date()
     );
   })();
+  // Always-current mirror of hasPaidAccess so async free-tier fetch callbacks
+  // can refuse to apply results once the user is known to be paid.
+  const hasPaidAccessRef = useRef(hasPaidAccess);
+  hasPaidAccessRef.current = hasPaidAccess;
 
   const transport = useMemo(
     () =>
@@ -663,7 +667,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         );
         if (!response.ok) return;
         const data = await response.json();
-        if (data && typeof data.remaining === "number") {
+        if (data && typeof data.remaining === "number" && !hasPaidAccessRef.current) {
           setFreeTierStatus(data);
           setShowFreeTierUsage(true);
         }

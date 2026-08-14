@@ -110,7 +110,7 @@ export function ChatInput({
     }
   };
 
-  const isBlocked = showFreeTierUsage && freeTierStatus?.blocked;
+  const isBlocked = showFreeTierUsage && freeTierStatus?.blocked && !isPaidUser;
   const canSubmit = (input.trim().length > 0 || attachments.length > 0) && !isLoading && !isBlocked;
 
   return (
@@ -318,7 +318,7 @@ export function ChatInput({
 
             {/* Right Controls: Usage monitor + Send Button */}
             <div className="flex items-center gap-2">
-              {showFreeTierUsage && freeTierStatus && (
+              {showFreeTierUsage && freeTierStatus && !isPaidUser && (
                 <span
                   className={cn(
                     "text-[10px] sm:text-[11px] font-semibold whitespace-nowrap",
