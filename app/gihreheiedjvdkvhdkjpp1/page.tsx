@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
-import { Shield, Key, Plus, Trash2, Save, Crown, X, RefreshCw, CheckCircle, AlertTriangle, Clock } from "lucide-react";
+import { Shield, Key, Plus, Trash2, Save, Crown, X, RefreshCw, CheckCircle, AlertTriangle, Clock, Maximize2, Replace } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PRIMARY_MODELS, FALLBACK_MODELS } from "@/lib/llm-providers";
 import {
@@ -83,6 +83,10 @@ export default function AdminPage() {
 
   // System prompt editor (live runtime)
   const [fileSystemPrompt, setFileSystemPrompt] = useState("");
+  const [expandScreen, setExpandScreen] = useState(false);
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [findText, setFindText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
 
   // New code form
   const [newCode, setNewCode] = useState("");
@@ -781,10 +785,30 @@ export default function AdminPage() {
           <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 space-y-6">
             {/* System Prompt (live, runtime-editable) */}
             <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 space-y-2.5">
+              {/* Editor toolbar: Expand Screen + Find and Replace */}
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">System Prompt</p>
-                  <p className="text-[11px] text-[#6d7288]">Live runtime editor — changes apply on the next chat request. Clear the field to fall back to systemprompt.txt.</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandScreen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    Expand Screen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFindReplaceOpen((v) => !v)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-colors",
+                      findReplaceOpen
+                        ? "bg-white/15 border-white/20 text-white"
+                        : "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                    )}
+                  >
+                    <Replace className="w-3.5 h-3.5" />
+                    Find and Replace
+                  </button>
                 </div>
                 <span className={cn(
                   "px-2 py-0.5 rounded-md text-[10px] font-semibold shrink-0",
@@ -793,6 +817,59 @@ export default function AdminPage() {
                   {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
                 </span>
               </div>
+
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">System Prompt</p>
+                <p className="text-[11px] text-[#6d7288]">Live runtime editor — changes apply on the next chat request. Clear the field to fall back to systemprompt.txt.</p>
+              </div>
+
+              {/* Find and Replace panel */}
+              {findReplaceOpen && (
+                <div className="rounded-xl bg-white/[0.03] border border-white/10 p-3 space-y-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Find</label>
+                      <input
+                        type="text"
+                        value={findText}
+                        onChange={(e) => setFindText(e.target.value)}
+                        className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                        placeholder="Text to find"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Replace with</label>
+                      <input
+                        type="text"
+                        value={replaceText}
+                        onChange={(e) => setReplaceText(e.target.value)}
+                        className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                        placeholder="Replacement text"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!findText) return;
+                        const current = settings.SYSTEM_PROMPT ?? "";
+                        setSettings((s) => ({ ...s, SYSTEM_PROMPT: current.split(findText).join(replaceText) }));
+                      }}
+                      disabled={!findText}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-[11px] font-semibold transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      Replace All
+                    </button>
+                    <span className="text-[10px] text-[#6d7288]">
+                      {findText
+                        ? `${(settings.SYSTEM_PROMPT ?? "").split(findText).length - 1} match(es)`
+                        : "Enter text to find"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={settings.SYSTEM_PROMPT ?? ""}
                 onChange={(e) => setSettings((s) => ({ ...s, SYSTEM_PROMPT: e.target.value }))}
@@ -819,6 +896,76 @@ export default function AdminPage() {
                 <span className="ml-auto text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
               </div>
             </div>
+
+            {/* Expand Screen modal — large editing surface overlay */}
+            {expandScreen && (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200"
+                onClick={() => setExpandScreen(false)}
+              >
+                <div
+                  className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[#0d0d11]/95 border border-white/10 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-white">System Prompt — Expanded</p>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded-md text-[10px] font-semibold",
+                        isUsingFileFallback ? "bg-white/5 text-[#8c8f9c] border border-white/10" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                      )}>
+                        {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpandScreen(false)}
+                      className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-[#8c8f9c] hover:text-white transition-colors"
+                      aria-label="Close expanded editor"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-hidden p-4">
+                    <textarea
+                      value={settings.SYSTEM_PROMPT ?? ""}
+                      onChange={(e) => setSettings((s) => ({ ...s, SYSTEM_PROMPT: e.target.value }))}
+                      spellCheck={false}
+                      className="w-full h-full min-h-[50vh] bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all resize-none leading-relaxed"
+                      placeholder="Enter the system prompt…"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-white/10">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
+                        className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                      >
+                        Reset to file default
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
+                        className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                      >
+                        Clear (use bundled file)
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
+                      <button
+                        type="button"
+                        onClick={() => setExpandScreen(false)}
+                        className="px-5 py-2 rounded-full bg-white text-black hover:bg-white/90 text-xs font-semibold transition-all active:scale-95"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-4">

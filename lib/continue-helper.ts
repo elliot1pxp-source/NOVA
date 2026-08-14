@@ -170,18 +170,3 @@ export function mergeAssistantText(
   return { ...source, parts: [...newParts, ...contNonText] };
 }
 
-// Heuristic for "the assistant stopped mid-response". Used to surface the
-// rounded Continue button under a reply that looks unfinished (truncated by
-// max tokens, interrupted, or cut off mid-sentence).
-export function isUnfinishedText(text: string): boolean {
-  const trimmed = text.trimEnd();
-  if (trimmed.length < 10) return false;
-  // Hanging markdown code fence (odd number of ```) — clearly unfinished.
-  const fences = (trimmed.match(/```/g) ?? []).length;
-  if (fences % 2 === 1) return true;
-  const last = trimmed[trimmed.length - 1];
-  // Ends with terminal punctuation or a closing/formatting marker → complete.
-  if (/[.!?…"')\]}*~>`]/.test(last)) return false;
-  // Ends mid-word/mid-sentence (letter, digit, or dangling punctuation) → unfinished.
-  return /[A-Za-z0-9,;:-]/.test(last);
-}

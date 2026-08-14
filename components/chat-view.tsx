@@ -10,7 +10,7 @@ import { ChatMessage, TypingIndicator } from "./chat-message";
 import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
-import { isUnfinishedText } from "@/lib/continue-helper";
+
 import { backupNow, flushBackup, restoreFromServer } from "@/lib/history-backup";
 import { getSupportedAttachmentMimeType, isImageMimeType, normalizeDataUrl, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
 import { getPaidTierClientId, getPaidTierData, getServerMode } from "@/lib/paid-tier";
@@ -791,11 +791,15 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         part.type === "tool-webSearch" ||
         (part.type === "dynamic-tool" && (part as any).toolName === "webSearch")
     );
+  // "Response was interrupted" is now shown ONLY for a genuine interruption:
+  // a manual Stop, or a failed/aborted stream (e.g. a dropped connection). We
+  // no longer guess from trailing characters — that heuristic caused false
+  // positives on completely normal, finished replies.
+  const streamFailed = status === "error";
   const hasTextInterruption =
-    status === "ready" &&
     lastVisibleMessage?.role === "assistant" &&
     lastAssistantText.trim().length >= 10 &&
-    (stoppedMidGenerationRef.current || isUnfinishedText(lastAssistantText));
+    (stoppedMidGenerationRef.current || streamFailed);
   const hasProcessInterruption =
     status === "ready" &&
     stoppedMidGenerationRef.current &&
