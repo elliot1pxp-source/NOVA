@@ -46,6 +46,8 @@ type GlobalSettings = {
   stringBasedChatHistory?: boolean;
   /** When true, automatically detect web-cookie models (containing "web" in model name) and apply string-based chat history. */
   autoDetectWebCookieModels?: boolean;
+  /** Live-editable system prompt. Non-empty overrides the bundled systemprompt.txt. */
+  SYSTEM_PROMPT?: string;
 };
 
 export default function AdminPage() {
@@ -78,6 +80,9 @@ export default function AdminPage() {
   const [refreshingCodes, setRefreshingCodes] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [changeReason, setChangeReason] = useState<string>("");
+
+  // System prompt editor (live runtime)
+  const [fileSystemPrompt, setFileSystemPrompt] = useState("");
 
   // New code form
   const [newCode, setNewCode] = useState("");
@@ -176,6 +181,8 @@ export default function AdminPage() {
           useFallbackAsPrimary: Boolean(settingsData.settings.useFallbackAsPrimary),
           PRIMARY_MODELS: settingsData.settings.PRIMARY_MODELS ?? PRIMARY_MODELS,
           FALLBACK_MODELS: settingsData.settings.FALLBACK_MODELS ?? FALLBACK_MODELS,
+          // Prefill the editor with whatever is currently active at runtime.
+          SYSTEM_PROMPT: settingsData.effectiveSystemPrompt ?? settingsData.settings.SYSTEM_PROMPT ?? "",
         };
         setSettings(loadedSettings);
         setCurrentEnvironmentInputs(buildCurrentEnvironmentInputs(loadedSettings, settingsData.env ?? {
@@ -189,6 +196,9 @@ export default function AdminPage() {
       }
       if (settingsData.env) {
         setEnvValues(settingsData.env);
+      }
+      if (typeof settingsData.fileSystemPrompt === "string") {
+        setFileSystemPrompt(settingsData.fileSystemPrompt);
       }
     } catch {
       setMessage({ type: "error", text: "Failed to load data" });
@@ -326,6 +336,8 @@ export default function AdminPage() {
   const effectiveFallbackApiKey = settings.useFallbackAsPrimary
     ? settings.BLOCKRUN_API_KEY ?? ""
     : settings.FALLBACK_API_KEY ?? "";
+
+  const isUsingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
 
   const handleSetCurrentEditTokens = () => {
     if (!editTokens) return;
@@ -767,6 +779,47 @@ export default function AdminPage() {
             </Link>
           </div>
           <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 space-y-6">
+            {/* System Prompt (live, runtime-editable) */}
+            <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 space-y-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">System Prompt</p>
+                  <p className="text-[11px] text-[#6d7288]">Live runtime editor — changes apply on the next chat request. Clear the field to fall back to systemprompt.txt.</p>
+                </div>
+                <span className={cn(
+                  "px-2 py-0.5 rounded-md text-[10px] font-semibold shrink-0",
+                  isUsingFileFallback ? "bg-white/5 text-[#8c8f9c] border border-white/10" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                )}>
+                  {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
+                </span>
+              </div>
+              <textarea
+                value={settings.SYSTEM_PROMPT ?? ""}
+                onChange={(e) => setSettings((s) => ({ ...s, SYSTEM_PROMPT: e.target.value }))}
+                rows={10}
+                spellCheck={false}
+                className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all resize-y leading-relaxed"
+                placeholder="Enter the system prompt…"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
+                  className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                >
+                  Reset to file default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
+                  className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                >
+                  Clear (use bundled file)
+                </button>
+                <span className="ml-auto text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
+              </div>
+            </div>
+
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">

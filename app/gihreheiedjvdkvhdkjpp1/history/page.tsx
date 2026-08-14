@@ -17,6 +17,7 @@ type GlobalSettings = {
   useFallbackAsPrimary?: boolean;
   PRIMARY_MODELS?: ModelMap;
   FALLBACK_MODELS?: ModelMap;
+  SYSTEM_PROMPT?: string;
 };
 
 type GlobalSettingsHistoryEntry = {

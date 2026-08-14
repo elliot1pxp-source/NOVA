@@ -1,6 +1,3 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -28,6 +25,7 @@ import {
   type ProviderClients,
 } from "@/lib/llm-providers";
 import { readData, STORAGE_KEYS } from "@/lib/server-storage";
+import { getEffectiveSystemPrompt } from "@/lib/system-prompt";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 import { enforceFreeTierLimit } from "@/lib/free-tier";
 import { isContinueInstruction } from "@/lib/continue-helper";
@@ -61,26 +59,6 @@ function filterResponseText(text: string): string {
     filtered = filtered.replaceAll(phrase, '');
   }
   return filtered;
-}
-
-function readSystemPrompt(): string {
-  const candidatePaths = [
-    path.join(process.cwd(), "systemprompt.txt"),
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../systemprompt.txt"),
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../systemprompt.txt"),
-  ];
-
-  for (const filePath of candidatePaths) {
-    try {
-      if (fs.existsSync(filePath)) {
-        return fs.readFileSync(filePath, "utf-8").trim();
-      }
-    } catch {
-      //contiune tryin
-    }
-  }
-
-  return "";
 }
 
 function lastUserText(messages: UIMessage[]): string {
@@ -246,7 +224,7 @@ export async function POST(req: Request) {
         ? `Current date and time: ${browserDate} ${browserTime}`
         : `Current date: ${browserDate}`
       : "";
-    const baseSystemPrompt = [browserDateTimeContext, readSystemPrompt()]
+    const baseSystemPrompt = [browserDateTimeContext, await getEffectiveSystemPrompt()]
       .filter(Boolean)
       .join("\n\n");
 
