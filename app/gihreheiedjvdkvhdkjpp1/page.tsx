@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useCallback } from "react";
-import { Shield, Key, Plus, Trash2, Save, Crown, X, RefreshCw, CheckCircle, AlertTriangle, Clock, Maximize2, Replace } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { Shield, Key, Plus, Trash2, Save, Crown, X, RefreshCw, CheckCircle, AlertTriangle, Clock, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PRIMARY_MODELS, FALLBACK_MODELS } from "@/lib/llm-providers";
 import {
@@ -12,6 +12,29 @@ import {
   getAdminKey,
   setAdminKey,
 } from "@/lib/paid-tier";
+
+// Renders text with `find` occurrences wrapped in a <mark>, used as a backdrop
+// layer behind a transparent <textarea> to highlight matches. Text is emitted
+// as React nodes (never HTML), so there is no injection risk.
+function HighlightedText({ text, find }: { text: string; find: string }) {
+  if (!find) return <>{text}</>;
+  const segments: ReactNode[] = [];
+  let rest = text;
+  let key = 0;
+  let pos = rest.indexOf(find);
+  while (pos !== -1) {
+    if (pos > 0) segments.push(rest.slice(0, pos));
+    segments.push(
+      <mark key={key++} className="rounded-[2px] bg-amber-400/50 text-transparent">
+        {find}
+      </mark>
+    );
+    rest = rest.slice(pos + find.length);
+    pos = rest.indexOf(find);
+  }
+  if (rest) segments.push(rest);
+  return <>{segments}</>;
+}
 
 type PaidCode = {
   code: string;
@@ -84,9 +107,41 @@ export default function AdminPage() {
   // System prompt editor (live runtime)
   const [fileSystemPrompt, setFileSystemPrompt] = useState("");
   const [expandScreen, setExpandScreen] = useState(false);
-  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
+  const [goToLine, setGoToLine] = useState("");
+  const expandedTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  // Keep the highlight backdrop scrolled in lockstep with the textarea.
+  const syncBackdropScroll = () => {
+    const ta = expandedTextareaRef.current;
+    const bd = backdropRef.current;
+    if (ta && bd) {
+      bd.scrollTop = ta.scrollTop;
+      bd.scrollLeft = ta.scrollLeft;
+    }
+  };
+
+  // Jump the caret to the start of a given 1-based line and scroll it into view.
+  const goToLineInEditor = () => {
+    const ta = expandedTextareaRef.current;
+    if (!ta) return;
+    const text = settings.SYSTEM_PROMPT ?? "";
+    const lines = text.split("\n");
+    const target = Math.max(1, Math.min(parseInt(goToLine, 10) || 1, lines.length));
+    const offset = lines.slice(0, target - 1).reduce((acc, l) => acc + l.length + 1, 0);
+    ta.focus();
+    ta.setSelectionRange(offset, offset + (lines[target - 1]?.length ?? 0));
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 22;
+    ta.scrollTop = Math.max(0, (target - 1) * lh - ta.clientHeight / 2);
+    syncBackdropScroll();
+  };
+
+  // Re-sync the highlight layer after open / content changes.
+  useEffect(() => {
+    if (expandScreen) requestAnimationFrame(syncBackdropScroll);
+  }, [expandScreen, settings.SYSTEM_PROMPT]);
 
   // New code form
   const [newCode, setNewCode] = useState("");
@@ -785,7 +840,6 @@ export default function AdminPage() {
           <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 space-y-6">
             {/* System Prompt (live, runtime-editable) */}
             <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 space-y-2.5">
-              {/* Editor toolbar: Expand Screen + Find and Replace */}
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <button
@@ -795,19 +849,6 @@ export default function AdminPage() {
                   >
                     <Maximize2 className="w-3.5 h-3.5" />
                     Expand Screen
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFindReplaceOpen((v) => !v)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-colors",
-                      findReplaceOpen
-                        ? "bg-white/15 border-white/20 text-white"
-                        : "bg-white/5 hover:bg-white/10 border-white/10 text-white"
-                    )}
-                  >
-                    <Replace className="w-3.5 h-3.5" />
-                    Find and Replace
                   </button>
                 </div>
                 <span className={cn(
@@ -820,55 +861,8 @@ export default function AdminPage() {
 
               <div>
                 <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">System Prompt</p>
-                <p className="text-[11px] text-[#6d7288]">Live runtime editor — changes apply on the next chat request. Clear the field to fall back to systemprompt.txt.</p>
+                <p className="text-[11px] text-[#6d7288]">Live runtime editor — changes apply on the next chat request. Clear the field to fall back to systemprompt.txt. Use Expand Screen for find &amp; replace and line jumps.</p>
               </div>
-
-              {/* Find and Replace panel */}
-              {findReplaceOpen && (
-                <div className="rounded-xl bg-white/[0.03] border border-white/10 p-3 space-y-2.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Find</label>
-                      <input
-                        type="text"
-                        value={findText}
-                        onChange={(e) => setFindText(e.target.value)}
-                        className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                        placeholder="Text to find"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Replace with</label>
-                      <input
-                        type="text"
-                        value={replaceText}
-                        onChange={(e) => setReplaceText(e.target.value)}
-                        className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                        placeholder="Replacement text"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!findText) return;
-                        const current = settings.SYSTEM_PROMPT ?? "";
-                        setSettings((s) => ({ ...s, SYSTEM_PROMPT: current.split(findText).join(replaceText) }));
-                      }}
-                      disabled={!findText}
-                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-[11px] font-semibold transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      Replace All
-                    </button>
-                    <span className="text-[10px] text-[#6d7288]">
-                      {findText
-                        ? `${(settings.SYSTEM_PROMPT ?? "").split(findText).length - 1} match(es)`
-                        : "Enter text to find"}
-                    </span>
-                  </div>
-                </div>
-              )}
 
               <textarea
                 value={settings.SYSTEM_PROMPT ?? ""}
@@ -897,22 +891,23 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Expand Screen modal — large editing surface overlay */}
+            {/* Expand Screen dialog — full-screen editing surface with find & replace */}
             {expandScreen && (
               <div
-                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200"
+                className="fixed inset-0 z-[60] flex flex-col bg-[#0d0d11] animate-in fade-in duration-200"
                 onClick={() => setExpandScreen(false)}
               >
                 <div
-                  className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-[#0d0d11]/95 border border-white/10 shadow-2xl"
+                  className="relative flex h-full w-full flex-col"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-white">System Prompt — Expanded</p>
+                      <p className="text-sm font-semibold text-white">System Prompt — Expanded Editor</p>
                       <span className={cn(
-                        "px-2 py-0.5 rounded-md text-[10px] font-semibold",
-                        isUsingFileFallback ? "bg-white/5 text-[#8c8f9c] border border-white/10" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                        "rounded-md border px-2 py-0.5 text-[10px] font-semibold",
+                        isUsingFileFallback ? "border-white/10 bg-white/5 text-[#8c8f9c]" : "border-amber-500/20 bg-amber-500/10 text-amber-400"
                       )}>
                         {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
                       </span>
@@ -920,34 +915,111 @@ export default function AdminPage() {
                     <button
                       type="button"
                       onClick={() => setExpandScreen(false)}
-                      className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-[#8c8f9c] hover:text-white transition-colors"
+                      className="rounded-full bg-white/5 p-2 text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
                       aria-label="Close expanded editor"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="flex-1 overflow-hidden p-4">
+
+                  {/* Find & Replace + Go to line toolbar */}
+                  <div className="space-y-3 border-b border-white/10 px-5 py-3">
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-[#8c8f9c]">Find</label>
+                        <input
+                          type="text"
+                          value={findText}
+                          onChange={(e) => setFindText(e.target.value)}
+                          className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
+                          placeholder="Text to find"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-[#8c8f9c]">Replace with</label>
+                        <input
+                          type="text"
+                          value={replaceText}
+                          onChange={(e) => setReplaceText(e.target.value)}
+                          className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
+                          placeholder="Replacement text"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!findText) return;
+                          const current = settings.SYSTEM_PROMPT ?? "";
+                          setSettings((s) => ({ ...s, SYSTEM_PROMPT: current.split(findText).join(replaceText) }));
+                        }}
+                        disabled={!findText}
+                        className="rounded-lg bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition-all active:scale-95 hover:bg-white/15 disabled:opacity-50"
+                      >
+                        Replace All
+                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] font-medium text-[#8c8f9c]">Go to line</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={goToLine}
+                          onChange={(e) => setGoToLine(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") goToLineInEditor(); }}
+                          className="w-20 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1.5 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
+                          placeholder="line #"
+                        />
+                        <button
+                          type="button"
+                          onClick={goToLineInEditor}
+                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10"
+                        >
+                          Go
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-[#6d7288]">
+                        {findText
+                          ? `${(settings.SYSTEM_PROMPT ?? "").split(findText).length - 1} match(es)`
+                          : "Enter text to find"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Editor with highlight overlay */}
+                  <div className="relative flex-1 overflow-hidden">
+                    <div
+                      ref={backdropRef}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-4 font-mono text-sm leading-relaxed text-transparent"
+                    >
+                      <HighlightedText text={settings.SYSTEM_PROMPT ?? ""} find={findText} />
+                    </div>
                     <textarea
+                      ref={expandedTextareaRef}
                       value={settings.SYSTEM_PROMPT ?? ""}
                       onChange={(e) => setSettings((s) => ({ ...s, SYSTEM_PROMPT: e.target.value }))}
+                      onScroll={syncBackdropScroll}
                       spellCheck={false}
-                      className="w-full h-full min-h-[50vh] bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all resize-none leading-relaxed"
+                      className="absolute inset-0 h-full w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent p-4 font-mono text-sm leading-relaxed text-white caret-white outline-none placeholder-[#5e616e] focus:outline-none"
                       placeholder="Enter the system prompt…"
                     />
                   </div>
-                  <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-white/10">
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-3">
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
-                        className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                        className="text-[10px] text-[#8c8f9c] transition-colors hover:text-white"
                       >
                         Reset to file default
                       </button>
                       <button
                         type="button"
                         onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
-                        className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                        className="text-[10px] text-[#8c8f9c] transition-colors hover:text-white"
                       >
                         Clear (use bundled file)
                       </button>
@@ -956,8 +1028,15 @@ export default function AdminPage() {
                       <span className="text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
                       <button
                         type="button"
+                        onClick={handleSaveGlobalSettings}
+                        className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition-all active:scale-95 hover:bg-white/90"
+                      >
+                        Save System Prompt
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setExpandScreen(false)}
-                        className="px-5 py-2 rounded-full bg-white text-black hover:bg-white/90 text-xs font-semibold transition-all active:scale-95"
+                        className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white transition-all active:scale-95 hover:bg-white/15"
                       >
                         Done
                       </button>
