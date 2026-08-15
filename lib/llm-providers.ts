@@ -24,8 +24,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 // unprefixed IDs. Both expose the same logical models.
 
 export const PRIMARY_MODELS: Record<string, string> = {
-  instant: "nvidia/nemotron-3.5-lightning:free",
-  expert: "nvidia/nemotron-3-super-120b-a12b:free",
+  instant: "nvidia/nemotron-3-super-120b-a12b:free",
+  expert: "nvidia/nemotron-3-ultra-550b-a55b:free",
   websearch: "nvidia/nemotron-3.5-lightning:free",
   fileAnalysis: "nvidia/nemotron-3.5-lightning:free",
 };
@@ -602,7 +602,30 @@ export function streamTextWithFallback(
             }
             controller.enqueue(value);
           }
-          // Successfully finished this attempt — close the output stream.
+
+          // The attempt ended but produced no text token at all (an empty
+          // completion). Treat it as a failed attempt and retry on the other
+          // endpoint (or the same one when there is no fallback) until we
+          // actually receive some text — otherwise the client's typing
+          // indicator just vanishes leaving a blank reply.
+          if (!receivedText) {
+            if (onAttemptError) onAttemptError(new Error("empty response (no text token)"), attempt);
+            if (attempt < attempts - 1) {
+              if (onProviderSwitch) {
+                const nextAttempt = attempt + 1;
+                const nextProvider =
+                  clients.hasFallback && nextAttempt % 2 === fallbackParity ? "fallback" : "primary";
+                onProviderSwitch(nextProvider, attempt);
+              }
+              attempt++;
+              continue;
+            }
+            // Every attempt came back empty — nothing more we can do.
+            controller.close();
+            return;
+          }
+
+          // Successfully finished this attempt with text — close the stream.
           controller.close();
           return;
         } catch (error) {
