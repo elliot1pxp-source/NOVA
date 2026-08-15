@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, X, Zap, Shield, AlertTriangle, RotateCcw, Trash2, Check, FolderX } from "lucide-react";
+import { Settings, X, Zap, Shield, AlertTriangle, RotateCcw, Trash2, Check, FolderX, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ModelSettings, ModelParams, DEFAULT_MODEL_SETTINGS } from "@/lib/storage";
 
@@ -14,7 +14,7 @@ type Props = {
   onDeleteAllFiles?: () => void;
 };
 
-type ActiveModelTab = "instant" | "expert";
+type ActiveModelTab = "instant" | "expert" | "coding";
 
 export function SettingsDialog({
   isOpen,
@@ -99,7 +99,7 @@ export function SettingsDialog({
             <label className="block text-[11px] font-bold text-[#8c8f9c] uppercase tracking-wider mb-2.5">
               Select Model Configuration
             </label>
-            <div className="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10">
+            <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10">
               <button
                 type="button"
                 onClick={() => setActiveTab("instant")}
@@ -125,6 +125,19 @@ export function SettingsDialog({
               >
                 <Shield className="w-4 h-4" />
                 <span>Expert Model</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("coding")}
+                className={cn(
+                  "flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200",
+                  activeTab === "coding"
+                    ? "bg-white/15 text-white border border-white/20 shadow-[0_0_12px_rgba(255,255,255,0.15)]"
+                    : "text-[#8c8f9c] hover:text-white hover:bg-white/5"
+                )}
+              >
+                <Code2 className="w-4 h-4" />
+                <span>Coding Model</span>
               </button>
             </div>
           </div>

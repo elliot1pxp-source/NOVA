@@ -30,6 +30,7 @@ export type ModelParams = {
 export type ModelSettings = {
   instant: ModelParams;
   expert: ModelParams;
+  coding: ModelParams;
 };
 
 export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
@@ -39,6 +40,11 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
     maxTokens: 32768,
   },
   expert: {
+    temperature: 0.7,
+    topK: 40,
+    maxTokens: 32768,
+  },
+  coding: {
     temperature: 0.7,
     topK: 40,
     maxTokens: 32768,
@@ -344,12 +350,14 @@ export function loadModelSettings(): ModelSettings {
     const merged: ModelSettings = {
       instant: { ...DEFAULT_MODEL_SETTINGS.instant, ...stored.instant },
       expert: { ...DEFAULT_MODEL_SETTINGS.expert, ...stored.expert },
+      coding: { ...DEFAULT_MODEL_SETTINGS.coding, ...stored.coding },
     };
     // One-time migration: bump old maxTokens values up to the new default max.
     // After this runs once, the user can lower maxTokens and it will stick.
     if (!window.localStorage.getItem(SETTINGS_MIGRATION_KEY)) {
       merged.instant.maxTokens = DEFAULT_MODEL_SETTINGS.instant.maxTokens;
       merged.expert.maxTokens = DEFAULT_MODEL_SETTINGS.expert.maxTokens;
+      merged.coding.maxTokens = DEFAULT_MODEL_SETTINGS.coding.maxTokens;
       window.localStorage.setItem(SETTINGS_MIGRATION_KEY, "1");
       saveModelSettings(merged);
     }

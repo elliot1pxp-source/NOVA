@@ -24,10 +24,11 @@ import { createOpenAI } from "@ai-sdk/openai";
 // unprefixed IDs. Both expose the same logical models.
 
 export const PRIMARY_MODELS: Record<string, string> = {
-  instant: "nvidia/nemotron-3-super-120b-a12b:free",
+  instant: "stepfun/step-3.7-flash:free",
   expert: "nvidia/nemotron-3-ultra-550b-a55b:free",
   websearch: "nvidia/nemotron-3.5-lightning:free",
   fileAnalysis: "nvidia/nemotron-3.5-lightning:free",
+  coding: "tencent/hy3:free",
 };
 
 export const FALLBACK_MODELS: Record<string, string> = {
@@ -35,6 +36,7 @@ export const FALLBACK_MODELS: Record<string, string> = {
   expert: "big-pickle",
   websearch: "deepseek-v4-flash-free",
   fileAnalysis: "nemotron-3-ultra-free",
+  coding: "deepseek-v4-flash-free",
 };
 
 // Model role keys used by call sites. The fallback functions resolve each key
@@ -42,6 +44,7 @@ export const FALLBACK_MODELS: Record<string, string> = {
 export const MODELS: Record<string, string> = {
   instant: "instant",
   expert: "expert",
+  coding: "coding",
   websearch: "websearch",
   // Dedicated model used for per-file analysis sub-calls, decoupled from
   // whichever chat model the user has selected.

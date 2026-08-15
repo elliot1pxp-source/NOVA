@@ -510,7 +510,7 @@ export default function AdminPage() {
     }));
   };
 
-  const MODEL_KEYS = ["instant", "expert", "websearch", "fileAnalysis"] as const;
+  const MODEL_KEYS = ["instant", "expert", "websearch", "fileAnalysis", "coding"] as const;
   type ModelKey = (typeof MODEL_KEYS)[number];
 
   const effectivePrimaryModels = settings.useFallbackAsPrimary

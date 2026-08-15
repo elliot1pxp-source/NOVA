@@ -42,7 +42,7 @@ type ChatInputProps = {
   onSubmit: () => void;
   onStop: () => void | Promise<void>;
   isLoading: boolean;
-  model: "instant" | "expert";
+  model: "instant" | "expert" | "coding";
   deepThink: boolean;
   onToggleDeepThink: () => void;
   /** Selected native reasoning strength — only meaningful while DeepThink is on. */
@@ -166,7 +166,7 @@ export function ChatInput({
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Message NOVA ${model === "instant" ? "Instant" : "Expert"}...`}
+            placeholder={`Message NOVA ${model === "instant" ? "Instant" : model === "coding" ? "Coding" : "Expert"}...`}
             rows={1}
             className="w-full min-h-[40px] bg-transparent text-white placeholder-[#787a85] text-sm px-2 sm:px-3 py-2 sm:py-2.5 focus:outline-none resize-none max-h-[160px] sm:max-h-[200px] leading-relaxed"
           />

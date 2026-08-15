@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback, useMemo, type TouchEvent, typ
 import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Zap, Shield, Redo2 } from "lucide-react";
+import { Zap, Shield, Redo2, Code2 } from "lucide-react";
 import { ChatInput, PendingAttachment } from "./chat-input";
 import { ChatMessage, TypingIndicator } from "./chat-message";
 import { MessageNavigator, NavItem } from "@/app/message-navigator";
@@ -15,7 +15,7 @@ import { backupNow, flushBackup, restoreFromServer } from "@/lib/history-backup"
 import { getSupportedAttachmentMimeType, isImageMimeType, normalizeDataUrl, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
 import { getPaidTierClientId, getPaidTierData, getServerMode } from "@/lib/paid-tier";
 
-type Model = "instant" | "expert";
+type Model = "instant" | "expert" | "coding";
 
 const MESSAGE_LIMIT = 200;
 const RECENT_MESSAGES_TO_KEEP = 180;
@@ -54,6 +54,7 @@ type Props = {
 const MODEL_TABS: { id: Model; label: string; icon: React.ReactNode }[] = [
   { id: "instant", label: "Instant", icon: <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> },
   { id: "expert", label: "Expert", icon: <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> },
+  { id: "coding", label: "Coding", icon: <Code2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> },
 ];
 
 function generateAttachmentId() {

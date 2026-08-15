@@ -19,7 +19,7 @@ import {
 import { refreshPaidTierStatus } from "@/lib/paid-tier";
 import { backupNow, clearBackup, flushBackup, restoreFromServer } from "@/lib/history-backup";
 
-type Model = "instant" | "expert";
+type Model = "instant" | "expert" | "coding";
 
 function generateId() {
   return Math.random().toString(36).slice(2, 10);
