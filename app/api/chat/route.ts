@@ -299,6 +299,12 @@ export async function POST(req: Request) {
       ...message,
       parts: message.parts.flatMap((part) => {
         if (part.type !== "file") {
+          // Drop UI-only progress parts (data-thought / data-search / data-file)
+          // so a prior turn's reasoning / search / file-scan results are never
+          // re-fed to the model as conversation history. Otherwise a model like
+          // tencent/hy3 sees the earlier thinking and suppresses re-reasoning on
+          // follow-up turns, making Deep Think only fire on the first message.
+          if ((part.type as string).startsWith("data-")) return [];
           return [part];
         }
 
