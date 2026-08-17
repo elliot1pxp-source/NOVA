@@ -24,10 +24,10 @@ import { createOpenAI } from "@ai-sdk/openai";
 // unprefixed IDs. Both expose the same logical models.
 
 export const PRIMARY_MODELS: Record<string, string> = {
-  instant: "stepfun/step-3.7-flash:free",
+  instant: "nvidia/nemotron-3-super-120b-a12b:free",
   expert: "nvidia/nemotron-3-ultra-550b-a55b:free",
   websearch: "nvidia/nemotron-3.5-lightning:free",
-  fileAnalysis: "nvidia/nemotron-3.5-lightning:free",
+  fileAnalysis: "nvidia/nemotron-3-ultra-550b-a55b:free",
   coding: "tencent/hy3:free",
 };
 

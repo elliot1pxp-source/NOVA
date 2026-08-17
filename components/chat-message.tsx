@@ -517,10 +517,57 @@ function StreamingMarkdown({
           <MarkdownSegment text={tail} components={markdownComponents} />
         )}
         {tail && tailIsPlainText && (
-          <span className="whitespace-pre-wrap break-words">{tail}</span>
+          <StreamingTail text={tail} isStreaming={isStreaming} />
         )}
       </div>
     </StreamingContext.Provider>
+  );
+}
+
+// StreamingTail animates only the last N new characters as they arrive.
+// Renders the settled prefix as plain text for performance.
+function StreamingTail({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+  const prevLengthRef = useRef(0);
+  const ANIMATED_CHARS = 200; // animate up to 200 new chars (covers multiple batches)
+
+  // Track only the new characters since last render
+  const newChars = useMemo(() => {
+    if (!isStreaming) return [];
+    const prevLen = prevLengthRef.current;
+    const newLen = text.length;
+    if (newLen <= prevLen) return [];
+    const start = Math.max(prevLen, newLen - ANIMATED_CHARS);
+    return text.slice(start, newLen).split("").map((ch, i) => ({ ch, index: start + i }));
+  }, [text, isStreaming]);
+
+  // Prefix text (already settled, no animation)
+  const prefixText = useMemo(() => {
+    if (!isStreaming) return text;
+    const prevLen = prevLengthRef.current;
+    const newLen = text.length;
+    if (newLen <= prevLen) return text;
+    const animStart = Math.max(prevLen, newLen - ANIMATED_CHARS);
+    return text.slice(0, animStart);
+  }, [text, isStreaming]);
+
+  // Update ref after render
+  useEffect(() => {
+    prevLengthRef.current = text.length;
+  }, [text]);
+
+  return (
+    <span className="streaming-tail whitespace-pre-wrap break-words">
+      {prefixText && <span>{prefixText}</span>}
+      {newChars.map(({ ch, index }) => (
+        <span
+          key={index}
+          className="streaming-char streaming-char-new"
+        >
+          {ch === " " ? "\u00A0" : ch}
+        </span>
+      ))}
+      {isStreaming && <span className="streaming-cursor" aria-hidden="true" />}
+    </span>
   );
 }
 
