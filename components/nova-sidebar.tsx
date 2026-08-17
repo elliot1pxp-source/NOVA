@@ -578,26 +578,6 @@ export function NovaSidebar({
     return () => window.removeEventListener("click", close);
   }, [menuOpenId]);
 
-  // Lock body scroll when sidebar is open on mobile
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const isMobile = window.innerWidth < 768;
-    if (!historyOpen || !isMobile) return;
-    const originalOverflow = document.body.style.overflow;
-    const originalPosition = document.body.style.position;
-    const originalTop = document.body.style.top;
-    const scrollY = window.scrollY;
-    document.body.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      document.body.style.position = originalPosition;
-      document.body.style.top = originalTop;
-      window.scrollTo(0, scrollY);
-    };
-  }, [historyOpen]);
-
   const filtered = searchQuery.trim()
     ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
     : null;
@@ -652,7 +632,7 @@ export function NovaSidebar({
             </button>
             <button
               onClick={openHistoryWithSearch}
-              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Search chats"
               title="Search chats"
             >
@@ -663,7 +643,7 @@ export function NovaSidebar({
                 onNewChat();
                 openHistoryAndReset();
               }}
-              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
               aria-label="New chat"
               title="New chat"
             >
@@ -678,7 +658,6 @@ export function NovaSidebar({
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden animate-in fade-in duration-200"
           onClick={() => setHistoryOpen(false)}
-          style={{ touchAction: "none" }}
         />
       )}
 

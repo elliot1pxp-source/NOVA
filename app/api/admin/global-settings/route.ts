@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
 import { isAdminAuthorized } from "@/lib/admin-auth";
-import { getEffectiveSystemPrompt, readSystemPromptFile } from "@/lib/system-prompt";
+import { getEffectiveSystemPrompt, readSystemPromptFile, getEffectiveInitialPrompt, readInitialPromptFile } from "@/lib/system-prompt";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,6 +23,10 @@ export type GlobalSettings = {
   autoDetectWebCookieModels?: boolean;
   /** Live-editable system prompt. When set (non-empty) it overrides the bundled systemprompt.txt at runtime. */
   SYSTEM_PROMPT?: string;
+  /** Live-editable initial chat prompt. Appended to the system prompt on every message (or chat start). */
+  INITIAL_CHAT_PROMPT?: string;
+  /** When true, apply INITIAL_CHAT_PROMPT to every message. When false, only apply on chat start. */
+  applyInitialPromptToEveryMessage?: boolean;
 };
 
 export type GlobalSettingsHistoryEntry = {
@@ -47,6 +51,8 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   stringBasedChatHistory: false,
   autoDetectWebCookieModels: false,
   SYSTEM_PROMPT: "",
+  INITIAL_CHAT_PROMPT: "",
+  applyInitialPromptToEveryMessage: true,
 };
 
 async function readSettings(): Promise<GlobalSettings> {
@@ -126,17 +132,21 @@ export async function GET(req: Request) {
     FALLBACK_BASED_URL: process.env.FALLBACK_BASED_URL ?? "",
   };
 
-  // The prompt that will actually be used at runtime: the configured
-  // SYSTEM_PROMPT if set, otherwise the bundled systemprompt.txt. Surfaced
-  // so the admin editor can prefill and show what is currently active.
-  const effectiveSystemPrompt = await getEffectiveSystemPrompt();
-  const usingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
-  const fileSystemPrompt = readSystemPromptFile();
+// The prompt that will actually be used at runtime: the configured
+    // SYSTEM_PROMPT if set, otherwise the bundled systemprompt.txt. Surfaced
+    // so the admin editor can prefill and show what is currently active.
+    const effectiveSystemPrompt = await getEffectiveSystemPrompt();
+    const usingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
+    const fileSystemPrompt = readSystemPromptFile();
 
-  return NextResponse.json(
-    { settings, env, effectiveSystemPrompt, usingFileFallback, fileSystemPrompt },
-    { headers: { "Cache-Control": "no-store, max-age=0" } },
-  );
+    // The initial chat prompt that will actually be used at runtime.
+    const effectiveInitialPrompt = await getEffectiveInitialPrompt();
+    const fileInitialPrompt = readInitialPromptFile();
+
+    return NextResponse.json(
+      { settings, env, effectiveSystemPrompt, usingFileFallback, fileSystemPrompt, effectiveInitialPrompt, fileInitialPrompt },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
 }
 
 export async function PUT(req: Request) {
@@ -158,6 +168,8 @@ export async function PUT(req: Request) {
       stringBasedChatHistory,
       autoDetectWebCookieModels,
       SYSTEM_PROMPT,
+      INITIAL_CHAT_PROMPT,
+      applyInitialPromptToEveryMessage,
     } = body;
     
     const settings = await readSettings();
@@ -178,6 +190,8 @@ export async function PUT(req: Request) {
     if (stringBasedChatHistory !== undefined) settings.stringBasedChatHistory = Boolean(stringBasedChatHistory);
     if (autoDetectWebCookieModels !== undefined) settings.autoDetectWebCookieModels = Boolean(autoDetectWebCookieModels);
     if (SYSTEM_PROMPT !== undefined) settings.SYSTEM_PROMPT = SYSTEM_PROMPT;
+    if (INITIAL_CHAT_PROMPT !== undefined) settings.INITIAL_CHAT_PROMPT = INITIAL_CHAT_PROMPT;
+    if (applyInitialPromptToEveryMessage !== undefined) settings.applyInitialPromptToEveryMessage = Boolean(applyInitialPromptToEveryMessage);
 
     const label = typeof body.label === "string" && body.label.trim().length > 0
       ? body.label.trim()

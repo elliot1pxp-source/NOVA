@@ -19,9 +19,29 @@ const SYSTEM_PROMPT_FILE_CANDIDATES = [
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../systemprompt.txt"),
 ];
 
+const INITIAL_PROMPT_FILE_CANDIDATES = [
+  path.join(process.cwd(), "initial_prompt.txt"),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../initial_prompt.txt"),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../initial_prompt.txt"),
+];
+
 /** Reads the bundled systemprompt.txt from disk. Returns "" when missing. */
 export function readSystemPromptFile(): string {
   for (const filePath of SYSTEM_PROMPT_FILE_CANDIDATES) {
+    try {
+      if (fs.existsSync(filePath)) {
+        return fs.readFileSync(filePath, "utf-8").trim();
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return "";
+}
+
+/** Reads the bundled initial_prompt.txt from disk. Returns "" when missing. */
+export function readInitialPromptFile(): string {
+  for (const filePath of INITIAL_PROMPT_FILE_CANDIDATES) {
     try {
       if (fs.existsSync(filePath)) {
         return fs.readFileSync(filePath, "utf-8").trim();
@@ -54,4 +74,29 @@ export async function getEffectiveSystemPrompt(): Promise<string> {
     // If the store is unavailable, fall through to the file default.
   }
   return readSystemPromptFile();
+}
+
+/**
+ * Returns the active initial chat prompt for the chat runtime.
+ *
+ * Priority:
+ *   1. INITIAL_CHAT_PROMPT stored in global settings (admin editor) — when non-empty.
+ *   2. The bundled initial_prompt.txt file on disk.
+ *   3. Hardcoded fallback "DO NOT OVERTHINK THIS".
+ */
+export async function getEffectiveInitialPrompt(): Promise<string> {
+  try {
+    const settings = await readData<{ INITIAL_CHAT_PROMPT?: string }>(
+      STORAGE_KEYS.GLOBAL_SETTINGS,
+      {}
+    );
+    const configured = settings.INITIAL_CHAT_PROMPT?.trim();
+    if (configured) {
+      return configured;
+    }
+  } catch {
+    // If the store is unavailable, fall through to the file default.
+  }
+  const filePrompt = readInitialPromptFile();
+  return filePrompt || "DO NOT OVERTHINK THIS";
 }

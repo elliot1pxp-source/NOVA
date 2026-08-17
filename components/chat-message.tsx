@@ -956,9 +956,9 @@ function Attachment({ part }: { part: any }) {
     );
   }
   return (
-    <div className="flex items-center gap-1.5 sm:gap-2 bg-[#111] border border-[#2a2a2a] rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs text-[#ccc] min-w-0 max-w-[160px] sm:max-w-[220px]">
-      <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#888] flex-shrink-0" />
-      <span className="truncate flex-1 min-w-0">{part.filename || "file"}</span>
+    <div className="flex items-center gap-1.5 sm:gap-2 bg-[#111] border border-[#2a2a2a] rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs text-[#ccc]">
+      <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#888]" />
+      <span className="truncate max-w-[120px] sm:max-w-[160px]">{part.filename || "file"}</span>
     </div>
   );
 }

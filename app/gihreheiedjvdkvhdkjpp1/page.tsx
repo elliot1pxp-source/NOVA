@@ -81,6 +81,10 @@ type GlobalSettings = {
   autoDetectWebCookieModels?: boolean;
   /** Live-editable system prompt. Non-empty overrides the bundled systemprompt.txt. */
   SYSTEM_PROMPT?: string;
+  /** Live-editable initial chat prompt. Non-empty overrides the bundled initial_prompt.txt. */
+  INITIAL_CHAT_PROMPT?: string;
+  /** When true, apply INITIAL_CHAT_PROMPT to every message. When false, only apply on chat start. */
+  applyInitialPromptToEveryMessage?: boolean;
 };
 
 export default function AdminPage() {
@@ -116,6 +120,7 @@ export default function AdminPage() {
 
   // System prompt editor (live runtime)
   const [fileSystemPrompt, setFileSystemPrompt] = useState("");
+  const [fileInitialPrompt, setFileInitialPrompt] = useState("");
   const [expandScreen, setExpandScreen] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
@@ -275,8 +280,10 @@ export default function AdminPage() {
           FALLBACK_MODELS: settingsData.settings.FALLBACK_MODELS ?? FALLBACK_MODELS,
           // Prefill the editor with whatever is currently active at runtime.
           SYSTEM_PROMPT: settingsData.effectiveSystemPrompt ?? settingsData.settings.SYSTEM_PROMPT ?? "",
+          INITIAL_CHAT_PROMPT: settingsData.settings.INITIAL_CHAT_PROMPT ?? "",
         };
         setSettings(loadedSettings);
+        setFileInitialPrompt(settingsData.fileInitialPrompt ?? "");
         setCurrentEnvironmentInputs(buildCurrentEnvironmentInputs(loadedSettings, settingsData.env ?? {
           ADMIN_KEY: "",
           BLOCKRUN_API_KEY: "",
@@ -291,6 +298,9 @@ export default function AdminPage() {
       }
       if (typeof settingsData.fileSystemPrompt === "string") {
         setFileSystemPrompt(settingsData.fileSystemPrompt);
+      }
+      if (typeof settingsData.fileInitialPrompt === "string") {
+        setFileInitialPrompt(settingsData.fileInitialPrompt);
       }
     } catch {
       setMessage({ type: "error", text: "Failed to load data" });
@@ -905,23 +915,85 @@ export default function AdminPage() {
                 className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all resize-y leading-relaxed"
                 placeholder="Enter the system prompt…"
               />
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
-                  className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                 >
                   Reset to file default
                 </button>
                 <button
                   type="button"
                   onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
-                  className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                 >
                   Clear (use bundled file)
                 </button>
                 <span className="ml-auto text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
               </div>
+            </div>
+
+            {/* Initial Chat Prompt (live, runtime-editable) */}
+            <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 space-y-2.5">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Initial Chat Prompt</p>
+                <p className="text-[11px] text-[#6d7288]">Appended to the system prompt on every message (or chat start). Live runtime editor — changes apply on the next chat request. Clear the field to fall back to the default.</p>
+              </div>
+
+              <textarea
+                value={settings.INITIAL_CHAT_PROMPT ?? ""}
+                onChange={(e) => setSettings((s) => ({ ...s, INITIAL_CHAT_PROMPT: e.target.value }))}
+                rows={4}
+                spellCheck={false}
+                className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all resize-y leading-relaxed"
+                placeholder="Enter the initial chat prompt…"
+              />
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, INITIAL_CHAT_PROMPT: fileInitialPrompt }))}
+                  disabled={!fileInitialPrompt}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Load from initial_prompt.txt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, INITIAL_CHAT_PROMPT: "" }))}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
+                >
+                  Clear (use default)
+                </button>
+                <span className="ml-auto text-[10px] text-[#6d7288]">{(settings.INITIAL_CHAT_PROMPT ?? "").length} chars</span>
+              </div>
+            </div>
+
+            {/* Apply Initial Prompt to Every Message Toggle */}
+            <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 space-y-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Apply Initial Prompt to Every Message</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(settings.applyInitialPromptToEveryMessage)}
+                  onClick={() => setSettings((s) => ({ ...s, applyInitialPromptToEveryMessage: !s.applyInitialPromptToEveryMessage }))}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+                    settings.applyInitialPromptToEveryMessage ? "bg-amber-500" : "bg-white/10"
+                  )}
+                  aria-label={settings.applyInitialPromptToEveryMessage ? "Enabled" : "Disabled"}
+                >
+                  <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", settings.applyInitialPromptToEveryMessage ? "translate-x-4" : "translate-x-0.5")} />
+                </button>
+              </div>
+              <p className="text-[11px] text-[#6d7288]">
+                {settings.applyInitialPromptToEveryMessage
+                  ? "Initial prompt is prepended to the system prompt on every message."
+                  : "Initial prompt is only prepended on chat start (first message)."}
+              </p>
             </div>
 
             {/* Expand Screen dialog — full-screen editing surface with find & replace */}
@@ -1046,14 +1118,14 @@ export default function AdminPage() {
                       <button
                         type="button"
                         onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
-                        className="text-[10px] text-[#8c8f9c] transition-colors hover:text-white"
+                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                       >
                         Reset to file default
                       </button>
                       <button
                         type="button"
                         onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
-                        className="text-[10px] text-[#8c8f9c] transition-colors hover:text-white"
+                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                       >
                         Clear (use bundled file)
                       </button>
@@ -1232,7 +1304,7 @@ export default function AdminPage() {
                   <button
                     type="button"
                     onClick={resetPrimaryModelsToDefault}
-                    className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                   >
                     Reset primary defaults
                   </button>
@@ -1256,7 +1328,7 @@ export default function AdminPage() {
                   <button
                     type="button"
                     onClick={resetFallbackModelsToDefault}
-                    className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                   >
                     Reset fallback defaults
                   </button>
@@ -1387,7 +1459,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={handleSetCurrentCodeTokens}
                 disabled={loading}
-                className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Use current global key values
               </button>
@@ -1597,7 +1669,7 @@ export default function AdminPage() {
                         <button
                           type="button"
                           onClick={handleSetCurrentEditTokens}
-                          className="text-[10px] text-[#8c8f9c] hover:text-white transition-colors"
+                          className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                         >
                           Set the current one from global settings
                         </button>

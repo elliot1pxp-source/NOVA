@@ -1722,15 +1722,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           </div>
 
           {/* Messages Container */}
-<div
-        ref={messagesContainerRef}
-        data-message-container
-        onWheel={handleMessagesWheel}
-        onTouchStart={handleMessagesTouchStart}
-        onTouchMove={handleMessagesTouchMove}
-        className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-40 sm:pb-48"
-        style={{ touchAction: "pan-y" }}
-      >
+          <div
+            ref={messagesContainerRef}
+            onWheel={handleMessagesWheel}
+            onTouchStart={handleMessagesTouchStart}
+            onTouchMove={handleMessagesTouchMove}
+            className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-40 sm:pb-48"
+          >
             {/* Fades in once, on mount — i.e. whenever a whole conversation is
                 opened or switched to (ChatView remounts per chatId). This is
                 separate from the flat swap used for edit-version branch nav

@@ -25,7 +25,7 @@ import {
   type ProviderClients,
 } from "@/lib/llm-providers";
 import { readData, STORAGE_KEYS } from "@/lib/server-storage";
-import { getEffectiveSystemPrompt } from "@/lib/system-prompt";
+import { getEffectiveSystemPrompt, getEffectiveInitialPrompt } from "@/lib/system-prompt";
 import { hasRedeemedCode, PaidCode } from "@/lib/paid-codes";
 import { enforceFreeTierLimit } from "@/lib/free-tier";
 import { isContinueInstruction } from "@/lib/continue-helper";
@@ -36,7 +36,6 @@ export const maxDuration = 300;
 // progress parts are sent, so bound their internal retries to avoid very long
 // server hangs.
 const SUBCALL_MAX_RETRIES = 3;
-const INITIAL_CHAT_PROMPT = `DO NOT OVERTHINK THIS`;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
 // User-selectable native reasoning levels for DeepThink. The endpoints
 // advertise effort tiers up to "xhigh"; the UI offers low/medium/high/xhigh.
@@ -108,6 +107,10 @@ type GlobalSettings = {
   stringBasedChatHistory?: boolean;
   /** When true, automatically detect web-cookie models (containing "web" in model name) and apply string-based chat history. */
   autoDetectWebCookieModels?: boolean;
+  /** Live-editable initial chat prompt. Appended to the system prompt on every message (or chat start). */
+  INITIAL_CHAT_PROMPT?: string;
+  /** When true, apply INITIAL_CHAT_PROMPT to every message. When false, only apply on chat start. */
+  applyInitialPromptToEveryMessage?: boolean;
 };
 
 async function readGlobalSettings(): Promise<GlobalSettings> {
@@ -254,6 +257,10 @@ export async function POST(req: Request) {
     runtimeFallbackModels = globalSettings.FALLBACK_MODELS;
     const stringBasedChatHistory = Boolean(globalSettings.stringBasedChatHistory);
     const autoDetectWebCookieModels = Boolean(globalSettings.autoDetectWebCookieModels);
+    const applyInitialPromptToEveryMessage = globalSettings.applyInitialPromptToEveryMessage ?? true;
+    // INITIAL_CHAT_PROMPT: runtime-overridable preamble appended to every
+    // system prompt. Resolved live from KV → initial_prompt.txt → default.
+    const INITIAL_CHAT_PROMPT = await getEffectiveInitialPrompt();
 
     if (paidCode?.expiresAt && new Date(paidCode.expiresAt) > new Date()) {
       if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
@@ -596,7 +603,7 @@ export async function POST(req: Request) {
         // that overrides the prior on-task thought).
         const shouldApplyInitialPrompt = isContinuation
           ? false
-          : APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE
+          : applyInitialPromptToEveryMessage
             ? true
             : isChatStart(messages);
 
