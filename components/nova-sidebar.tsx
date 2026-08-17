@@ -636,7 +636,7 @@ export function NovaSidebar({
     <>
       {/* Persistent Floating Controls Button (Always rendered outside sidebar container when closed) */}
       {!historyOpen && (
-        <div className="fixed left-4 top-4 z-40 flex items-center gap-1 animate-in fade-in duration-200">
+        <div className="fixed left-4 top-4 z-40 flex items-center gap-1 animate-in fade-in duration-200 sm:left-auto sm:right-4">
           <div className="relative flex items-center gap-1 rounded-full bg-[#0a0a0c]/90 border border-white/15 p-1 shadow-2xl backdrop-blur-2xl">
             <button
               onClick={() => {
@@ -652,7 +652,7 @@ export function NovaSidebar({
             </button>
             <button
               onClick={openHistoryWithSearch}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Search chats"
               title="Search chats"
             >
@@ -663,7 +663,7 @@ export function NovaSidebar({
                 onNewChat();
                 openHistoryAndReset();
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
               aria-label="New chat"
               title="New chat"
             >
