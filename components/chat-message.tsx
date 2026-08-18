@@ -16,6 +16,8 @@ import { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { NeuralNetworkDiagram } from "@/components/neural-network-diagram";
+import { ChatFlowDiagram } from "@/components/chat-flow-diagram";
 import {
   ChevronDown,
   ChevronLeft,
@@ -226,6 +228,17 @@ function createMarkdownComponents() {
           {children}
         </code>
       );
+    }
+
+    // Render visual diagrams for language-diagram-* code blocks
+    if (match) {
+      const lang = match[1];
+      if (lang === "diagram" || lang === "diagram-nn") {
+        return <NeuralNetworkDiagram />;
+      }
+      if (lang === "diagram-chat-flow" || lang === "diagram-flow") {
+        return <ChatFlowDiagram />;
+      }
     }
 
     return <CodeBlock className={className}>{children}</CodeBlock>;
@@ -600,7 +613,7 @@ function ThoughtBlock({ data, stopped }: { data: any; stopped?: boolean }) {
           className={cn(
             "w-3.5 h-3.5 sm:w-4 sm:h-4 transition-all duration-300",
             isThinking
-              ? "text-[#4a6cf7] animate-pulse scale-110"
+              ? "text-white animate-pulse scale-110"
               : "text-[#888] group-hover:text-[#bbb]"
           )}
         />
@@ -608,10 +621,10 @@ function ThoughtBlock({ data, stopped }: { data: any; stopped?: boolean }) {
           {isThinking
             ? "Thinking…"
             : stopped
-            ? "Stopped"
-            : status === "error"
-            ? "Thinking (unavailable)"
-            : `Thought for ${seconds ?? 1} second${seconds === 1 ? "" : "s"}`}
+              ? "Stopped"
+              : status === "error"
+                ? "Thinking (unavailable)"
+                : `Thought for ${seconds ?? 1} second${seconds === 1 ? "" : "s"}`}
         </span>
         <ChevronDown
           className={cn(
@@ -623,7 +636,7 @@ function ThoughtBlock({ data, stopped }: { data: any; stopped?: boolean }) {
 
       {/* Thought content with Markdown */}
       {open && (
-        <div className="mt-2 sm:mt-2.5 border-l-2 border-[#4a6cf7]/50 pl-2.5 sm:pl-3 text-[11px] sm:text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
+        <div className="mt-2 sm:mt-2.5 border-l-2 border-white/30 pl-2.5 sm:pl-3 text-[11px] sm:text-xs text-[#999] leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200 min-w-0 overflow-hidden">
           {thoughtText ? (
             <div className="relative prose prose-invert prose-xs max-w-none text-[#999]">
               <StreamingMarkdown
@@ -633,7 +646,7 @@ function ThoughtBlock({ data, stopped }: { data: any; stopped?: boolean }) {
             </div>
           ) : isThinking ? (
             <div className="flex items-center gap-2 text-[#777] italic py-1">
-              <span className="w-1.5 h-1.5 bg-[#4a6cf7] rounded-full animate-ping" />
+              <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
               <span>Analyzing & thinking step-by-step…</span>
             </div>
           ) : null}
@@ -665,18 +678,18 @@ function SearchBlock({ data }: { data: any }) {
           className={cn(
             "w-3 h-3 sm:w-3.5 sm:h-3.5 transition-all duration-300",
             isGenerating
-              ? "text-[#4a6cf7] animate-pulse"
+              ? "text-white animate-pulse"
               : isSearching
-              ? "text-[#4a6cf7] animate-spin"
-              : "text-[#888]"
+                ? "text-white animate-spin"
+                : "text-[#888]"
           )}
         />
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
           {isGenerating || isSearching
             ? "Searching the web..."
             : status === "error"
-            ? "Web search unavailable"
-            : "Searched the web"}
+              ? "Web search unavailable"
+              : "Searched the web"}
         </span>
         <ChevronDown
           className={cn(
@@ -694,7 +707,7 @@ function SearchBlock({ data }: { data: any }) {
                   href={r.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#4a6cf7] hover:underline"
+                  className="text-white hover:underline"
                 >
                   [{i + 1}] {r.title}
                 </a>
@@ -753,8 +766,8 @@ function ToolSearchBlock({ part }: { part: any }) {
             "w-3 h-3 sm:w-3.5 sm:h-3.5 transition-all duration-300",
             isSearching
               ? query
-                ? "text-[#4a6cf7] animate-spin"
-                : "text-[#4a6cf7] animate-pulse"
+                ? "text-white animate-spin"
+                : "text-white animate-pulse"
               : "text-[#888]"
           )}
         />
@@ -762,8 +775,8 @@ function ToolSearchBlock({ part }: { part: any }) {
           {isSearching
             ? "Searching the web..."
             : isError
-            ? "Web search unavailable"
-            : "Searched the web"}
+              ? "Web search unavailable"
+              : "Searched the web"}
         </span>
         <ChevronDown
           className={cn(
@@ -781,7 +794,7 @@ function ToolSearchBlock({ part }: { part: any }) {
                   href={r.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#4a6cf7] hover:underline"
+                  className="text-white hover:underline"
                 >
                   [{i + 1}] {r.title}
                 </a>
@@ -857,7 +870,7 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
               ? "text-[#22c55e]"
               : hasError
                 ? "text-red-400"
-                : "text-[#4a6cf7] animate-pulse"
+                : "text-white animate-pulse"
           )}
         />
         <span className="font-medium text-[#aaa]">
@@ -871,9 +884,9 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
         </span>
         {isScanning && (
           <span className="ml-auto flex gap-1">
-            <span className="w-1 h-1 rounded-full bg-[#4a6cf7] animate-pulse [animation-delay:0ms]" />
-            <span className="w-1 h-1 rounded-full bg-[#4a6cf7] animate-pulse [animation-delay:200ms]" />
-            <span className="w-1 h-1 rounded-full bg-[#4a6cf7] animate-pulse [animation-delay:400ms]" />
+            <span className="w-1 h-1 rounded-full bg-white animate-pulse [animation-delay:0ms]" />
+            <span className="w-1 h-1 rounded-full bg-white animate-pulse [animation-delay:200ms]" />
+            <span className="w-1 h-1 rounded-full bg-white animate-pulse [animation-delay:400ms]" />
           </span>
         )}
       </div>
@@ -893,9 +906,9 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
                 className={cn(
                   "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] border transition-all duration-300 whitespace-nowrap",
                   isReading && isScanning
-                    ? "bg-[#4a6cf7]/15 border-[#4a6cf7]/50 text-[#7a8cff] file-scan-chip-active"
+                    ? "bg-white/15 border-white/50 text-white file-scan-chip-active"
                     : isReading
-                      ? "bg-[#4a6cf7]/15 border-[#4a6cf7]/50 text-[#7a8cff]"
+                      ? "bg-white/15 border-white/50 text-white"
                       : isDoneFile
                         ? "bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]"
                         : isFailed
@@ -903,7 +916,7 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
                           : "bg-white/5 border-white/10 text-[#555]"
                 )}
               >
-                {isReading && <span className="w-1.5 h-1.5 rounded-full bg-[#4a6cf7] animate-pulse" />}
+                {isReading && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                 {isDoneFile && <Check className="w-3 h-3" />}
                 {isFailed && <X className="w-3 h-3" />}
                 {isPending && <span className="w-1.5 h-1.5 rounded-full bg-[#555]" />}
@@ -916,7 +929,7 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
                   className={cn(
                     "w-4 h-[2px] shrink-0 rounded-full transition-colors duration-300",
                     isScanning
-                      ? "bg-[#4a6cf7]/30"
+                      ? "bg-white/30"
                       : isDoneFile || isDone
                         ? "bg-[#22c55e]/40"
                         : isFailed
@@ -935,7 +948,7 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
         <div className="mt-2.5">
           <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#4a6cf7] to-[#7a8cff] transition-all duration-500 ease-out"
+              className="h-full rounded-full bg-gradient-to-r from-white to-white/50 transition-all duration-500 ease-out"
               style={{ width: `${Math.max(percent, doneCount > 0 ? 8 : 0)}%` }}
             />
           </div>

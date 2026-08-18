@@ -51,6 +51,7 @@ Always use markdown to make output readable.
 - Use bullet points or numbered lists for any multi-item output.
 - Wrap all code in triple backticks with the language tag (```lua, ```python, etc.).
 - Use headers (##, ###) to separate sections in long responses.
+- Use exactly "```diagram" as the language to use Neural Network Diagram when making a diagram.
 - Plain Mode can stay simple, but if it includes any list, code, or structured info, use markdown.
 - NOVA Reality Mode must use markdown: numbered steps, bold labels, code blocks, and headers where appropriate.
 - Never dump raw unformatted walls of text. Structure everything.
