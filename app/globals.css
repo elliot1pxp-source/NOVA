@@ -49,6 +49,73 @@
   }
 }
 
+/* ── Modern Mermaid diagram styling ─────────────────────────── */
+/* Monochromatic NOVA palette — every node is the same neutral tone */
+.mermaid-output .node rect,
+.mermaid-output .node polygon,
+.mermaid-output .node circle,
+.mermaid-output .node path {
+  fill: #1a1a1e !important;
+  stroke: #4a4d55 !important;
+  stroke-width: 1.5px !important;
+}
+
+.mermaid-output .node rect,
+.mermaid-output .node polygon,
+.mermaid-output .node circle {
+  rx: 8px !important;
+  ry: 8px !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+  transition: filter 0.2s ease, stroke 0.2s ease;
+}
+
+.mermaid-output .node:hover rect,
+.mermaid-output .node:hover polygon,
+.mermaid-output .node:hover circle {
+  filter: drop-shadow(0 0 8px rgba(74, 108, 247, 0.35));
+  stroke: #4a6cf7 !important;
+}
+
+/* Label text */
+.mermaid-output .node text {
+  font-family: "Inter", system-ui, -apple-system, sans-serif !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  fill: #e8e8e8 !important;
+  letter-spacing: 0.01em;
+}
+
+/* Edge labels (Yes/No etc.) */
+.mermaid-output .edgeLabel {
+  background: #0d0d0d !important;
+  border-radius: 8px !important;
+  padding: 2px 8px !important;
+}
+
+.mermaid-output .edgeLabel text {
+  fill: #8c8f9c !important;
+  font-size: 9px !important;
+}
+
+/* Edges & arrowheads */
+.mermaid-output .edgePath .path {
+  stroke: #6b7280 !important;
+  stroke-width: 1.5px !important;
+}
+
+.mermaid-output marker {
+  fill: #6b7280 !important;
+}
+
+/* Subgraph / cluster backgrounds */
+.mermaid-output .cluster {
+  fill: rgba(255, 255, 255, 0.03) !important;
+  stroke: rgba(255, 255, 255, 0.08) !important;
+  stroke-width: 1px !important;
+  rx: 12px !important;
+  ry: 12px !important;
+}
+
 @theme inline {
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

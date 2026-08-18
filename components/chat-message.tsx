@@ -18,6 +18,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { NeuralNetworkDiagram } from "@/components/neural-network-diagram";
 import { ChatFlowDiagram } from "@/components/chat-flow-diagram";
+import { MermaidDiagram } from "@/components/mermaid-diagram";
 import {
   ChevronDown,
   ChevronLeft,
@@ -238,6 +239,9 @@ function createMarkdownComponents() {
       }
       if (lang === "diagram-chat-flow" || lang === "diagram-flow") {
         return <ChatFlowDiagram />;
+      }
+      if (lang === "mermaid") {
+        return <MermaidDiagram code={String(children).replace(/\n$/, "")} />;
       }
     }
 
