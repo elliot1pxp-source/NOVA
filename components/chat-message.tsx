@@ -70,7 +70,8 @@ const SCROLL_BOTTOM_THRESHOLD = 24;
 // Streaming state flows through context (instead of being baked into the
 // per-stream components object) so the components map can be created once and
 // memoized segments never re-parse when the stream starts/stops.
-const StreamingContext = createContext(false);
+// Exported so child components (e.g. MermaidDiagram) can read the same flag.
+export const StreamingContext = createContext(false);
 
 // Citation results (from the web-search tool) flow through context for the
 // same reason: markdownComponents is built once at module scope, so the `a`
