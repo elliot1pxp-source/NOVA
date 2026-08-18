@@ -97,12 +97,12 @@ export function MermaidDiagram({ code }: Props) {
   return (
     <div
       className={cn(
-        "w-full max-w-xl rounded-2xl border border-white/10 bg-[#0d0d11]/95 p-3 sm:p-4 backdrop-blur-2xl overflow-hidden"
+        "w-full rounded-2xl border border-white/10 bg-[#0d0d11]/95 p-3 sm:p-4 backdrop-blur-2xl"
       )}
     >
       {svg ? (
         <div
-          className="mermaid-output flex justify-center overflow-y-auto max-h-[70vh] [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:mx-auto [&>svg]:[&>rect]:rounded-lg [&>svg]:[&>polygon]:drop-shadow-sm"
+          className="mermaid-output overflow-x-auto [&>svg]:min-w-[640px] [&>svg]:block [&>svg]:mx-auto"
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       ) : error ? (
