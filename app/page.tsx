@@ -15,6 +15,7 @@ import {
   ModelSettings,
   loadModelSettings,
   saveModelSettings,
+  reclaimOrphanedBranchSnapshots,
 } from "@/lib/storage";
 import { refreshPaidTierStatus } from "@/lib/paid-tier";
 import { backupNow, clearBackup, flushBackup, restoreFromServer } from "@/lib/history-backup";
@@ -76,6 +77,10 @@ export default function Home() {
   const hydratedRef = useRef(false);
 
   useEffect(() => {
+    // Free up any quota still held by orphaned version snapshots from the
+    // previous implementation BEFORE the first save happens, otherwise an
+    // already-full store keeps silently dropping assistant replies.
+    reclaimOrphanedBranchSnapshots();
     const stored = loadChats();
     let uniqueChats: Chat[] = [];
     if (stored.length > 0) {

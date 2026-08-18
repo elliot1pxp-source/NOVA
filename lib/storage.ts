@@ -58,9 +58,15 @@ const FILES_PREFIX = "nova_files_v1_";
 const SETTINGS_KEY = "nova_model_settings_v1";
 const SETTINGS_MIGRATION_KEY = "nova_model_settings_migrated_v2";
 const LAST_CHAT_KEY = "nova_last_chat_v1";
+// Edit/regenerate version snapshots (written by components/chat-view.tsx).
+// Declared here so chat deletion can clean them up too — otherwise every
+// deleted chat leaks its snapshots forever and eventually exhausts the quota,
+// which makes saveMessages() fail and silently drop assistant replies.
+export const BRANCHES_PREFIX = "nova-edit-branches:";
 
 const messagesKey = (chatId: string) => `${MESSAGES_PREFIX}${chatId}`;
 const filesKey = (chatId: string) => `${FILES_PREFIX}${chatId}`;
+export const branchesKey = (chatId: string) => `${BRANCHES_PREFIX}${chatId}`;
 
 // Stable, device-scoped identifier used for server-side history backup. It is
 // written to BOTH a long-lived cookie and localStorage so that a WebView
@@ -192,38 +198,149 @@ export function loadMessages<T = unknown>(chatId: string): T[] {
   }
 }
 
+/**
+ * Strips heavy base64 file data URLs — the single biggest quota hog.
+ */
+function stripDataUrls(messages: Array<{ id?: string }>) {
+  return messages.map((m: any) => ({
+    ...m,
+    parts: Array.isArray(m?.parts)
+      ? m.parts.map((part: any) =>
+          part?.type === "file" && typeof part?.url === "string" && part.url.startsWith("data:")
+            ? { ...part, url: "" }
+            : part
+        )
+      : m?.parts,
+  }));
+}
+
+/**
+ * Drops UI-only progress parts (reasoning transcripts, search results, file
+ * scan chips). These can be tens of KB per message and are pure decoration —
+ * losing them is always preferable to losing the assistant's actual answer.
+ */
+function stripProgressParts(messages: Array<{ id?: string }>) {
+  return messages.map((m: any) => ({
+    ...m,
+    parts: Array.isArray(m?.parts)
+      ? m.parts.filter((part: any) => !String(part?.type ?? "").startsWith("data-"))
+      : m?.parts,
+  }));
+}
+
+/**
+ * Frees quota by deleting the version-snapshot blobs of OTHER chats. They are
+ * a nice-to-have (the "< 2/3 >" switcher) and are stored redundantly, so they
+ * are the correct thing to sacrifice to keep real conversations intact.
+ */
+function evictOtherChatBranchSnapshots(keepChatId: string): boolean {
+  let evicted = false;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(BRANCHES_PREFIX) && key !== branchesKey(keepChatId)) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) {
+      window.localStorage.removeItem(key);
+      evicted = true;
+    }
+  } catch {
+    // ignore — best effort
+  }
+  return evicted;
+}
+
+/**
+ * Persists a chat's messages, degrading progressively rather than failing.
+ *
+ * A silent failure here was the cause of "NOVA's replies disappear": the last
+ * write that fit was the one taken moments after the user hit send (containing
+ * only their message), so the assistant's reply was never stored and the chat
+ * reloaded as user-only. Every tier below is therefore attempted in order, and
+ * the final tier keeps the most recent messages so SOMETHING survives.
+ */
 export function saveMessages(chatId: string, messages: unknown[]) {
   if (!isBrowser()) return;
   const deduped = dedupeById(messages as Array<{ id?: string }>);
   if (deduped.length === 0) return;
-  try {
-    window.localStorage.setItem(messagesKey(chatId), JSON.stringify(deduped));
-    return;
-  } catch {
-    // Quota exceeded or storage disabled — fall back to a smaller payload
-    // instead of dropping the save entirely: strip heavy data URLs (file
-    // attachments are the main quota hog) and retry once.
+
+  const key = messagesKey(chatId);
+  const write = (payload: unknown[]): boolean => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Tier 1: everything.
+  if (write(deduped)) return;
+  // Tier 2: without base64 attachment payloads.
+  const slim = stripDataUrls(deduped);
+  if (write(slim)) return;
+  // Tier 3: reclaim space from other chats' redundant version snapshots.
+  if (evictOtherChatBranchSnapshots(chatId) && write(slim)) return;
+  // Tier 4: without UI-only progress parts (thoughts / search / file scans).
+  const minimal = stripProgressParts(slim);
+  if (write(minimal)) return;
+  // Tier 5: keep only the most recent messages. Never give up entirely —
+  // truncated history beats a conversation that looks like it never happened.
+  for (const limit of [100, 50, 20, 10, 4]) {
+    if (minimal.length <= limit) continue;
+    if (write(minimal.slice(-limit))) return;
   }
-  try {
-    const slim = deduped.map((m: any) => ({
-      ...m,
-      parts: Array.isArray(m?.parts)
-        ? m.parts.map((part: any) =>
-            part?.type === "file" && typeof part?.url === "string" && part.url.startsWith("data:")
-              ? { ...part, url: "" }
-              : part
-          )
-        : m?.parts,
-    }));
-    window.localStorage.setItem(messagesKey(chatId), JSON.stringify(slim));
-  } catch {
-    // storage truly unavailable — the server-side backup still has the data
-  }
+  // Storage is genuinely unusable (private mode / disabled). The server-side
+  // backup remains the safety net.
+  console.warn(`[storage] unable to persist messages for chat ${chatId}`);
 }
 
 export function deleteMessages(chatId: string) {
   if (!isBrowser()) return;
   window.localStorage.removeItem(messagesKey(chatId));
+}
+
+export function deleteBranchSnapshots(chatId: string) {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(branchesKey(chatId));
+  } catch {
+    // storage disabled — nothing to clean
+  }
+}
+
+const BRANCH_GC_KEY = "nova_branch_gc_v1";
+
+/**
+ * One-time reclaim for users whose quota is ALREADY full of orphaned version
+ * snapshots written by the previous (leaking) implementation. Without this,
+ * existing users stay wedged — every save keeps failing until they manually
+ * clear site data. Deletes snapshot blobs belonging to chats that no longer
+ * exist, then marks itself done.
+ */
+export function reclaimOrphanedBranchSnapshots() {
+  if (!isBrowser()) return;
+  try {
+    if (window.localStorage.getItem(BRANCH_GC_KEY)) return;
+    const liveChatIds = new Set(loadChats().map((c) => c.id));
+    const orphaned: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(BRANCHES_PREFIX)) continue;
+      const chatId = key.slice(BRANCHES_PREFIX.length);
+      if (!liveChatIds.has(chatId)) orphaned.push(key);
+    }
+    for (const key of orphaned) window.localStorage.removeItem(key);
+    window.localStorage.setItem(BRANCH_GC_KEY, "1");
+    if (orphaned.length > 0) {
+      console.info(`[storage] reclaimed ${orphaned.length} orphaned branch snapshot(s)`);
+    }
+  } catch {
+    // best effort
+  }
 }
 
 export function deleteChat(chatId: string) {
@@ -232,6 +349,9 @@ export function deleteChat(chatId: string) {
   saveChats(chats);
   deleteMessages(chatId);
   deleteChatFiles(chatId);
+  // Without this the version snapshots (which duplicate message content)
+  // outlive the chat forever and slowly consume the whole quota.
+  deleteBranchSnapshots(chatId);
 }
 
 /** Wipes every chat and every chat's message history and files from localStorage. */
@@ -276,7 +396,13 @@ export function clearAllChats() {
     const keysToRemove: string[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && (key === CHATS_KEY || key.startsWith(MESSAGES_PREFIX) || key.startsWith(FILES_PREFIX))) {
+      if (
+        key &&
+        (key === CHATS_KEY ||
+          key.startsWith(MESSAGES_PREFIX) ||
+          key.startsWith(FILES_PREFIX) ||
+          key.startsWith(BRANCHES_PREFIX))
+      ) {
         keysToRemove.push(key);
       }
     }

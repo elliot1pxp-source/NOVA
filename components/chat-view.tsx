@@ -181,17 +181,38 @@ function loadBranchGroups(chatId: string): Record<string, BranchGroup> {
   }
 }
 
+// Only groups that actually have MORE THAN ONE version are worth persisting:
+// a single-version group renders no "< n/m >" switcher, so it is pure storage
+// overhead. Filtering them out keeps this blob proportional to the number of
+// edits/regenerations rather than to the length of the conversation.
+function prunableBranchGroups(
+  groups: Record<string, BranchGroup>
+): Record<string, BranchGroup> {
+  const out: Record<string, BranchGroup> = {};
+  for (const [groupId, group] of Object.entries(groups)) {
+    if (group?.branches?.length > 1) out[groupId] = group;
+  }
+  return out;
+}
+
 function saveBranchGroups(chatId: string, groups: Record<string, BranchGroup>) {
   if (typeof window === "undefined") return;
+  const persistable = prunableBranchGroups(groups);
   try {
-    if (Object.keys(groups).length === 0) {
+    if (Object.keys(persistable).length === 0) {
       window.localStorage.removeItem(branchStorageKey(chatId));
       return;
     }
-    window.localStorage.setItem(branchStorageKey(chatId), JSON.stringify(groups));
+    window.localStorage.setItem(branchStorageKey(chatId), JSON.stringify(persistable));
   } catch {
-    // Storage unavailable (private mode, quota, etc) — versions just won't
-    // survive a refresh, which is a fine degradation.
+    // Storage unavailable or quota exhausted. Version snapshots are the
+    // LOWEST-priority data we hold, so drop this blob entirely rather than
+    // let it compete with the actual conversation for space.
+    try {
+      window.localStorage.removeItem(branchStorageKey(chatId));
+    } catch {
+      // nothing more we can do
+    }
   }
 }
 
@@ -238,10 +259,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     void restoreFromServer().then((restored) => {
       if (cancelled || !restored) return;
       const remoteMessages = restored.messages?.[chatId];
-      if (Array.isArray(remoteMessages) && remoteMessages.length > 0) {
-        saveMessages(chatId, remoteMessages);
-        setMessages(remoteMessages as never);
-      }
+      if (!Array.isArray(remoteMessages) || remoteMessages.length === 0) return;
+      // This request is async: the user may have started (or finished) a real
+      // conversation while it was in flight. Overwriting that with the older
+      // server snapshot would wipe the reply they just received, so only apply
+      // the restore while the chat is still genuinely empty.
+      if (messagesRef.current.length > 0) return;
+      saveMessages(chatId, remoteMessages);
+      setMessages(remoteMessages as never);
     });
     return () => {
       cancelled = true;
@@ -499,7 +524,20 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         return -1;
       })();
       if (lastUserIndex === -1) return current;
-      // Keep messages up to last user message
+      // Only discard assistant messages that are genuinely EMPTY. The watchdog
+      // races with the stream: text can land between the timer firing and this
+      // callback running, and unconditionally truncating here destroyed fully
+      // received replies (leaving the chat as user-message-only). Anything that
+      // already carries text is a real answer and must be kept.
+      const tail = current.slice(lastUserIndex + 1);
+      const hasRealContent = tail.some(
+        (message) =>
+          message.role === "assistant" &&
+          message.parts.some(
+            (part) => part.type === "text" && ((part as { text?: string }).text ?? "").length > 0
+          )
+      );
+      if (hasRealContent) return current;
       return current.slice(0, lastUserIndex + 1);
     });
   }, [setMessages]);
@@ -1472,31 +1510,16 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         setBranchGroups((g) => ({ ...g, ...groupUpdates }));
       }
 
-      // Ensure the freshly streamed assistant has a branch group so it can
-      // be regenerated later as a sibling (same parent).
-      let lastAssistantIndex = -1;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "assistant") {
-          lastAssistantIndex = i;
-          break;
-        }
-      }
-      if (lastAssistantIndex !== -1) {
-        const assistantMessageId = messages[lastAssistantIndex].id;
-        if (!branchGroups[assistantMessageId]) {
-          const parentId =
-            lastAssistantIndex > 0 ? messages[lastAssistantIndex - 1]?.id ?? null : null;
-          setBranchGroups((g) => ({
-            ...g,
-            [assistantMessageId]: {
-              branches: [{ messages: messages.slice(lastAssistantIndex), childBranchIds: [] }],
-              activeIndex: 0,
-              parentMessageId: parentId,
-            },
-          }));
-          branchGroupForMessageRef.current[assistantMessageId] = assistantMessageId;
-        }
-      }
+      // NOTE: we deliberately do NOT pre-create a branch group for every
+      // freshly streamed assistant message here. Doing so stored a duplicate
+      // copy of the conversation tail after EVERY reply — O(n²) localStorage
+      // growth that eventually exhausted the quota, at which point
+      // saveMessages() failed and assistant replies silently vanished.
+      //
+      // A group is only needed once a message actually HAS a second version,
+      // and handleRegenerate() creates it on demand (it resolves
+      // `branchGroupForMessageRef.current[messageId] ?? messageId`, so a
+      // missing group is the normal, expected starting state).
     }
   }, [status, messages, branchGroups]);
 
