@@ -222,19 +222,35 @@ export function MermaidDiagram({ code }: Props) {
   // re-trigger the async render.
   const codeKey = code.trim();
 
-  // Guard: nothing to render (e.g. empty/malformed code) — show the raw block
-  // directly so we never spam the noisy mermaid error banner.
+  // Render happens in exactly ONE effect, keyed on a *debounced* copy of the
+  // code. The model streams the fenced block token-by-token, so `code` changes
+  // on every delta — running the effect synchronously on each delta (and the
+  // prior guard effect resetting state alongside it) thrashed React's update
+  // budget and produced "Maximum update depth exceeded" (#185). Debouncing
+  // until the text settles collapses hundreds of effect runs into a single
+  // render once the diagram is fully streamed.
+  const [debouncedKey, setDebouncedKey] = useState(codeKey);
+
   useEffect(() => {
-    setSvg(null);
-    setError(null);
-    setShowRaw(false);
-    if (!codeKey) {
-      setShowRaw(true);
-    }
+    const t = setTimeout(() => setDebouncedKey(codeKey), 400);
+    return () => clearTimeout(t);
   }, [codeKey]);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Nothing to render (e.g. empty/malformed code) — show the raw block.
+    if (!debouncedKey) {
+      setSvg(null);
+      setError(null);
+      setShowRaw(true);
+      return;
+    }
+
+    // Reset to loading state for this run.
+    setSvg(null);
+    setError(null);
+    setShowRaw(false);
 
     async function render() {
       try {
@@ -283,14 +299,12 @@ export function MermaidDiagram({ code }: Props) {
           return mermaid.render(rid, src);
         };
 
-        // Skip the parse entirely when there is no code to render.
-        if (!codeKey) return;
-
         try {
           const { svg } = await renderOnce(code);
           if (!cancelled) {
             setSvg(svg);
             setError(null);
+            setShowRaw(false);
           }
         } catch (renderErr) {
           // Stage 1 — conservative label quoting + direction normalisation.
@@ -301,6 +315,7 @@ export function MermaidDiagram({ code }: Props) {
               if (!cancelled) {
                 setSvg(fixedSvg);
                 setError(null);
+                setShowRaw(false);
               }
               return;
             } catch {
@@ -317,6 +332,7 @@ export function MermaidDiagram({ code }: Props) {
               if (!cancelled) {
                 setSvg(repairedSvg);
                 setError(null);
+                setShowRaw(false);
               }
               return;
             } catch {
@@ -334,6 +350,7 @@ export function MermaidDiagram({ code }: Props) {
               if (!cancelled) {
                 setSvg(fallbackSvg);
                 setError(null);
+                setShowRaw(false);
               }
               return;
             } catch {
@@ -350,10 +367,9 @@ export function MermaidDiagram({ code }: Props) {
         }
       } catch (err) {
         if (!cancelled) {
-          const message =
-            err instanceof Error ? err.message : "Failed to render diagram";
-          setError(message);
+          // import()/initialize failure — surface quietly, never loop.
           setSvg(null);
+          setShowRaw(true);
         }
       }
     }
@@ -362,7 +378,7 @@ export function MermaidDiagram({ code }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [codeKey]);
+  }, [debouncedKey]);
 
   return (
     <div
