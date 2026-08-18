@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+
+import { StreamingContext } from "./chat-message";
 
 type Props = {
   code: string;
@@ -218,6 +220,9 @@ export function MermaidDiagram({ code }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
 
+  // Read streaming state from context (the same one CodeBlock uses)
+  const isStreaming = useContext(StreamingContext);
+
   // Keep a stable copy of the code so a re-render with the same text doesn't
   // re-trigger the async render.
   const codeKey = code.trim();
@@ -232,11 +237,23 @@ export function MermaidDiagram({ code }: Props) {
   const [debouncedKey, setDebouncedKey] = useState(codeKey);
 
   useEffect(() => {
+    // While streaming, we don't want the render effect to even think about
+    // running. Reset to raw code or just keep the spinner.
+    if (isStreaming) {
+      setSvg(null);
+      setError(null);
+      setShowRaw(true);
+      return;
+    }
+
     const t = setTimeout(() => setDebouncedKey(codeKey), 400);
     return () => clearTimeout(t);
-  }, [codeKey]);
+  }, [codeKey, isStreaming]);
 
   useEffect(() => {
+    // The debounce effect already handles the streaming guard.
+    if (isStreaming) return;
+
     let cancelled = false;
 
     // Nothing to render (e.g. empty/malformed code) — show the raw block.
@@ -263,6 +280,7 @@ export function MermaidDiagram({ code }: Props) {
         if (!(mermaid as any).__initialized) {
           mermaid.initialize({
             startOnLoad: false,
+            suppressErrorRendering: true, // Prevent Mermaid from injecting error SVG on parse failure
             theme: "dark",
             themeVariables: {
               darkMode: true,
@@ -295,6 +313,12 @@ export function MermaidDiagram({ code }: Props) {
         }
 
         const renderOnce = async (src: string) => {
+          // Validate syntax before rendering — durante streaming debounce can
+          // still fire on a just-completed but syntactically invalid chunk.
+          await mermaid.parse(src, { suppressErrors: true }).catch(() => {
+            throw new Error("Incomplete or invalid syntax");
+          });
+
           const rid = `mermaid-${Math.random().toString(36).slice(2, 10)}`;
           return mermaid.render(rid, src);
         };
