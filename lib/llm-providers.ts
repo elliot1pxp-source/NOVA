@@ -26,8 +26,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 export const PRIMARY_MODELS: Record<string, string> = {
   instant: "nvidia/nemotron-3-super-120b-a12b:free",
   expert: "nvidia/nemotron-3-ultra-550b-a55b:free",
-  websearch: "nvidia/nemotron-3.5-lightning:free",
-  fileAnalysis: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  websearch: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  fileAnalysis: "nvidia/nemotron-3.5-lightning:free",
   coding: "tencent/hy3:free",
 };
 

@@ -803,9 +803,10 @@ function ToolSearchBlock({ part }: { part: any }) {
 function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boolean }) {
   // Derive the full file chain state from all accumulated data-file parts.
   // Each event has a unique id so they all accumulate in message.parts.
-  const { files, total, hasError, isDone } = useMemo(() => {
+  const { files, total, hasError, isDone, isReady } = useMemo(() => {
     let total = 0;
     let isDone = false;
+    let isReady = false;
     const fileMap = new Map<number, { name: string; status: string }>();
 
     for (const part of parts) {
@@ -813,6 +814,7 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
       if (!d) continue;
       if (typeof d.total === "number") total = d.total;
       if (d.status === "done") isDone = true;
+      if (d.status === "ready") isReady = true;
       if (d.filename && typeof d.index === "number") {
         fileMap.set(d.index, { name: d.filename, status: d.status });
       }
@@ -825,14 +827,17 @@ function FileScanBlock({ parts, isStreaming }: { parts: any[]; isStreaming?: boo
 
     const hasError = parts.some((p) => p.data?.status === "error");
 
-    return { files, total, hasError, isDone };
+    return { files, total, hasError, isDone, isReady };
   }, [parts]);
 
+  // For a single file, the server skips the analysis sub-call and sends
+  // a "ready" event immediately. Don't show the analysis UI in that case.
+  if (total === 1 && isReady) return null;
   if (total === 0) return null;
 
   // The scan is "active" while streaming AND the final "done" event hasn't
   // arrived yet. Once done (or the stream finished), animations freeze.
-  const isScanning = isStreaming && !isDone && !hasError;
+  const isScanning = isStreaming && !isDone && !hasError && !isReady;
   const isComplete = !isScanning && !hasError && (isDone || !isStreaming);
 
   const readingIndex = files.findIndex((f) => f.status === "reading");

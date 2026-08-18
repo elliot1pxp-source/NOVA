@@ -424,91 +424,106 @@ export async function POST(req: Request) {
           const userQuestion = lastUserText(messages);
           const extractedContexts: string[] = [];
           const fileCount = fileTextParts.length;
-          // NOTE: data parts with the same type+id REPLACE each other in the
-          // AI SDK stream, so every event gets a unique id and the client
-          // aggregates the full state from the accumulated parts.
-          let eventSeq = 0;
-          const nextEventId = () => `file-scan-${eventSeq++}`;
 
-          writer.write({
-            type: "data-file",
-            id: nextEventId(),
-            data: { status: "Analyzing files: ", total: fileCount },
-          });
-
-          for (let i = 0; i < fileTextParts.length; i++) {
-            const text = fileTextParts[i].text;
-            const match = text.match(
-              /^File: (.+?)\nMime-Type: (.+?)\n\n([\s\S]*)$/
-            );
-            if (!match) continue;
-            const [, filename, mimeType, content] = match;
-
-            const cappedContent =
-              content.length > 80_000
-                ? content.slice(0, 80_000) +
-                  "\n\n[...truncated – content exceeds 80 000 characters]"
-                : content;
+          // When there is only ONE file, skip the per-file analysis sub-call
+          // and keep the full file content directly in the message. Only
+          // multiple files trigger the sequential extraction to avoid overly
+          // heavy requests.
+          if (fileCount === 1) {
+            writer.write({
+              type: "data-file",
+              id: "file-scan-0",
+              data: { status: "ready", total: 1 },
+            });
+            // Keep the full file content as-is; fileContext stays empty so the
+            // raw "File: ..." text part is sent to the model directly.
+          } else {
+            // NOTE: data parts with the same type+id REPLACE each other in the
+            // AI SDK stream, so every event gets a unique id and the client
+            // aggregates the full state from the accumulated parts.
+            let eventSeq = 0;
+            const nextEventId = () => `file-scan-${eventSeq++}`;
 
             writer.write({
               type: "data-file",
               id: nextEventId(),
-              data: {
-                status: "reading",
-                filename,
-                mimeType,
-                index: i,
-                total: fileCount,
-              },
+              data: { status: "Analyzing files: ", total: fileCount },
             });
 
-            try {
-              const extracted = await runSubcallWithFallback(providerClients, {
-                modelId: MODELS.fileAnalysis,
-                startProvider: getFileAnalysisProviderPreference(),
-                system:
-                  "You are a file analysis tool. Read the following file and extract only the information that is relevant to the user's question. Be concise but thorough. If the file contains code, describe its structure, key functions, exports, and anything relevant to the question. Do not repeat the entire file — extract only what matters.",
-                messages: [
-                  {
-                    role: "user" as const,
-                    content: `File: ${filename} (type: ${mimeType})\n\n${cappedContent}\n\n---\nUser's question: ${userQuestion}\n\nExtract the relevant information from this file.`,
-                  },
-                ],
-                maxRetries: SUBCALL_MAX_RETRIES,
-                // File extraction is a utility sub-call — never reason.
-                reasoning: NO_REASONING,
-                primaryModels: runtimePrimaryModels,
-                fallbackModels: runtimeFallbackModels,
-              });
-              const trimmed = filterResponseText(extracted).trim();
-              if (trimmed) {
-                extractedContexts.push(`### ${filename}\n\n${trimmed}`);
-              }
-            } catch (error) {
-              console.error(
-                `[chat] file extraction failed for ${filename}`,
-                error
+            for (let i = 0; i < fileTextParts.length; i++) {
+              const text = fileTextParts[i].text;
+              const match = text.match(
+                /^File: (.+?)\nMime-Type: (.+?)\n\n([\s\S]*)$/
               );
+              if (!match) continue;
+              const [, filename, mimeType, content] = match;
+
+              const cappedContent =
+                content.length > 80_000
+                  ? content.slice(0, 80_000) +
+                    "\n\n[...truncated – content exceeds 80 000 characters]"
+                  : content;
+
+              writer.write({
+                type: "data-file",
+                id: nextEventId(),
+                data: {
+                  status: "reading",
+                  filename,
+                  mimeType,
+                  index: i,
+                  total: fileCount,
+                },
+              });
+
+              try {
+                const extracted = await runSubcallWithFallback(providerClients, {
+                  modelId: MODELS.fileAnalysis,
+                  startProvider: getFileAnalysisProviderPreference(),
+                  system:
+                    "You are a file analysis tool. Read the following file and extract only the information that is relevant to the user's question. Be concise but thorough. If the file contains code, describe its structure, key functions, exports, and anything relevant to the question. Do not repeat the entire file — extract only what matters.",
+                  messages: [
+                    {
+                      role: "user" as const,
+                      content: `File: ${filename} (type: ${mimeType})\n\n${cappedContent}\n\n---\nUser's question: ${userQuestion}\n\nExtract the relevant information from this file.`,
+                    },
+                  ],
+                  maxRetries: SUBCALL_MAX_RETRIES,
+                  // File extraction is a utility sub-call — never reason.
+                  reasoning: NO_REASONING,
+                  primaryModels: runtimePrimaryModels,
+                  fallbackModels: runtimeFallbackModels,
+                });
+                const trimmed = filterResponseText(extracted).trim();
+                if (trimmed) {
+                  extractedContexts.push(`### ${filename}\n\n${trimmed}`);
+                }
+              } catch (error) {
+                console.error(
+                  `[chat] file extraction failed for ${filename}`,
+                  error
+                );
+              }
+
+              writer.write({
+                type: "data-file",
+                id: nextEventId(),
+                data: {
+                  status: "analyzed",
+                  filename,
+                  mimeType,
+                  index: i,
+                  total: fileCount,
+                },
+              });
             }
 
             writer.write({
               type: "data-file",
               id: nextEventId(),
-              data: {
-                status: "analyzed",
-                filename,
-                mimeType,
-                index: i,
-                total: fileCount,
-              },
+              data: { status: "done", total: fileCount },
             });
           }
-
-          writer.write({
-            type: "data-file",
-            id: nextEventId(),
-            data: { status: "done", total: fileCount },
-          });
 
           if (extractedContexts.length > 0) {
             fileContext = extractedContexts.join("\n\n");

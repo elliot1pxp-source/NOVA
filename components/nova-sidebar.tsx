@@ -27,6 +27,8 @@ import { PaidTierDialog } from "@/components/paid-tier-dialog";
 import { ModelSettings, ChatFile, loadChatFiles, saveChatFiles, deleteChatFile, clearAllChatFiles } from "@/lib/storage";
 import { getSupportedAttachmentMimeType, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
 import { getPaidTierData, getServerMode, PAID_TIER_DIALOG_EVENT } from "@/lib/paid-tier";
+import { useDraggableResizable } from "@/lib/draggable-resizable";
+import { Maximize2 } from "lucide-react";
 
 export type Chat = {
   id: string;
@@ -230,6 +232,18 @@ function UploadFilesModal({
   const [uploading, setUploading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  const { position, size, isDragging, isResizing, handleDragStart, handleResizeStart, elRef } =
+    useDraggableResizable({
+      initialSize: { width: 560, height: 600 },
+      minWidth: 320,
+      minHeight: 400,
+      maxWidth: 900,
+      maxHeight: 860,
+    });
+
+  const compact = size.width > 0 && size.width < 560;
+  const sz = (small: string, large: string) => (compact ? small : `${small} ${large}`);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -323,45 +337,63 @@ function UploadFilesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md px-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-xl rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
+        ref={elRef}
+        className={cn(
+          "absolute flex flex-col overflow-hidden rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-4 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl",
+          isDragging ? "select-none" : "animate-in zoom-in-95 duration-200"
+        )}
+        style={{
+          left: position.x,
+          top: position.y,
+          width: size.width || "auto",
+          height: size.height || "auto",
+          maxHeight: "90vh",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#8c8f9c]">
+        <div
+          className={cn(
+            sz("mb-1 text-[10px]", "sm:text-[11px]") + " font-bold uppercase tracking-wider text-[#8c8f9c]",
+            isDragging ? "cursor-grabbing" : "cursor-grab"
+          )}
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+        >
           Upload Files
         </div>
-        <div className="mb-4 text-xl font-semibold text-white">Manage Chat Files</div>
+        <div className={sz("mb-3 text-lg", "sm:mb-4 sm:text-xl") + " font-semibold text-white"}>Manage Chat Files</div>
 
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-[#8c8f9c] mb-2">
+        <div className={sz("mb-3", "sm:mb-4")}>
+          <label className={sz("block text-[10px] font-medium text-[#8c8f9c] mb-1.5", "sm:text-xs sm:mb-2")}>
             Select a chat
           </label>
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setDropdownOpen((v) => !v)}
-              className="w-full flex items-center justify-between bg-white/[0.05] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white hover:bg-white/[0.09] focus:outline-none transition-all text-left"
+              className={sz("w-full flex items-center justify-between bg-white/[0.05] border border-white/10 rounded-xl px-3 py-2.5", "sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm") + " text-[10px] text-white hover:bg-white/[0.09] focus:outline-none transition-all text-left"}
             >
               <span className={cn("truncate", !selectedChat && "text-[#5e616e]")}>
                 {selectedChat ? selectedChat.title : "Choose a conversation…"}
               </span>
               <ChevronDown
                 className={cn(
-                  "w-4 h-4 text-[#8c8f9c] transition-transform duration-200 flex-shrink-0 ml-2",
+                  sz("w-3.5 h-3.5", "sm:w-4 sm:h-4") + " text-[#8c8f9c] transition-transform duration-200 flex-shrink-0 ml-2",
                   dropdownOpen && "rotate-180"
                 )}
               />
             </button>
 
             {dropdownOpen && (
-              <div className="absolute left-0 right-0 top-full mt-2 z-50 max-h-80 overflow-y-auto rounded-2xl bg-[#141419]/98 border border-white/10 shadow-2xl backdrop-blur-2xl p-2 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150 scrollbar-thin scrollbar-thumb-white/20">
+              <div className={sz("absolute left-0 right-0 top-full mt-2 z-50 max-h-72 overflow-y-auto rounded-xl bg-[#141419]/98 border border-white/10 shadow-2xl backdrop-blur-2xl p-1.5 space-y-0.5", "sm:rounded-2xl sm:p-2 sm:space-y-1") + " animate-in fade-in slide-in-from-top-1 duration-150 scrollbar-thin scrollbar-thumb-white/20"}>
                 {chats.length === 0 ? (
-                  <div className="px-3 py-3 text-xs text-[#5e616e] text-center">
+                  <div className={sz("px-2.5 py-2.5 text-[10px]", "sm:text-xs") + " text-[#5e616e] text-center"}>
                     No conversations available
                   </div>
                 ) : (
@@ -374,13 +406,13 @@ function UploadFilesModal({
                         setDropdownOpen(false);
                       }}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-left transition-colors",
+                        sz("w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[10px]", "sm:gap-3 sm:px-3.5 sm:py-2.5 sm:text-sm") + " text-left transition-colors",
                         selectedChatId === chat.id
                           ? "bg-white/15 text-white font-medium"
                           : "text-[#ccc] hover:bg-white/10 hover:text-white"
                       )}
                     >
-                      <MessageSquare className="w-4 h-4 flex-shrink-0 text-[#8c8f9c]" />
+                      <MessageSquare className={sz("w-3.5 h-3.5", "sm:w-4 sm:h-4") + " flex-shrink-0 text-[#8c8f9c]"} />
                       <span className="truncate flex-1">{chat.title}</span>
                     </button>
                   ))
@@ -404,57 +436,57 @@ function UploadFilesModal({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-xs font-medium text-[#8c8f9c] hover:text-white transition-all disabled:opacity-50"
+              className={sz("w-full flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl", "sm:gap-2 sm:px-4 sm:rounded-2xl sm:text-xs") + " bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-[10px] font-medium text-[#8c8f9c] hover:text-white transition-all disabled:opacity-50"}
             >
-              <Upload className="w-4 h-4" />
+              <Upload className={sz("w-3.5 h-3.5", "sm:w-4 sm:h-4")} />
               {uploading ? "Uploading…" : "Click to upload files to this chat"}
             </button>
 
             {uploadError && (
-              <p className="mt-2 text-xs text-rose-400">{uploadError}</p>
+              <p className={sz("mt-1.5 text-[10px]", "sm:mt-2 sm:text-xs") + " text-rose-400"}>{uploadError}</p>
             )}
 
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#5e616e]">
+            <div className={sz("mt-3", "sm:mt-4")}>
+              <div className={sz("flex items-center justify-between mb-1.5", "sm:mb-2")}>
+                <span className={sz("text-[10px]", "sm:text-[11px]") + " font-bold uppercase tracking-wider text-[#5e616e]"}>
                   Files in this chat
                 </span>
-                <span className="text-[10px] text-[#8c8f9c]">{files.length} file(s)</span>
+                <span className={sz("text-[9px]", "sm:text-[10px]") + " text-[#8c8f9c]"}>{files.length} file(s)</span>
               </div>
 
               {files.length === 0 ? (
-                <div className="text-center py-6 text-xs text-[#5e616e] bg-white/[0.03] border border-white/5 rounded-2xl">
+                <div className={sz("text-center py-4 text-[10px] bg-white/[0.03] border border-white/5 rounded-xl", "sm:py-6 sm:text-xs sm:rounded-2xl") + " text-[#5e616e]"}>
                   No files uploaded yet for this chat
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
+                <div className={sz("space-y-1 max-h-52 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1", "sm:max-h-60")}>
                   {files.map((file) => (
                     <div
                       key={file.id}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/5 hover:bg-white/[0.08] transition-colors group"
+                      className={sz("flex items-center gap-2 px-2.5 py-1.5 rounded-xl", "sm:px-3 sm:py-2") + " bg-white/[0.04] border border-white/5 hover:bg-white/[0.08] transition-colors group"}
                     >
                       {file.mimeType.startsWith("image/") ? (
                         <img
                           src={file.dataUrl}
                           alt={file.name}
-                          className="w-7 h-7 rounded-lg object-cover flex-shrink-0"
+                          className={sz("w-6 h-6 rounded-lg object-cover flex-shrink-0", "sm:w-7 sm:h-7")}
                         />
                       ) : (
-                        <FileText className="w-4 h-4 text-[#8c8f9c] flex-shrink-0" />
+                        <FileText className={sz("w-3.5 h-3.5", "sm:w-4 sm:h-4") + " text-[#8c8f9c] flex-shrink-0"} />
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs text-white truncate font-medium">{file.name}</div>
-                        <div className="text-[10px] text-[#8c8f9c]">
+                        <div className={sz("text-[10px]", "sm:text-xs") + " text-white truncate font-medium"}>{file.name}</div>
+                        <div className={sz("text-[9px]", "sm:text-[10px]") + " text-[#8c8f9c]"}>
                           {formatBytes(file.size)} · {file.mimeType}
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleDeleteFile(file.id)}
-                        className="p-1.5 rounded-lg text-[#8c8f9c] hover:text-rose-400 hover:bg-rose-950/40 transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-1 rounded-lg text-[#8c8f9c] hover:text-rose-400 hover:bg-rose-950/40 transition-colors opacity-0 group-hover:opacity-100"
                         aria-label="Delete file"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className={sz("w-3 h-3", "sm:w-3.5 sm:h-3.5")} />
                       </button>
                     </div>
                   ))}
@@ -465,19 +497,29 @@ function UploadFilesModal({
         )}
 
         {!selectedChatId && (
-          <div className="text-center py-8 text-xs text-[#5e616e]">
+          <div className={sz("text-center py-6 text-[10px]", "sm:py-8 sm:text-xs") + " text-[#5e616e]"}>
             Select a chat above to manage its files
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2.5 mt-5">
+        <div className="flex items-center justify-end gap-2 mt-4 sm:mt-5">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-white text-black hover:bg-white/90 px-5 py-2 text-xs font-semibold transition-all active:scale-95 shadow-md"
+            className="rounded-full bg-white text-black hover:bg-white/90 px-4 sm:px-5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold transition-all active:scale-95 shadow-md"
           >
             Done
           </button>
+        </div>
+
+        {/* Resize handle (bottom-right corner) */}
+        <div
+          onMouseDown={handleResizeStart}
+          onTouchStart={handleResizeStart}
+          className="absolute bottom-0 right-0 z-50 flex h-6 w-6 cursor-se-resize touch-none items-end justify-end"
+          aria-label="Resize dialog"
+        >
+          <Maximize2 className="mr-1 mb-1 h-3.5 w-3.5 text-white/30" />
         </div>
       </div>
     </div>
