@@ -578,6 +578,19 @@ export function NovaSidebar({
     return () => window.removeEventListener("click", close);
   }, [menuOpenId]);
 
+  // Lock background scrolling while the mobile sidebar overlay is open so the
+  // page behind it can't scroll or rubber-band on touch devices.
+  useEffect(() => {
+    if (!historyOpen) return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    if (!mq.matches) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [historyOpen]);
+
   const filtered = searchQuery.trim()
     ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
     : null;
@@ -632,7 +645,7 @@ export function NovaSidebar({
             </button>
             <button
               onClick={openHistoryWithSearch}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="hidden h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white md:flex"
               aria-label="Search chats"
               title="Search chats"
             >
@@ -643,7 +656,7 @@ export function NovaSidebar({
                 onNewChat();
                 openHistoryAndReset();
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+              className="hidden h-8 w-8 items-center justify-center rounded-full text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white md:flex"
               aria-label="New chat"
               title="New chat"
             >
@@ -664,7 +677,7 @@ export function NovaSidebar({
       {/* Main Sidebar Element */}
       <aside
         className={cn(
-          "fixed md:relative inset-y-0 left-0 z-40 md:z-30 flex flex-col h-full bg-[#0a0a0c]/95 md:bg-[#0a0a0c]/90 border-r border-white/10 backdrop-blur-xl transition-all duration-300 ease-in-out select-none",
+          "fixed md:relative inset-y-0 left-0 z-40 md:z-30 flex flex-col h-full bg-[#0a0a0c]/95 md:bg-[#0a0a0c]/90 border-r border-white/10 backdrop-blur-xl transition-all duration-300 ease-in-out select-none transform-gpu",
           historyOpen
             ? "w-[280px] min-w-[280px] translate-x-0"
             : "w-0 min-w-0 -translate-x-full md:translate-x-0 overflow-hidden border-none"
