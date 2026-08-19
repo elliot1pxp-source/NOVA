@@ -41,7 +41,7 @@ export type Chat = {
 // Module-level flag that survives component remounts. Navigation between chat
 // URLs remounts the page, so keeping the sidebar open state here prevents the
 // sidebar from closing when creating/switching chats.
-let sidebarHistoryOpenPersist = false;
+export let sidebarHistoryOpenPersist = false;
 
 type Props = {
   chats: Chat[];
@@ -54,6 +54,10 @@ type Props = {
   onDeleteAllChats: () => void;
   modelSettings: ModelSettings;
   onUpdateModelSettings: (settings: ModelSettings) => void;
+  /** Controlled sidebar (history) open state, lifted to the page so other
+      components (e.g. the floating model selector) can react to it. */
+  historyOpen: boolean;
+  onHistoryOpenChange: (open: boolean) => void;
 };
 
 function groupChats(chats: Chat[]) {
@@ -549,13 +553,14 @@ export function NovaSidebar({
   onDeleteAllChats,
   modelSettings,
   onUpdateModelSettings,
+  historyOpen,
+  onHistoryOpenChange,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paidTierOpen, setPaidTierOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(sidebarHistoryOpenPersist);
   const [deletePendingChatId, setDeletePendingChatId] = useState<string | null>(null);
   const [uploadFilesOpen, setUploadFilesOpen] = useState(false);
 
@@ -587,13 +592,13 @@ export function NovaSidebar({
   const tierLabel = isPaidTierActive ? "Paid Tier" : "Free Tier";
 
   const openHistoryWithSearch = () => {
-    setHistoryOpen(true);
+    onHistoryOpenChange(true);
     setSearchOpen(true);
     setMenuOpenId(null);
   };
 
   const openHistoryAndReset = () => {
-    setHistoryOpen(true);
+    onHistoryOpenChange(true);
     setSearchOpen(false);
     setMenuOpenId(null);
   };
@@ -659,7 +664,7 @@ export function NovaSidebar({
           onSelectChat(chat.id);
           // On mobile screens, auto-close sidebar on chat select
           if (window.innerWidth < 768) {
-            setHistoryOpen(false);
+            onHistoryOpenChange(false);
           }
         }}
         menuOpen={menuOpenId === chat.id}
@@ -687,7 +692,7 @@ export function NovaSidebar({
           <div className="relative flex items-center gap-1 rounded-full bg-[#0a0a0c]/90 border border-white/15 p-1 shadow-2xl backdrop-blur-2xl">
             <button
               onClick={() => {
-                setHistoryOpen(true);
+                onHistoryOpenChange(true);
                 setSearchOpen(false);
                 setMenuOpenId(null);
               }}
@@ -724,7 +729,7 @@ export function NovaSidebar({
       {historyOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden animate-in fade-in duration-200"
-          onClick={() => setHistoryOpen(false)}
+          onClick={() => onHistoryOpenChange(false)}
         />
       )}
 
@@ -778,7 +783,7 @@ export function NovaSidebar({
               </button>
               <button
                 onClick={() => {
-                  setHistoryOpen(false);
+                  onHistoryOpenChange(false);
                   setSearchOpen(false);
                   setMenuOpenId(null);
                 }}

@@ -43,6 +43,10 @@ type Props = {
    *  background; this flag lets the view restore scroll position when it
    *  becomes visible again. */
   isActive?: boolean;
+  /** Whether the sidebar (history) is open — hides the floating model selector
+   *  so it does not visually conflict with the open sidebar, matching the
+   *  sidebar opener's behavior. */
+  sidebarOpen?: boolean;
 };
 
 const MODEL_TABS: { id: Model; label: string; icon: React.ReactNode }[] = [
@@ -210,7 +214,7 @@ function saveBranchGroups(chatId: string, groups: Record<string, BranchGroup>) {
   }
 }
 
-export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage, isActive = true }: Props) {
+export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage, isActive = true, sidebarOpen = false }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const shouldFollowMessagesRef = useRef(true);
@@ -1635,31 +1639,35 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         </div>
       ) : (
         <>
-          {/* Top Floating Dynamic Island Header */}
-          {/* Uses `fixed` (not absolute) so it stays pinned to the viewport
-              through any scroll, exactly like the sidebar opener. top-4 (1rem)
-              matches the opener; the safe-area floor clears notched devices. */}
-          <div className="fixed top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
-            <div className="relative">
-              <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1">
-                {MODEL_TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => onModelChange(tab.id)}
-                    className={cn(
-                      "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
-                      model === tab.id
-                        ? "bg-white/15 text-white border border-white/25"
-                        : "text-[#888c99] hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    {tab.icon}
-                    <span>{tab.label}</span>
-                  </button>
-                ))}
+          {!sidebarOpen && (
+            <>
+              {/* Top Floating Dynamic Island Header */}
+              {/* Uses `fixed` (not absolute) so it stays pinned to the viewport
+                  through any scroll, exactly like the sidebar opener. top-4 (1rem)
+                  matches the opener; the safe-area floor clears notched devices. */}
+              <div className="fixed top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
+                <div className="relative">
+                  <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1">
+                    {MODEL_TABS.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => onModelChange(tab.id)}
+                        className={cn(
+                          "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
+                          model === tab.id
+                            ? "bg-white/15 text-white border border-white/25"
+                            : "text-[#888c99] hover:text-white hover:bg-white/5"
+                        )}
+                      >
+                        {tab.icon}
+                        <span>{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
 
           {/* Messages Container */}
           <div

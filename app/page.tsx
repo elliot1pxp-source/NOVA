@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { NovaSidebar, Chat } from "@/components/nova-sidebar";
+import { NovaSidebar, Chat, sidebarHistoryOpenPersist } from "@/components/nova-sidebar";
 import { ChatView } from "@/components/chat-view";
 import { cn } from "@/lib/utils";
 import {
@@ -73,6 +73,7 @@ export default function Home() {
   const [model, setModel] = useState<Model>("instant");
   const [modelSettings, setModelSettings] = useState<ModelSettings>(loadModelSettings);
   const [pendingChatId, setPendingChatId] = useState<string>(() => generateId());
+  const [historyOpen, setHistoryOpen] = useState(sidebarHistoryOpenPersist);
   const pendingChatIdRef = useRef<string>(pendingChatId);
   const hydratedRef = useRef(false);
 
@@ -308,6 +309,8 @@ export default function Home() {
         onDeleteAllChats={handleDeleteAllChats}
         modelSettings={modelSettings}
         onUpdateModelSettings={handleUpdateModelSettings}
+        historyOpen={historyOpen}
+        onHistoryOpenChange={setHistoryOpen}
       />
       <main className="flex flex-1 overflow-hidden">
         {mountedChatIds.map((chatId) => (
@@ -322,6 +325,7 @@ export default function Home() {
               onModelChange={setModel}
               isActive={chatId === currentChatId}
               onFirstMessage={(title) => handleFirstMessage(chatId, title)}
+              sidebarOpen={historyOpen}
             />
           </div>
         ))}
