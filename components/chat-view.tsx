@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo, type TouchEvent, type WheelEvent } from "react";
+import { useIsMobile } from "@/lib/use-is-mobile";
 import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
@@ -215,6 +216,8 @@ function saveBranchGroups(chatId: string, groups: Record<string, BranchGroup>) {
 }
 
 export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstMessage, isActive = true, sidebarOpen = false }: Props) {
+  const isMobile = useIsMobile();
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const shouldFollowMessagesRef = useRef(true);
@@ -1639,7 +1642,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
         </div>
       ) : (
         <>
-          {!sidebarOpen && (
+          {!(isMobile && sidebarOpen) && (
             <>
               {/* Top Floating Dynamic Island Header */}
               {/* Uses `fixed` (not absolute) so it stays pinned to the viewport
