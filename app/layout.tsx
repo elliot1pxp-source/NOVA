@@ -14,6 +14,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'dark',
   themeColor: '#0d0d0d',
+  // Enables env(safe-area-inset-*) so floating chrome (model selector, etc.)
+  // can clear notched / browser-UI areas instead of being overlapped.
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

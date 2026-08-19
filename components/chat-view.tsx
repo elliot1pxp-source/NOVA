@@ -1635,7 +1635,10 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       ) : (
         <>
           {/* Top Floating Dynamic Island Header */}
-          <div className="absolute top-2.5 sm:top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+          {/* Sits at least 1rem (matching the sidebar opener) below the top edge
+              and clears notched/safe-area insets so mobile browser chrome (the
+              address/search bar) never overlaps it. */}
+          <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
             <div className="relative">
               <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1">
                 {MODEL_TABS.map((tab) => (
@@ -1663,7 +1666,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
             onWheel={handleMessagesWheel}
             onTouchStart={handleMessagesTouchStart}
             onTouchMove={handleMessagesTouchMove}
-            className="flex-1 overflow-y-auto px-2 sm:px-4 pt-12 sm:pt-16 pb-40 sm:pb-48"
+            className="flex-1 overflow-y-auto px-2 sm:px-4 pt-20 sm:pt-16 pb-40 sm:pb-48"
           >
             {/* Fades in once, on mount — i.e. whenever a whole conversation is
                 opened or switched to (ChatView remounts per chatId). This is

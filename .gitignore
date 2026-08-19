@@ -29,3 +29,5 @@ next-env.d.ts
 
 # other files
 agent.txt
+systemprompt.txt
+initial_prompt.txt
