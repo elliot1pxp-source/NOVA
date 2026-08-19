@@ -62,6 +62,8 @@ type ChatInputProps = {
   showFreeTierUsage?: boolean;
   /** Whether the user has an active paid tier (for gating high/xhigh reasoning). */
   isPaidUser?: boolean;
+  /** True when the chat has no messages yet — shows the risk disclaimer. */
+  isEmpty?: boolean;
 };
 
 export function ChatInput({
@@ -87,6 +89,7 @@ export function ChatInput({
   freeTierStatus = null,
   showFreeTierUsage = false,
   isPaidUser = false,
+  isEmpty = false,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -364,6 +367,11 @@ export function ChatInput({
       <p className="text-[9px] sm:text-[11px] text-center text-[#6e717c] font-medium tracking-wide">
         NOVA can make mistakes. Consider checking important information.
       </p>
+      {isEmpty && (
+        <p className="text-[9px] sm:text-[11px] text-center text-[#6e717c] font-medium tracking-wide">
+          By chatting with NOVA, you agree that you use this service entirely at your own risk and we are not responsible for anything the AI says or how you use it.
+        </p>
+      )}
     </div>
   );
 }

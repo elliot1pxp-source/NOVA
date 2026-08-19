@@ -1629,6 +1629,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               freeTierStatus={freeTierStatus}
               showFreeTierUsage={showFreeTierUsage}
               isPaidUser={hasPaidAccess}
+              isEmpty={isEmpty}
             />
           </div>
         </div>
@@ -1751,6 +1752,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 freeTierStatus={freeTierStatus}
                 showFreeTierUsage={showFreeTierUsage}
                 isPaidUser={hasPaidAccess}
+              isEmpty={isEmpty}
               />
             </div>
           </div>
