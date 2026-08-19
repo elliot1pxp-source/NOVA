@@ -5,6 +5,7 @@ import { Settings, X, Zap, Shield, AlertTriangle, RotateCcw, Trash2, Check, Fold
 import { cn } from "@/lib/utils";
 import { ModelSettings, ModelParams, DEFAULT_MODEL_SETTINGS } from "@/lib/storage";
 import { useDraggableResizable } from "@/lib/draggable-resizable";
+import { useIsMobile } from "@/lib/use-is-mobile";
 
 type Props = {
   isOpen: boolean;
@@ -38,6 +39,20 @@ export function SettingsDialog({
       maxWidth: 900,
       maxHeight: 860,
     });
+
+  // On mobile, drag/resize are disabled and the dialog becomes a fixed,
+  // full-screen sheet so it can't be moved or expanded off-screen.
+  const isMobile = useIsMobile();
+  const dialogStyle = isMobile
+    ? { position: "fixed" as const, inset: 0, width: "100%", height: "100%", maxHeight: "100%" }
+    : {
+        position: "absolute" as const,
+        left: position.x,
+        top: position.y,
+        width: size.width || "auto",
+        height: size.height || "auto",
+        maxHeight: "90vh",
+      };
 
   if (!isOpen) return null;
 
@@ -88,25 +103,18 @@ export function SettingsDialog({
           "relative flex flex-col overflow-hidden rounded-[28px] bg-[#0d0d11]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] text-white border border-white/10",
           isDragging ? "select-none" : "animate-in zoom-in-95 duration-200"
         )}
-        style={{
-          position: "absolute",
-          left: position.x,
-          top: position.y,
-          width: size.width || "auto",
-          height: size.height || "auto",
-          maxHeight: "90vh",
-        }}
+        style={dialogStyle}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div
-          onMouseDown={handleDragStart}
-          onTouchStart={handleDragStart}
+          onMouseDown={isMobile ? undefined : handleDragStart}
+          onTouchStart={isMobile ? undefined : handleDragStart}
           className={cn(
             "flex items-center justify-between",
             sz("px-4 pt-4 pb-3", "sm:px-6 sm:pt-6 sm:pb-4"),
             "flex-shrink-0",
-            isDragging ? "cursor-grabbing" : "cursor-grab"
+            isMobile ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
           )}
         >
           <div className="flex items-center gap-2.5">
@@ -361,15 +369,18 @@ export function SettingsDialog({
             Done
           </button>
         </div>
-        {/* Resize handle (bottom-right corner) */}
-        <div
-          onMouseDown={handleResizeStart}
-          onTouchStart={handleResizeStart}
-          className="absolute bottom-0 right-0 z-50 flex h-6 w-6 cursor-se-resize touch-none items-end justify-end"
-          aria-label="Resize dialog"
-        >
-          <Maximize2 className="mr-1 mb-1 h-3.5 w-3.5 text-white/30" />
-        </div>
+        {/* Resize handle (bottom-right corner) — hidden on mobile where the
+            dialog is a fixed full-screen sheet and must not be resizable. */}
+        {!isMobile && (
+          <div
+            onMouseDown={handleResizeStart}
+            onTouchStart={handleResizeStart}
+            className="absolute bottom-0 right-0 z-50 flex h-6 w-6 cursor-se-resize touch-none items-end justify-end"
+            aria-label="Resize dialog"
+          >
+            <Maximize2 className="mr-1 mb-1 h-3.5 w-3.5 text-white/30" />
+          </div>
+        )}
       </div>
     </div>
   );

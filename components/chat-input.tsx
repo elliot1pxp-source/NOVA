@@ -362,7 +362,7 @@ export function ChatInput({
 
       {/* Footer Disclaimer */}
       <p className="text-[9px] sm:text-[11px] text-center text-[#6e717c] font-medium tracking-wide">
-        NOVA can make mistakes. Consider checking important information. By chatting with NOVA, you agree that everything you do is at your own risk. NOVA is not responsible for any consequences of your actions.
+        NOVA can make mistakes. Consider checking important information.
       </p>
     </div>
   );

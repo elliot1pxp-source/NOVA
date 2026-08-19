@@ -28,6 +28,7 @@ import { ModelSettings, ChatFile, loadChatFiles, saveChatFiles, deleteChatFile, 
 import { getSupportedAttachmentMimeType, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_ACCEPT } from "@/lib/attachments";
 import { getPaidTierData, getServerMode, PAID_TIER_DIALOG_EVENT } from "@/lib/paid-tier";
 import { useDraggableResizable } from "@/lib/draggable-resizable";
+import { useIsMobile } from "@/lib/use-is-mobile";
 import { Maximize2 } from "lucide-react";
 
 export type Chat = {
@@ -241,6 +242,20 @@ function UploadFilesModal({
       maxHeight: 860,
     });
 
+  // On mobile, drag/resize are disabled and the dialog becomes a fixed,
+  // full-screen sheet so it can't be moved or expanded off-screen.
+  const isMobile = useIsMobile();
+  const dialogStyle = isMobile
+    ? { position: "fixed" as const, inset: 0, width: "100%", height: "100%", maxHeight: "100%" }
+    : {
+        position: "absolute" as const,
+        left: position.x,
+        top: position.y,
+        width: size.width || "auto",
+        height: size.height || "auto",
+        maxHeight: "90vh",
+      };
+
   const compact = size.width > 0 && size.width < 560;
   const sz = (small: string, large: string) => (compact ? small : `${small} ${large}`);
 
@@ -348,22 +363,16 @@ function UploadFilesModal({
           "absolute flex flex-col overflow-hidden rounded-[28px] bg-[#0d0d11]/95 border border-white/10 p-4 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] backdrop-blur-2xl",
           isDragging ? "select-none" : "animate-in zoom-in-95 duration-200"
         )}
-        style={{
-          left: position.x,
-          top: position.y,
-          width: size.width || "auto",
-          height: size.height || "auto",
-          maxHeight: "90vh",
-        }}
+        style={dialogStyle}
         onClick={(e) => e.stopPropagation()}
       >
         <div
           className={cn(
             sz("mb-1 text-[10px]", "sm:text-[11px]") + " font-bold uppercase tracking-wider text-[#8c8f9c]",
-            isDragging ? "cursor-grabbing" : "cursor-grab"
+            isMobile ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
           )}
-          onMouseDown={handleDragStart}
-          onTouchStart={handleDragStart}
+          onMouseDown={isMobile ? undefined : handleDragStart}
+          onTouchStart={isMobile ? undefined : handleDragStart}
         >
           Upload Files
         </div>
@@ -512,15 +521,18 @@ function UploadFilesModal({
           </button>
         </div>
 
-        {/* Resize handle (bottom-right corner) */}
-        <div
-          onMouseDown={handleResizeStart}
-          onTouchStart={handleResizeStart}
-          className="absolute bottom-0 right-0 z-50 flex h-6 w-6 cursor-se-resize touch-none items-end justify-end"
-          aria-label="Resize dialog"
-        >
-          <Maximize2 className="mr-1 mb-1 h-3.5 w-3.5 text-white/30" />
-        </div>
+        {/* Resize handle (bottom-right corner) — hidden on mobile where the
+            dialog is a fixed full-screen sheet and must not be resizable. */}
+        {!isMobile && (
+          <div
+            onMouseDown={handleResizeStart}
+            onTouchStart={handleResizeStart}
+            className="absolute bottom-0 right-0 z-50 flex h-6 w-6 cursor-se-resize touch-none items-end justify-end"
+            aria-label="Resize dialog"
+          >
+            <Maximize2 className="mr-1 mb-1 h-3.5 w-3.5 text-white/30" />
+          </div>
+        )}
       </div>
     </div>
   );
