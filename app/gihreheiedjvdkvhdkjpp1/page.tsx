@@ -184,6 +184,24 @@ export default function AdminPage() {
   // New code form
   const [newCode, setNewCode] = useState("");
   const [newDurationHours, setNewDurationHours] = useState("24");
+
+  const generateRandomCode = () => {
+    const duration = newDurationHours || "24";
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // excluding I, O for clarity
+    const numbers = '23456789'; // excluding 0, 1 for clarity
+
+    let randomPart = '';
+    // 3 random letters
+    for (let i = 0; i < 3; i++) {
+      randomPart += letters[Math.floor(Math.random() * letters.length)];
+    }
+    // 3 random numbers
+    for (let i = 0; i < 3; i++) {
+      randomPart += numbers[Math.floor(Math.random() * numbers.length)];
+    }
+
+    return `NOVA-${duration}-${randomPart}`;
+  };
   const [newMaxRedemptions, setNewMaxRedemptions] = useState("1");
   const [newBlockrunApiKey, setNewBlockrunApiKey] = useState("");
   const [newFallbackApiKey, setNewFallbackApiKey] = useState("");
@@ -1403,13 +1421,24 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Code</label>
-                <input
-                  type="text"
-                  value={newCode}
-                  onChange={(e) => setNewCode(e.target.value)}
-                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
-                  placeholder="e.g. NOVA-PREMIUM-2025"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCode}
+                    onChange={(e) => setNewCode(e.target.value)}
+                    className="flex-1 bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono placeholder-[#5e616e] focus:outline-none focus:border-white/20 transition-all"
+                    placeholder="e.g. NOVA-PREMIUM-2025"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewCode(generateRandomCode())}
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-[10px] font-medium text-[#8c8f9c] hover:text-white hover:bg-white/10 border border-white/10 rounded-xl transition-colors whitespace-nowrap"
+                    title="Generate random code: NOVA-{duration}-{3letters}{3numbers}"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Generate
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Access Duration (Hours)</label>
