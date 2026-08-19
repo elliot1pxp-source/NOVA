@@ -41,13 +41,9 @@ type Props = {
   /** true while this specific assistant message is still being generated */
   isStreaming?: boolean;
   /** how this reply was interrupted:
-      - "text": stopped/cut off mid-answer — red "Response was interrupted"
-        hint next to the retry button
-      - "thinking": stopped while DeepThink was running — thought block shows
-        "Stopped" and a Continue pill is available (no red hint)
-      - "search": stopped while web-searching / file-scanning — the progress
-        UI is terminated and only "The response was interrupted" + retry show */
-  interrupted?: "text" | "thinking" | "search";
+      - "text": stopped/cut off mid-answer — red "You stopped the response"
+        hint next to the retry button. The Continue flow was removed. */
+  interrupted?: "text";
   /** true while any response is in flight (disables edit/retry to avoid overlap) */
   disableActions?: boolean;
   /** false for messages already present when the chat loaded, so history doesn't replay its entrance animation */
@@ -589,10 +585,10 @@ function StreamingTail({ text, isStreaming }: { text: string; isStreaming: boole
   );
 }
 
-function ThoughtBlock({ data, stopped }: { data: any; stopped?: boolean }) {
+function ThoughtBlock({ data }: { data: any }) {
   const status = data?.status;
   const seconds = data?.seconds;
-  const isThinking = status === "thinking" && !stopped;
+  const isThinking = status === "thinking";
   const [open, setOpen] = useState(isThinking);
   const thoughtText = data?.text ?? "";
 
@@ -625,11 +621,9 @@ function ThoughtBlock({ data, stopped }: { data: any; stopped?: boolean }) {
         <span className="font-medium text-[#aaa] group-hover:text-[#ddd]">
           {isThinking
             ? "Thinking…"
-            : stopped
-              ? "Stopped"
-              : status === "error"
-                ? "Thinking (unavailable)"
-                : `Thought for ${seconds ?? 1} second${seconds === 1 ? "" : "s"}`}
+            : status === "error"
+              ? "Thinking (unavailable)"
+              : `Thought for ${seconds ?? 1} second${seconds === 1 ? "" : "s"}`}
         </span>
         <ChevronDown
           className={cn(
@@ -1081,10 +1075,10 @@ export function ChatMessage({
           </div>
         )}
 
-        {!isUser && interrupted !== "search" && scanParts.length > 0 && (
+        {!isUser && scanParts.length > 0 && (
           <FileScanBlock parts={scanParts} isStreaming={Boolean(isStreaming)} />
         )}
-        {!isUser && interrupted !== "search" &&
+        {!isUser &&
           (toolParts.length > 0
             ? toolParts.map((p, i) => (
                 <ToolSearchBlock key={`tool-${i}`} part={p as any} />
@@ -1092,15 +1086,9 @@ export function ChatMessage({
             : searchParts.map((p, i) => (
                 <SearchBlock key={`s-${i}`} data={(p as any).data} />
               )))}
-        {!isUser && interrupted !== "search" && thoughtParts.map((p, i) => (
-          <ThoughtBlock key={`t-${i}`} data={(p as any).data} stopped={interrupted === "thinking"} />
+        {!isUser && thoughtParts.map((p, i) => (
+          <ThoughtBlock key={`t-${i}`} data={(p as any).data} />
         ))}
-
-        {!isUser && interrupted === "search" && (
-          <div className="text-xs sm:text-sm text-rose-400 font-medium animate-in fade-in duration-200">
-            The response was interrupted
-          </div>
-        )}
 
         {isUser && isEditing ? (
           <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl sm:rounded-2xl rounded-tr-sm px-3 py-2 sm:px-4 sm:py-3 text-white w-full min-w-[200px] sm:min-w-[240px] shadow-lg animate-in fade-in duration-200">
@@ -1170,15 +1158,13 @@ export function ChatMessage({
         {/* Action row */}
         {!isEditing && showActions && (
           <div className={cn("flex items-center gap-1 text-[#666] animate-in fade-in duration-200", isUser ? "justify-end" : "justify-start")}>
-            {interrupted !== "search" && (
-              <button
+            <button
                 onClick={handleCopy}
                 className="p-1 sm:p-1.5 rounded-md hover:bg-[#1e1e1e] hover:text-[#ccc] transition-all duration-150 active:scale-90"
                 aria-label="Copy message"
               >
                 {copied ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4a6cf7] scale-110 transition-transform" /> : <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
               </button>
-            )}
 
             {isUser && onEdit && (
               <button
@@ -1204,7 +1190,7 @@ export function ChatMessage({
 
             {!isUser && interrupted === "text" && (
               <span className="ml-1 text-[11px] sm:text-xs text-rose-400 font-medium select-none animate-in fade-in duration-200">
-                Response was interrupted
+                You stopped the response
               </span>
             )}
 

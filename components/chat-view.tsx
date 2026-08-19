@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback, useMemo, type TouchEvent, typ
 import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Zap, Shield, Redo2, Code2 } from "lucide-react";
+import { Zap, Shield, Code2 } from "lucide-react";
 import { ChatInput, PendingAttachment } from "./chat-input";
 import { ChatMessage, TypingIndicator } from "./chat-message";
 import { MessageNavigator, NavItem } from "@/app/message-navigator";
@@ -21,13 +21,7 @@ const MESSAGE_LIMIT = 200;
 const RECENT_MESSAGES_TO_KEEP = 180;
 const SCROLL_BOTTOM_THRESHOLD = 24;
 
-import {
-  CONTINUE_INSTRUCTION,
-  buildContinueInstruction,
-  findContinuation,
-  isContinueInstruction,
-  mergeAssistantText,
-} from "@/lib/continue-helper";
+
 
 // Retry policy for transient provider failures ("capacity busy" etc.).
 // The server already retries internally (MODEL_MAX_RETRIES), but if a whole
@@ -423,57 +417,43 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     messagesRef.current = messages;
   }, [messages]);
 
-  // Once the continuation finishes (or errors/stops), merge it into the
-  // original reply and drop the invisible instruction from history. Also
-  // cleans up the instruction alone if the continuation never started.
+  // When the user manually stops a reply, any in-flight progress part
+  // (thinking / searching / file-scan) never received a terminal status, so
+  // settle it to "error" once so the UI doesn't spin forever. We also stamp a
+  // `data-stopped` marker on that exact assistant message: it is a normal
+  // message part, so it persists across refresh and through branch switching.
+  // The red hint renders only on the message carrying this marker.
+  const settledStoppedRef = useRef(false);
   useEffect(() => {
-    if (status !== "ready" && status !== "error") return;
-    const idx = messages.findIndex(isContinueInstruction);
-    if (idx === -1) return;
-    const instruction = messages[idx];
-    const source = messages[idx - 1];
-    const continuation = messages[idx + 1];
-
-    if (!source || source.role !== "assistant" || !continuation || continuation.role !== "assistant") {
-      // Continuation never produced an assistant reply (error before stream).
-      // Drop the invisible instruction so it can't linger in history.
-      setMessages((prev) => prev.filter((m) => m.id !== instruction.id));
-      return;
-    }
-
-    setMessages((prev) => {
-      const mergedList: UIMessage[] = [];
-      for (const m of prev) {
-        if (m.id === instruction.id || m.id === continuation.id) continue;
-        if (m.id === source.id) {
-          // The stream was stopped mid-thought/search/scan, so its progress
-          // parts never received a final status and would spin forever inside
-          // the merged bubble. Settle them to "error" (interrupted) instead.
-          const settledSource = {
-            ...m,
-            parts: m.parts.map((part: any) => {
-              if (part.type === "data-thought" && part.data?.status === "thinking") {
-                return { ...part, data: { ...part.data, status: "error" } };
-              }
-              if (
-                part.type === "data-search" &&
-                (part.data?.status === "searching" || part.data?.status === "generating_query")
-              ) {
-                return { ...part, data: { ...part.data, status: "error" } };
-              }
-              if (part.type === "data-file" && part.data?.status === "reading") {
-                return { ...part, data: { ...part.data, status: "error" } };
-              }
-              return part;
-            }),
-          };
-          mergedList.push(mergeAssistantText(settledSource, continuation));
-          continue;
+    if (status !== "ready" || !stoppedMidGenerationRef.current || settledStoppedRef.current) return;
+    settledStoppedRef.current = true;
+    let changed = false;
+    const next = messages.map((m) => {
+      if (m.role !== "assistant") return m;
+      const parts = (m.parts as any[]).map((part) => {
+        if (part.type === "data-thought" && part.data?.status === "thinking") {
+          changed = true;
+          return { ...part, data: { ...part.data, status: "error" } };
         }
-        mergedList.push(m);
+        if (part.type === "data-search" && part.data?.status === "searching") {
+          changed = true;
+          return { ...part, data: { ...part.data, status: "error" } };
+        }
+        if (part.type === "data-file" && part.data?.status === "reading") {
+          changed = true;
+          return { ...part, data: { ...part.data, status: "error" } };
+        }
+        return part;
+      });
+      // Only the last assistant message could have been the one we stopped.
+      const isLastAssistant = m.id === lastAssistantIdForStopRef.current;
+      if (isLastAssistant && !m.parts.some((p: any) => p.type === "data-stopped")) {
+        changed = true;
+        return { ...m, parts: [...parts, { type: "data-stopped" }] };
       }
-      return mergedList;
+      return changed ? { ...m, parts } : m;
     });
+    if (changed) setMessages(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, messages, setMessages]);
 
@@ -499,11 +479,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const firstTokenReceivedRef = useRef(false);
   const lastAssistantActivityKeyRef = useRef<string | null>(null);
   // Set when the user presses Stop. A manual stop means the last reply is
-  // unfinished BY DEFINITION, no matter how the text happens to end (mid-word,
-  // em-dash, closing quote, emoji, …) — the text heuristic alone can miss
-  // those and silently hide the Continue button. Cleared whenever a new
-  // request (send, edit, regenerate, continue) starts.
+  // unfinished BY DEFINITION, so the red "You stopped the response" hint is
+  // shown. Cleared whenever a new request (send, edit, regenerate) starts.
   const stoppedMidGenerationRef = useRef(false);
+  // The id of the assistant message the user actually stopped, so the
+  // `data-stopped` marker is stamped on the right message (and the hint never
+  // leaks onto a finished branch sibling or a different message).
+  const lastAssistantIdForStopRef = useRef<string | null>(null);
   // While true, transient errors are hidden from the UI because a retry is
   // already scheduled. Only the final failed attempt surfaces its error.
   const suppressingErrorRef = useRef(false);
@@ -647,6 +629,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     suppressingErrorRef.current = false;
     lastAssistantActivityKeyRef.current = null;
     stoppedMidGenerationRef.current = false;
+    settledStoppedRef.current = false;
+    lastAssistantIdForStopRef.current = null;
     sendMessage(payload);
   }, [sendMessage]);
 
@@ -669,6 +653,8 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       suppressingErrorRef.current = false;
       lastAssistantActivityKeyRef.current = null;
       stoppedMidGenerationRef.current = false;
+      settledStoppedRef.current = false;
+      lastAssistantIdForStopRef.current = null;
       regenerate(payload);
       if (retryable) {
         // start watcher for initial 5s
@@ -688,6 +674,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     retryAttemptRef.current = 0;
     suppressingErrorRef.current = false;
     stoppedMidGenerationRef.current = true;
+    // Record which assistant message is being stopped so the settle effect
+    // stamps the marker on the right one.
+    const lastAssistant = [...messagesRef.current]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    lastAssistantIdForStopRef.current = lastAssistant?.id ?? null;
     stop();
   }, [clearStreamTimer, stop]);
 
@@ -757,24 +749,12 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   // substituting by activeIndex would corrupt restored snapshots. We only
   // hide system messages and progress-only assistant messages.
   const computeVisibleMessages = useCallback((): UIMessage[] => {
-    const continuation = findContinuation(messages);
     const result: UIMessage[] = [];
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
       if (message.role === "system") continue;
       const nextMessage = messages[i + 1];
       if (isProgressOnlyAssistantMessage(message) && nextMessage?.role === "assistant") {
-        continue;
-      }
-      // The Continue instruction is internal — never render it as a bubble.
-      if (isContinueInstruction(message)) continue;
-      // While the continuation streams, show it as part of the original
-      // truncated reply so the bubble keeps growing in place.
-      if (continuation && message.id === continuation.continuation.id) {
-        const sourceIdx = result.findIndex((r) => r.id === continuation.source.id);
-        if (sourceIdx !== -1 && result[sourceIdx].role === "assistant") {
-          result[sourceIdx] = mergeAssistantText(result[sourceIdx], message);
-        }
         continue;
       }
       result.push(message);
@@ -805,61 +785,19 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     !deepThinkActive &&
     !filesActive;
 
-  // Rounded Continue pill under the final assistant reply when it looks
-  // unfinished (cut off mid-sentence / hanging code fence / stopped stream).
-  const lastAssistantText =
-    lastVisibleMessage?.role === "assistant"
-      ? lastVisibleMessage.parts
-          .filter((part) => part.type === "text")
-          .map((part) => (part as { text: string }).text)
-          .join("")
-      : "";
-  // A reply that was stopped while it was still thinking / searching / file-
-  // scanning has no text yet, but the process was interrupted just the same.
-  // DeepThink gets the "Stopped" state + Continue; web search / file scan
-  // terminates the whole response with "The response was interrupted".
-  const lastAssistantHasThinking =
-    lastVisibleMessage?.role === "assistant" &&
-    lastVisibleMessage.parts.some(
-      (part) => part.type === "data-thought" && (part as any).data?.status === "thinking"
-    );
-  const lastAssistantHasSearch =
-    lastVisibleMessage?.role === "assistant" &&
-    lastVisibleMessage.parts.some(
-      (part) =>
-        part.type === "data-search" ||
-        part.type === "data-file" ||
-        part.type === "tool-webSearch" ||
-        (part.type === "dynamic-tool" && (part as any).toolName === "webSearch")
-    );
-  // "Response was interrupted" is now shown ONLY for a genuine interruption:
-  // a manual Stop, or a failed/aborted stream (e.g. a dropped connection). We
-  // no longer guess from trailing characters — that heuristic caused false
-  // positives on completely normal, finished replies.
+// The red "You stopped the response" hint follows the `data-stopped` marker
+  // stamped onto the message itself when the user stops a generation. Because
+  // it is a normal message part, it survives a page refresh and only ever
+  // shows under the exact reply that was stopped — never on a finished branch
+  // sibling. The Continue flow has been removed.
   const streamFailed = status === "error";
-  const hasTextInterruption =
+  // The hint now follows the `data-stopped` marker stamped on the message
+  // itself, so it survives a page refresh and only ever shows under the exact
+  // reply the user stopped — never on a finished branch sibling.
+  const lastAssistantStopped =
     lastVisibleMessage?.role === "assistant" &&
-    lastAssistantText.trim().length >= 10 &&
-    (stoppedMidGenerationRef.current || streamFailed);
-  const hasProcessInterruption =
-    status === "ready" &&
-    stoppedMidGenerationRef.current &&
-    lastVisibleMessage?.role === "assistant" &&
-    lastAssistantText.trim().length < 10 &&
-    (lastAssistantHasThinking || lastAssistantHasSearch);
-
-  // "text": stopped/cut off mid-answer → red hint + Continue.
-  // "thinking": stopped while DeepThink was running → "Stopped" + Continue.
-  // "search": stopped while web-searching / file-scanning → terminate.
-  const interruptedKind: "text" | "thinking" | "search" | undefined = hasTextInterruption
-    ? "text"
-    : hasProcessInterruption
-    ? lastAssistantHasSearch
-      ? "search"
-      : "thinking"
-    : undefined;
-
-  const showContinueButton = interruptedKind === "text" || interruptedKind === "thinking";
+    (lastVisibleMessage.parts as any[]).some((p) => p.type === "data-stopped");
+  const interruptedKind: "text" | undefined = lastAssistantStopped ? "text" : undefined;
 
   useEffect(() => {
     if (isLoading && !wasLoadingRef.current) {
@@ -1258,41 +1196,9 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   }, []);
 
   const handleContinue = useCallback(() => {
-    if (isLoading) return;
-    stoppedMidGenerationRef.current = false;
-    // The instruction is an internal user message: it tells the model to keep
-    // writing from the exact cutoff point. It is hidden from the UI and
-    // removed from history once the continuation is merged into the original
-    // reply — the user never sees a "Continue" prompt bubble.
-    // The exact ending of the reply is quoted inside so the model anchors on
-    // where to resume without re-typing the tail (the usual cause of
-    // duplicated text after a Continue). messagesRef is always current.
-    const lastAssistant = [...messagesRef.current]
-      .reverse()
-      .find((m) => m.role === "assistant");
-    const tailText = lastAssistant
-      ? lastAssistant.parts
-          .filter((p) => p.type === "text")
-          .map((p) => (p as { text: string }).text)
-          .join("")
-      : "";
-    // When the reply was stopped while DeepThink was running, resume the same
-    // way: re-enable reasoning so the "Thinking…" phase picks up again.
-    const resumeThinking = lastAssistant?.parts.some(
-      (p) => p.type === "data-thought" && (p as any).data?.status === "thinking"
-    );
-    sendMessage(
-      { text: buildContinueInstruction(tailText) },
-      {
-        // Continue runs without web search / tool calling. DeepThink is kept
-        // only when the reply was interrupted mid-thought, so "Thinking…"
-        // resumes exactly where it stopped; otherwise it stays off. The full
-        // history (with the exact ending quoted above) is sent just like a
-        // normal message, so the model resumes from where it left off.
-        body: { deepThink: Boolean(resumeThinking), webSearch: false },
-      }
-    );
-  }, [isLoading, sendMessage]);
+    // The Continue feature has been removed. Retained as a no-op so any stale
+    // call site stays harmless.
+  }, []);
 
   const handleSubmit = async () => {
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
@@ -1551,6 +1457,13 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const handleBranchNav = useCallback(
     (messageId: string, direction: "prev" | "next") => {
       if (isLoading) return;
+      // Switching the displayed branch means we are no longer looking at the
+      // reply that was manually stopped, so clear the stopped hint — otherwise
+      // "You stopped the response" would wrongly show under the now-selected
+      // (finished) version. The hint is now driven by the per-message
+      // `data-stopped` marker, but we still reset the in-flight flag here.
+      stoppedMidGenerationRef.current = false;
+      lastAssistantIdForStopRef.current = null;
       const { groupId, group } = resolveGroupForMessage(messageId);
       if (!groupId || !group) return;
 
@@ -1786,18 +1699,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 );
               })}
               {showTypingIndicator && <TypingIndicator />}
-              {showContinueButton && (
-                <div className="flex w-full max-w-3xl mx-auto pl-12 sm:pl-14 py-1">
-                  <button
-                    onClick={handleContinue}
-                    disabled={isLoading}
-                    className="flex items-center gap-1.5 rounded-full bg-[#1a1a1c] hover:bg-[#242428] border border-white/10 text-[#ccc] hover:text-white text-xs font-medium px-3.5 py-1.5 transition-colors duration-200 select-none disabled:opacity-50"
-                  >
-                    <Redo2 className="w-3.5 h-3.5" />
-                    Continue
-                  </button>
-                </div>
-              )}
               {displayError && (
                 <div className="flex gap-2.5 sm:gap-4 w-full max-w-3xl mx-auto py-3 sm:py-4">
                   <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center overflow-hidden flex-shrink-0 mt-1">
