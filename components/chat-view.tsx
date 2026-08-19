@@ -1635,10 +1635,10 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       ) : (
         <>
           {/* Top Floating Dynamic Island Header */}
-          {/* Sits at least 1rem (matching the sidebar opener) below the top edge
-              and clears notched/safe-area insets so mobile browser chrome (the
-              address/search bar) never overlaps it. */}
-          <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+          {/* Uses `fixed` (not absolute) so it stays pinned to the viewport
+              through any scroll, exactly like the sidebar opener. top-4 (1rem)
+              matches the opener; the safe-area floor clears notched devices. */}
+          <div className="fixed top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
             <div className="relative">
               <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1">
                 {MODEL_TABS.map((tab) => (
