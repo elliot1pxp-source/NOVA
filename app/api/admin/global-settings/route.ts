@@ -9,10 +9,10 @@ export const revalidate = 0;
 export type ModelMap = Record<string, string>;
 
 export type GlobalSettings = {
-  BLOCKRUN_API_KEY?: string;
+  MAIN_BASED_URL_KEY?: string;
   FALLBACK_API_KEY?: string;
   SERPER_API_KEY?: string;
-  BASED_URL?: string;
+  MAIN_BASED_URL?: string;
   FALLBACK_BASED_URL?: string;
   useFallbackAsPrimary?: boolean;
   PRIMARY_MODELS?: ModelMap;
@@ -40,10 +40,10 @@ export type GlobalSettingsHistoryEntry = {
 };
 
 const DEFAULT_SETTINGS: GlobalSettings = {
-  BLOCKRUN_API_KEY: "",
+  MAIN_BASED_URL_KEY: "",
   FALLBACK_API_KEY: "",
   SERPER_API_KEY: "",
-  BASED_URL: "",
+  MAIN_BASED_URL: "",
   FALLBACK_BASED_URL: "",
   useFallbackAsPrimary: false,
   PRIMARY_MODELS: undefined,
@@ -125,28 +125,27 @@ export async function GET(req: Request) {
   const settings = await readSettings();
   const env = {
     ADMIN_KEY: process.env.ADMIN_KEY ?? "",
-    BLOCKRUN_API_KEY: process.env.BLOCKRUN_API_KEY ?? process.env.BLOCKRUN_TOKEN ?? process.env.OPENAI_API_KEY ?? "",
+    MAIN_BASED_URL_KEY: process.env.MAIN_BASED_URL_KEY ?? process.env.BLOCKRUN_TOKEN ?? process.env.OPENAI_API_KEY ?? "",
     FALLBACK_API_KEY: process.env.FALLBACK_API_KEY ?? "",
     SERPER_API_KEY: process.env.SERPER_API_KEY ?? "",
-    BASED_URL: process.env.BASED_URL ?? process.env.BASE_URL ?? process.env.BLOCKRUN_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "",
-    FALLBACK_BASED_URL: process.env.FALLBACK_BASED_URL ?? "",
+    MAIN_BASED_URL: process.env.MAIN_BASED_URL ?? process.env.BASE_URL ?? process.env.BLOCKRUN_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "",
   };
 
-// The prompt that will actually be used at runtime: the configured
-    // SYSTEM_PROMPT if set, otherwise the bundled systemprompt.txt. Surfaced
-    // so the admin editor can prefill and show what is currently active.
-    const effectiveSystemPrompt = await getEffectiveSystemPrompt();
-    const usingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
-    const fileSystemPrompt = readSystemPromptFile();
+  // The prompt that will actually be used at runtime: the configured
+  // SYSTEM_PROMPT if set, otherwise the bundled systemprompt.txt. Surfaced
+  // so the admin editor can prefill and show what is currently active.
+  const effectiveSystemPrompt = await getEffectiveSystemPrompt();
+  const usingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
+  const fileSystemPrompt = readSystemPromptFile();
 
-    // The initial chat prompt that will actually be used at runtime.
-    const effectiveInitialPrompt = await getEffectiveInitialPrompt();
-    const fileInitialPrompt = readInitialPromptFile();
+  // The initial chat prompt that will actually be used at runtime.
+  const effectiveInitialPrompt = await getEffectiveInitialPrompt();
+  const fileInitialPrompt = readInitialPromptFile();
 
-    return NextResponse.json(
-      { settings, env, effectiveSystemPrompt, usingFileFallback, fileSystemPrompt, effectiveInitialPrompt, fileInitialPrompt },
-      { headers: { "Cache-Control": "no-store, max-age=0" } },
-    );
+  return NextResponse.json(
+    { settings, env, effectiveSystemPrompt, usingFileFallback, fileSystemPrompt, effectiveInitialPrompt, fileInitialPrompt },
+    { headers: { "Cache-Control": "no-store, max-age=0" } },
+  );
 }
 
 export async function PUT(req: Request) {
@@ -157,10 +156,10 @@ export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const {
-      BLOCKRUN_API_KEY,
+      MAIN_BASED_URL_KEY,
       FALLBACK_API_KEY,
       SERPER_API_KEY,
-      BASED_URL,
+      MAIN_BASED_URL,
       FALLBACK_BASED_URL,
       useFallbackAsPrimary,
       PRIMARY_MODELS,
@@ -179,10 +178,10 @@ export async function PUT(req: Request) {
       FALLBACK_MODELS: settings.FALLBACK_MODELS ? { ...settings.FALLBACK_MODELS } : undefined,
     };
 
-    if (BLOCKRUN_API_KEY !== undefined) settings.BLOCKRUN_API_KEY = BLOCKRUN_API_KEY;
+    if (MAIN_BASED_URL_KEY !== undefined) settings.MAIN_BASED_URL_KEY = MAIN_BASED_URL_KEY;
     if (FALLBACK_API_KEY !== undefined) settings.FALLBACK_API_KEY = FALLBACK_API_KEY;
     if (SERPER_API_KEY !== undefined) settings.SERPER_API_KEY = SERPER_API_KEY;
-    if (BASED_URL !== undefined) settings.BASED_URL = BASED_URL;
+    if (MAIN_BASED_URL !== undefined) settings.MAIN_BASED_URL = MAIN_BASED_URL;
     if (FALLBACK_BASED_URL !== undefined) settings.FALLBACK_BASED_URL = FALLBACK_BASED_URL;
     if (useFallbackAsPrimary !== undefined) settings.useFallbackAsPrimary = Boolean(useFallbackAsPrimary);
     if (PRIMARY_MODELS !== undefined) settings.PRIMARY_MODELS = PRIMARY_MODELS;

@@ -67,10 +67,10 @@ export async function POST(req: Request) {
       activatedAt: null,
       expiresAt: null,
       tokens: {
-        BLOCKRUN_API_KEY: tokens.BLOCKRUN_API_KEY || "",
+        MAIN_BASED_URL_KEY: tokens.MAIN_BASED_URL_KEY || "",
         FALLBACK_API_KEY: tokens.FALLBACK_API_KEY || "",
         SERPER_API_KEY: tokens.SERPER_API_KEY || "",
-        BASED_URL: tokens.BASED_URL || "",
+        MAIN_BASED_URL: tokens.MAIN_BASED_URL || "",
         FALLBACK_BASED_URL: tokens.FALLBACK_BASED_URL || "",
       },
       redeemed: false,
@@ -137,10 +137,10 @@ export async function PUT(req: Request) {
       codes[index].maxRedemptions = maxUses;
     }
     if (tokens) {
-      if (tokens.BLOCKRUN_API_KEY !== undefined) codes[index].tokens.BLOCKRUN_API_KEY = tokens.BLOCKRUN_API_KEY;
+      if (tokens.MAIN_BASED_URL_KEY !== undefined) codes[index].tokens.MAIN_BASED_URL_KEY = tokens.MAIN_BASED_URL_KEY;
       if (tokens.FALLBACK_API_KEY !== undefined) codes[index].tokens.FALLBACK_API_KEY = tokens.FALLBACK_API_KEY;
       if (tokens.SERPER_API_KEY !== undefined) codes[index].tokens.SERPER_API_KEY = tokens.SERPER_API_KEY;
-      if (tokens.BASED_URL !== undefined) codes[index].tokens.BASED_URL = tokens.BASED_URL;
+      if (tokens.MAIN_BASED_URL !== undefined) codes[index].tokens.MAIN_BASED_URL = tokens.MAIN_BASED_URL;
       if (tokens.FALLBACK_BASED_URL !== undefined) codes[index].tokens.FALLBACK_BASED_URL = tokens.FALLBACK_BASED_URL;
     }
     if (redeemedUserIds !== undefined) codes[index].redeemedUserIds = redeemedUserIds;

@@ -9,10 +9,10 @@ import { cn } from "@/lib/utils";
 type ModelMap = Record<string, string>;
 
 type GlobalSettings = {
-  BLOCKRUN_API_KEY?: string;
+  MAIN_BASED_URL_KEY?: string;
   FALLBACK_API_KEY?: string;
   SERPER_API_KEY?: string;
-  BASED_URL?: string;
+  MAIN_BASED_URL?: string;
   FALLBACK_BASED_URL?: string;
   useFallbackAsPrimary?: boolean;
   PRIMARY_MODELS?: ModelMap;

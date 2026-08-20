@@ -2,7 +2,7 @@
  * Shared LLM provider layer with a silent fail-over chain.
  *
  * Two OpenAI-compatible endpoints are supported:
- *   1. The primary endpoint (BASED_URL / BLOCKRUN_API_KEY).
+ *   1. The primary endpoint (MAIN_BASED_URL / MAIN_BASED_URL_KEY).
  *   2. A fallback endpoint (FALLBACK_BASED_URL / FALLBACK_API_KEY).
  *
  * When a request to the primary endpoint fails (network error, retryable
@@ -19,7 +19,7 @@ import {
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 
-// Per-provider model mappings. The primary endpoint (BASED_URL) uses "oc/"
+// Per-provider model mappings. The primary endpoint (MAIN_BASED_URL) uses "oc/"
 // prefixed model IDs; the fallback endpoint (FALLBACK_BASED_URL) uses 
 // unprefixed IDs. Both expose the same logical models.
 
@@ -289,7 +289,7 @@ function createOpenRouterAwareFetch(
 }
 
 export type ProviderClients = {
-  /** Primary endpoint client (BASED_URL). */
+  /** Primary endpoint client (MAIN_BASED_URL). */
   primary: ReturnType<typeof createOpenAI>;
   /** Fallback endpoint client (FALLBACK_BASED_URL). May be the primary if no fallback is configured. */
   fallback: ReturnType<typeof createOpenAI>;
@@ -326,7 +326,7 @@ export function createProviderClients(
   const primaryBaseURL =
     options?.primaryBaseURL ||
     getServerEnvValue(
-      "BASED_URL",
+      "MAIN_BASED_URL",
       "BASE_URL",
       "BLOCKRUN_BASE_URL",
       "OPENAI_BASE_URL"

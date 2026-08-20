@@ -55,10 +55,10 @@ type PaidCode = {
   redeemedUserIds?: string[];
   activatedAt?: string | null;
   tokens: {
-    BLOCKRUN_API_KEY?: string;
+    MAIN_BASED_URL_KEY?: string;
     FALLBACK_API_KEY?: string;
     SERPER_API_KEY: string;
-    BASED_URL?: string;
+    MAIN_BASED_URL?: string;
     FALLBACK_BASED_URL?: string;
   };
   redeemed: boolean;
@@ -67,10 +67,10 @@ type PaidCode = {
 };
 
 type GlobalSettings = {
-  BLOCKRUN_API_KEY?: string;
+  MAIN_BASED_URL_KEY?: string;
   FALLBACK_API_KEY?: string;
   SERPER_API_KEY?: string;
-  BASED_URL?: string;
+  MAIN_BASED_URL?: string;
   FALLBACK_BASED_URL?: string;
   useFallbackAsPrimary?: boolean;
   PRIMARY_MODELS?: Record<string, string>;
@@ -99,10 +99,10 @@ export default function AdminPage() {
   });
   const [envValues, setEnvValues] = useState({
     ADMIN_KEY: "",
-    BLOCKRUN_API_KEY: "",
+    MAIN_BASED_URL_KEY: "",
     FALLBACK_API_KEY: "",
     SERPER_API_KEY: "",
-    BASED_URL: "",
+    MAIN_BASED_URL: "",
     FALLBACK_BASED_URL: "",
   });
   const [currentEnvironmentInputs, setCurrentEnvironmentInputs] = useState({
@@ -321,7 +321,7 @@ export default function AdminPage() {
 
   // Editing
   const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editTokens, setEditTokens] = useState<{ BLOCKRUN_API_KEY?: string; FALLBACK_API_KEY?: string; SERPER_API_KEY: string; BASED_URL?: string; FALLBACK_BASED_URL?: string } | null>(null);
+  const [editTokens, setEditTokens] = useState<{ MAIN_BASED_URL_KEY?: string; FALLBACK_API_KEY?: string; SERPER_API_KEY: string; MAIN_BASED_URL?: string; FALLBACK_BASED_URL?: string } | null>(null);
   const [editExpiry, setEditExpiry] = useState("");
   const [editDurationHours, setEditDurationHours] = useState("");
   const [editMaxRedemptions, setEditMaxRedemptions] = useState("");
@@ -366,15 +366,15 @@ export default function AdminPage() {
     SERPER_API_KEY: settings.SERPER_API_KEY || env.SERPER_API_KEY || "",
     PRIMARY_KEY: settings.useFallbackAsPrimary
       ? settings.FALLBACK_API_KEY || env.FALLBACK_API_KEY || ""
-      : settings.BLOCKRUN_API_KEY || env.BLOCKRUN_API_KEY || "",
+      : settings.MAIN_BASED_URL_KEY || env.MAIN_BASED_URL_KEY || "",
     FALLBACK_KEY: settings.useFallbackAsPrimary
-      ? settings.BLOCKRUN_API_KEY || env.FALLBACK_API_KEY || ""
+      ? settings.MAIN_BASED_URL_KEY || env.MAIN_BASED_URL_KEY || ""
       : settings.FALLBACK_API_KEY || env.FALLBACK_API_KEY || "",
     PRIMARY_ENDPOINT: settings.useFallbackAsPrimary
       ? settings.FALLBACK_BASED_URL || env.FALLBACK_BASED_URL || ""
-      : settings.BASED_URL || env.BASED_URL || "",
+      : settings.MAIN_BASED_URL || env.MAIN_BASED_URL || "",
     FALLBACK_ENDPOINT: settings.useFallbackAsPrimary
-      ? settings.BASED_URL || env.BASED_URL || ""
+      ? settings.MAIN_BASED_URL || env.MAIN_BASED_URL || ""
       : settings.FALLBACK_BASED_URL || env.FALLBACK_BASED_URL || "",
   });
 
@@ -414,10 +414,10 @@ export default function AdminPage() {
         setFileInitialPrompt(settingsData.fileInitialPrompt ?? "");
         setCurrentEnvironmentInputs(buildCurrentEnvironmentInputs(loadedSettings, settingsData.env ?? {
           ADMIN_KEY: "",
-          BLOCKRUN_API_KEY: "",
+          MAIN_BASED_URL_KEY: "",
           FALLBACK_API_KEY: "",
           SERPER_API_KEY: "",
-          BASED_URL: "",
+          MAIN_BASED_URL: "",
           FALLBACK_BASED_URL: "",
         }));
       }
@@ -482,7 +482,7 @@ export default function AdminPage() {
 
   const validateSettings = (): string | null => {
     const urlFields = [
-      { label: "Primary endpoint", value: settings.BASED_URL },
+      { label: "Primary endpoint", value: settings.MAIN_BASED_URL },
       { label: "Fallback endpoint", value: settings.FALLBACK_BASED_URL },
     ];
 
@@ -547,24 +547,24 @@ export default function AdminPage() {
   };
 
   const handleSetCurrentCodeTokens = () => {
-    setNewBlockrunApiKey(currentSettingsValues.BLOCKRUN_API_KEY);
+    setNewBlockrunApiKey(currentSettingsValues.MAIN_BASED_URL_KEY);
     setNewFallbackApiKey(currentSettingsValues.FALLBACK_API_KEY);
     setNewSerper(currentSettingsValues.SERPER_API_KEY);
-    setNewBaseUrl(currentSettingsValues.BASED_URL);
+    setNewBaseUrl(currentSettingsValues.MAIN_BASED_URL);
     setNewFallbackBaseUrl(currentSettingsValues.FALLBACK_BASED_URL);
   };
 
   const effectivePrimaryBaseURL = settings.useFallbackAsPrimary
     ? settings.FALLBACK_BASED_URL ?? ""
-    : settings.BASED_URL ?? "";
+    : settings.MAIN_BASED_URL ?? "";
   const effectiveFallbackBaseURL = settings.useFallbackAsPrimary
-    ? settings.BASED_URL ?? ""
+    ? settings.MAIN_BASED_URL ?? ""
     : settings.FALLBACK_BASED_URL ?? "";
   const effectiveBlockrunApiKey = settings.useFallbackAsPrimary
     ? settings.FALLBACK_API_KEY ?? ""
-    : settings.BLOCKRUN_API_KEY ?? "";
+    : settings.MAIN_BASED_URL_KEY ?? "";
   const effectiveFallbackApiKey = settings.useFallbackAsPrimary
-    ? settings.BLOCKRUN_API_KEY ?? ""
+    ? settings.MAIN_BASED_URL_KEY ?? ""
     : settings.FALLBACK_API_KEY ?? "";
 
   const isUsingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
@@ -572,10 +572,10 @@ export default function AdminPage() {
   const handleSetCurrentEditTokens = () => {
     if (!editTokens) return;
     setEditTokens({
-      BLOCKRUN_API_KEY: currentSettingsValues.BLOCKRUN_API_KEY || editTokens.BLOCKRUN_API_KEY,
+      MAIN_BASED_URL_KEY: currentSettingsValues.MAIN_BASED_URL_KEY || editTokens.MAIN_BASED_URL_KEY,
       FALLBACK_API_KEY: currentSettingsValues.FALLBACK_API_KEY || editTokens.FALLBACK_API_KEY,
       SERPER_API_KEY: currentSettingsValues.SERPER_API_KEY || editTokens.SERPER_API_KEY || "",
-      BASED_URL: currentSettingsValues.BASED_URL || editTokens.BASED_URL,
+      MAIN_BASED_URL: currentSettingsValues.MAIN_BASED_URL || editTokens.MAIN_BASED_URL,
       FALLBACK_BASED_URL: currentSettingsValues.FALLBACK_BASED_URL || editTokens.FALLBACK_BASED_URL,
     });
   };
@@ -584,7 +584,7 @@ export default function AdminPage() {
     setSettings((current) => {
       const next = current.useFallbackAsPrimary
         ? { ...current, FALLBACK_BASED_URL: value }
-        : { ...current, BASED_URL: value };
+        : { ...current, MAIN_BASED_URL: value };
       setCurrentEnvironmentInputs((currentInputs) => ({
         ...currentInputs,
         PRIMARY_ENDPOINT: value,
@@ -596,7 +596,7 @@ export default function AdminPage() {
   const handleFallbackBaseURLChange = (value: string) => {
     setSettings((current) => {
       const next = current.useFallbackAsPrimary
-        ? { ...current, BASED_URL: value }
+        ? { ...current, MAIN_BASED_URL: value }
         : { ...current, FALLBACK_BASED_URL: value };
       setCurrentEnvironmentInputs((currentInputs) => ({
         ...currentInputs,
@@ -610,7 +610,7 @@ export default function AdminPage() {
     setSettings((current) => {
       const next = current.useFallbackAsPrimary
         ? { ...current, FALLBACK_API_KEY: value }
-        : { ...current, BLOCKRUN_API_KEY: value };
+        : { ...current, MAIN_BASED_URL_KEY: value };
       setCurrentEnvironmentInputs((currentInputs) => ({
         ...currentInputs,
         PRIMARY_KEY: value,
@@ -622,7 +622,7 @@ export default function AdminPage() {
   const handleFallbackApiKeyChange = (value: string) => {
     setSettings((current) => {
       const next = current.useFallbackAsPrimary
-        ? { ...current, BLOCKRUN_API_KEY: value }
+        ? { ...current, FALLBACK_API_KEY: value }
         : { ...current, FALLBACK_API_KEY: value };
       setCurrentEnvironmentInputs((currentInputs) => ({
         ...currentInputs,
@@ -661,17 +661,17 @@ export default function AdminPage() {
   const currentSettingsValues = {
     ADMIN_KEY: envValues.ADMIN_KEY,
     SERPER_API_KEY: settings.SERPER_API_KEY || envValues.SERPER_API_KEY || "",
-    BLOCKRUN_API_KEY: settings.useFallbackAsPrimary
+    MAIN_BASED_URL_KEY: settings.useFallbackAsPrimary
       ? settings.FALLBACK_API_KEY || envValues.FALLBACK_API_KEY || ""
-      : settings.BLOCKRUN_API_KEY || envValues.BLOCKRUN_API_KEY || "",
+      : settings.MAIN_BASED_URL_KEY || envValues.MAIN_BASED_URL_KEY || "",
     FALLBACK_API_KEY: settings.useFallbackAsPrimary
-      ? settings.BLOCKRUN_API_KEY || envValues.BLOCKRUN_API_KEY || ""
+      ? settings.MAIN_BASED_URL_KEY || envValues.MAIN_BASED_URL_KEY || ""
       : settings.FALLBACK_API_KEY || envValues.FALLBACK_API_KEY || "",
-    BASED_URL: settings.useFallbackAsPrimary
+    MAIN_BASED_URL: settings.useFallbackAsPrimary
       ? settings.FALLBACK_BASED_URL || envValues.FALLBACK_BASED_URL || ""
-      : settings.BASED_URL || envValues.BASED_URL || "",
+      : settings.MAIN_BASED_URL || envValues.MAIN_BASED_URL || "",
     FALLBACK_BASED_URL: settings.useFallbackAsPrimary
-      ? settings.BASED_URL || envValues.BASED_URL || ""
+      ? settings.MAIN_BASED_URL || envValues.MAIN_BASED_URL || ""
       : settings.FALLBACK_BASED_URL || envValues.FALLBACK_BASED_URL || "",
   };
 
@@ -764,10 +764,10 @@ export default function AdminPage() {
           durationMinutes: Math.round(durationHours * 60),
           maxRedemptions,
           tokens: {
-            BLOCKRUN_API_KEY: newBlockrunApiKey,
+            MAIN_BASED_URL_KEY: newBlockrunApiKey,
             FALLBACK_API_KEY: newFallbackApiKey,
             SERPER_API_KEY: newSerper,
-            BASED_URL: newBaseUrl,
+            MAIN_BASED_URL: newBaseUrl,
             FALLBACK_BASED_URL: newFallbackBaseUrl,
           },
         }),
@@ -1633,7 +1633,7 @@ export default function AdminPage() {
             </div>
             <div className="space-y-3 mb-3">
               <div>
-                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">BLOCKRUN_API_KEY (for this code)</label>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">MAIN_BASED_URL_KEY (for this code)</label>
                 <input
                   type="text"
                   value={newBlockrunApiKey}
@@ -1671,7 +1671,7 @@ export default function AdminPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">BASED_URL (for this code)</label>
+                <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">MAIN_BASED_URL (for this code)</label>
                 <input
                   type="text"
                   value={newBaseUrl}
@@ -1819,11 +1819,11 @@ export default function AdminPage() {
                         </div>
                         )}
                         <div>
-                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">BLOCKRUN_API_KEY</label>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">MAIN_BASED_URL_KEY</label>
                           <input
                             type="text"
-                            value={editTokens?.BLOCKRUN_API_KEY || ""}
-                            onChange={(e) => setEditTokens({ ...editTokens!, BLOCKRUN_API_KEY: e.target.value })}
+                            value={editTokens?.MAIN_BASED_URL_KEY || ""}
+                            onChange={(e) => setEditTokens({ ...editTokens!, MAIN_BASED_URL_KEY: e.target.value })}
                             className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-white/20 transition-all"
                           />
                         </div>
@@ -1846,11 +1846,11 @@ export default function AdminPage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">BASED_URL</label>
+                          <label className="block text-[10px] font-medium text-[#8c8f9c] mb-0.5">MAIN_BASED_URL</label>
                           <input
                             type="text"
-                            value={editTokens?.BASED_URL || ""}
-                            onChange={(e) => setEditTokens({ ...editTokens!, BASED_URL: e.target.value })}
+                            value={editTokens?.MAIN_BASED_URL || ""}
+                            onChange={(e) => setEditTokens({ ...editTokens!, MAIN_BASED_URL: e.target.value })}
                             className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-white/20 transition-all"
                           />
                         </div>

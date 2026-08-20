@@ -95,10 +95,10 @@ function isChatStart(messages: UIMessage[]): boolean {
 
 
 type GlobalSettings = {
-  BLOCKRUN_API_KEY?: string;
+  MAIN_BASED_URL_KEY?: string;
   FALLBACK_API_KEY?: string;
   SERPER_API_KEY?: string;
-  BASED_URL?: string;
+  MAIN_BASED_URL?: string;
   FALLBACK_BASED_URL?: string;
   useFallbackAsPrimary?: boolean;
   PRIMARY_MODELS?: Record<string, string>;
@@ -237,20 +237,20 @@ export async function POST(req: Request) {
     // 2. A redeemed paid tier code overrides API keys only (its dedicated
     //    tokens); it never replaces the endpoint/model configuration.
     // 3. Environment variables are the final fallback for anything unset.
-    let apiKey = getServerEnvValue("BLOCKRUN_API_KEY", "BLOCKRUN_TOKEN", "OPENAI_API_KEY");
+    let apiKey = getServerEnvValue("MAIN_BASED_URL_KEY", "BLOCKRUN_TOKEN", "OPENAI_API_KEY");
     let fallbackApiKey = getServerEnvValue("FALLBACK_API_KEY");
     let serperApiKey = getServerEnvValue("SERPER_API_KEY");
-    let primaryBaseURL = getServerEnvValue("BASED_URL", "BASE_URL", "BLOCKRUN_BASE_URL", "OPENAI_BASE_URL");
+    let primaryBaseURL = getServerEnvValue("MAIN_BASED_URL", "BASE_URL", "BLOCKRUN_BASE_URL", "OPENAI_BASE_URL");
     let fallbackBaseURL = getServerEnvValue("FALLBACK_BASED_URL");
     let useFallbackAsPrimary = false;
     let runtimePrimaryModels: Record<string, string> | undefined;
     let runtimeFallbackModels: Record<string, string> | undefined;
 
     const globalSettings = await readGlobalSettings();
-    if (globalSettings.BLOCKRUN_API_KEY) apiKey = globalSettings.BLOCKRUN_API_KEY;
+    if (globalSettings.MAIN_BASED_URL_KEY) apiKey = globalSettings.MAIN_BASED_URL_KEY;
     if (globalSettings.FALLBACK_API_KEY) fallbackApiKey = globalSettings.FALLBACK_API_KEY;
     if (globalSettings.SERPER_API_KEY) serperApiKey = globalSettings.SERPER_API_KEY;
-    if (globalSettings.BASED_URL) primaryBaseURL = globalSettings.BASED_URL;
+    if (globalSettings.MAIN_BASED_URL) primaryBaseURL = globalSettings.MAIN_BASED_URL;
     if (globalSettings.FALLBACK_BASED_URL) fallbackBaseURL = globalSettings.FALLBACK_BASED_URL;
     useFallbackAsPrimary = Boolean(globalSettings.useFallbackAsPrimary);
     runtimePrimaryModels = globalSettings.PRIMARY_MODELS;
@@ -263,10 +263,10 @@ export async function POST(req: Request) {
     const INITIAL_CHAT_PROMPT = await getEffectiveInitialPrompt();
 
     if (paidCode?.expiresAt && new Date(paidCode.expiresAt) > new Date()) {
-      if (paidCode.tokens.BLOCKRUN_API_KEY) apiKey = paidCode.tokens.BLOCKRUN_API_KEY;
+      if (paidCode.tokens.MAIN_BASED_URL_KEY) apiKey = paidCode.tokens.MAIN_BASED_URL_KEY;
       if (paidCode.tokens.FALLBACK_API_KEY) fallbackApiKey = paidCode.tokens.FALLBACK_API_KEY;
       if (paidCode.tokens.SERPER_API_KEY) serperApiKey = paidCode.tokens.SERPER_API_KEY;
-      if (paidCode.tokens.BASED_URL) primaryBaseURL = paidCode.tokens.BASED_URL;
+      if (paidCode.tokens.MAIN_BASED_URL) primaryBaseURL = paidCode.tokens.MAIN_BASED_URL;
       if (paidCode.tokens.FALLBACK_BASED_URL) fallbackBaseURL = paidCode.tokens.FALLBACK_BASED_URL;
     }
 
