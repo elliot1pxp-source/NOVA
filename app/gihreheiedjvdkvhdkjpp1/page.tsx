@@ -481,9 +481,17 @@ export default function AdminPage() {
   };
 
   const validateSettings = (): string | null => {
+    // Use effective URLs based on useFallbackAsPrimary toggle
+    const effectivePrimaryURL = settings.useFallbackAsPrimary
+      ? settings.FALLBACK_BASED_URL
+      : settings.MAIN_BASED_URL;
+    const effectiveFallbackURL = settings.useFallbackAsPrimary
+      ? settings.MAIN_BASED_URL
+      : settings.FALLBACK_BASED_URL;
+
     const urlFields = [
-      { label: "Primary endpoint", value: settings.MAIN_BASED_URL },
-      { label: "Fallback endpoint", value: settings.FALLBACK_BASED_URL },
+      { label: "Primary endpoint", value: effectivePrimaryURL },
+      { label: "Fallback endpoint", value: effectiveFallbackURL },
     ];
 
     for (const field of urlFields) {
