@@ -980,7 +980,7 @@ function Attachment({ part }: { part: any }) {
   );
 }
 
-export function ChatMessage({
+function ChatMessageInner({
   message,
   onRegenerate,
   onEdit,
@@ -998,7 +998,12 @@ export function ChatMessage({
 
   useEffect(() => {
     if (!isEditing) {
-      setEditValue(messageText(message));
+      const next = messageText(message);
+      // Avoid a state update (and the resulting re-render) when the derived
+      // text is identical. During streaming the parent re-renders on every
+      // chunk; for non-streaming messages this guard prevents redundant
+      // setEditValue calls that contribute to render-storm pressure (#185).
+      setEditValue((prev) => (prev === next ? prev : next));
     }
   }, [message, isEditing]);
 
@@ -1223,6 +1228,41 @@ export function ChatMessage({
     </div>
   );
 }
+
+// Memoize so that during streaming — when `useChat` pushes a fresh `messages`
+// array on every chunk — only the actively streaming message (whose `message`
+// reference actually changes) re-renders. Non-streaming messages keep their
+// object identity across chunks, so they are skipped entirely. Without this,
+// every chunk re-rendered ALL messages, and with a long conversation history
+// that render storm tripped React's "Maximum update depth exceeded" guard
+// (#185) mid-generation.
+//
+// The comparator intentionally ignores the function props (onRegenerate /
+// onEdit / onBranchNav): they are recreated inline on every parent render, so
+// comparing them would defeat memoization. We compare only the data that
+// affects what is drawn: the message object, streaming flag, and a few
+// booleans. branchInfo is compared by its primitive fields rather than by
+// reference because getBranchInfo() returns a fresh object each render.
+const ChatMessage = memo(ChatMessageInner, (prev, next) => {
+  const biPrev = prev.branchInfo;
+  const biNext = next.branchInfo;
+  const branchInfoEqual =
+    (biPrev === undefined || biPrev === null) &&
+    (biNext === undefined || biNext === null)
+      ? true
+      : biPrev?.current === biNext?.current && biPrev?.total === biNext?.total;
+
+  return (
+    prev.message === next.message &&
+    prev.isStreaming === next.isStreaming &&
+    prev.interrupted === next.interrupted &&
+    prev.disableActions === next.disableActions &&
+    prev.animateIn === next.animateIn &&
+    branchInfoEqual
+  );
+});
+
+export { ChatMessage };
 
 export function TypingIndicator() {
   return (
