@@ -125,17 +125,91 @@ export default function AdminPage() {
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
   const [matchIndex, setMatchIndex] = useState(-1);
+  const [goToLineValue, setGoToLineValue] = useState("");
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
+  const [wrapLines, setWrapLines] = useState(true);
   const expandedTextareaRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   // Keep the highlight backdrop scrolled in lockstep with the textarea.
   const syncBackdropScroll = () => {
     const ta = expandedTextareaRef.current;
     const bd = backdropRef.current;
+    const ln = lineNumbersRef.current;
     if (ta && bd) {
       bd.scrollTop = ta.scrollTop;
       bd.scrollLeft = ta.scrollLeft;
     }
+    if (ta && ln) {
+      ln.scrollTop = ta.scrollTop;
+    }
+  };
+
+  // Handle keyboard shortcuts in the expanded editor
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Tab key for indentation
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const ta = e.currentTarget;
+      const { selectionStart, selectionEnd } = ta;
+      const newText = ta.value.slice(0, selectionStart) + "  " + ta.value.slice(selectionEnd);
+      ta.value = newText;
+      ta.setSelectionRange(selectionStart + 2, selectionStart + 2);
+      // Trigger onChange to update state
+      const event = new Event("change", { bubbles: true });
+      ta.dispatchEvent(event);
+    }
+    // Ctrl+F - Find
+    if (e.ctrlKey && e.key === "f") {
+      e.preventDefault();
+      // Focus find input
+      setTimeout(() => {
+        const findInput = document.querySelector('input[placeholder="Text to find"]') as HTMLInputElement;
+        if (findInput) findInput.focus();
+      }, 0);
+    }
+    // Ctrl+H - Replace
+    if (e.ctrlKey && e.key === "h") {
+      e.preventDefault();
+      const findInput = document.querySelector('input[placeholder="Text to find"]') as HTMLInputElement;
+      if (findInput) findInput.focus();
+    }
+    // Ctrl+G - Go to line
+    if (e.ctrlKey && e.key === "g") {
+      e.preventDefault();
+      const lineInput = document.querySelector('input[placeholder="Line number"]') as HTMLInputElement;
+      if (lineInput) lineInput.focus();
+    }
+    // Escape - clear selection
+    if (e.key === "Escape") {
+      const ta = e.currentTarget;
+      ta.setSelectionRange(ta.selectionStart, ta.selectionStart);
+    }
+  };
+
+  // Get the active line number based on cursor position
+  const getActiveLineNumber = () => {
+    const ta = expandedTextareaRef.current;
+    if (!ta) return undefined;
+    const { selectionStart } = ta;
+    return ta.value.slice(0, selectionStart).split("\n").length;
+  };
+
+  // Go to specific line number
+  const handleGoToLine = () => {
+    if (!goToLineValue.trim()) return;
+    const ta = expandedTextareaRef.current;
+    if (!ta) return;
+    const lineNum = Math.max(1, parseInt(goToLineValue.trim(), 10));
+    const lines = ta.value.split("\n");
+    const targetLine = Math.min(lineNum, lines.length);
+    const start = lines.slice(0, targetLine - 1).join("\n").length + (targetLine > 1 ? 1 : 0);
+    ta.setSelectionRange(start, start);
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 22;
+    ta.scrollTop = Math.max(0, (targetLine - 1) * lh - ta.clientHeight / 2);
+    syncBackdropScroll();
+    ta.focus();
   };
 
   // All non-overlapping start offsets of the current find term.
@@ -180,6 +254,42 @@ export default function AdminPage() {
   useEffect(() => {
     if (expandScreen) requestAnimationFrame(syncBackdropScroll);
   }, [expandScreen, settings.SYSTEM_PROMPT]);
+
+  // Lock body scroll when expanded editor is open
+  useEffect(() => {
+    if (expandScreen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [expandScreen]);
+
+  // Generate line numbers for the gutter
+  const generateLineNumbers = (text: string, activeLine?: number) => {
+    // Normalize line count — split by \n preserves empty lines correctly
+    // e.g., "a\n\nb" -> ["a", "", "b"] (3 lines), "a\n" -> ["a", ""] (2 lines)
+    const lines = text.length > 0 ? text.split("\n") : [""];
+    const numLines = lines.length;
+    return Array.from({ length: numLines }, (_, i) => {
+      const lineNum = i + 1;
+      return (
+        <div
+          key={i}
+          className={cn(
+            "select-none text-right pr-2 text-sm leading-relaxed border-r border-white/5",
+            // Only first line gets pt-4 to match textarea's p-4 top padding.
+            // Subsequent lines use leading-relaxed only to match textarea's line-height spacing.
+            i === 0 ? "pt-4" : "",
+            activeLine === lineNum ? "text-amber-400 font-medium" : "text-[#4a4d5a]"
+          )}
+        >
+          {lineNum}
+        </div>
+      );
+    });
+  };
 
   // New code form
   const [newCode, setNewCode] = useState("");
@@ -833,6 +943,220 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-[#0d0d0d] text-white">
+      {/* Expanded modal - rendered at page root level for true full-screen coverage */}
+      {expandScreen && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col bg-[#0d0d11]"
+          style={{ position: "fixed" }}
+          onClick={() => setExpandScreen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="System Prompt Expanded Editor"
+        >
+          <div
+            className="relative flex h-screen flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-white">System Prompt — Expanded Editor</p>
+                <span className={cn(
+                  "rounded-md border px-2 py-0.5 text-[10px] font-semibold",
+                  isUsingFileFallback ? "border-white/10 bg-white/5 text-[#8c8f9c]" : "border-amber-500/20 bg-amber-500/10 text-amber-400"
+                )}>
+                  {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpandScreen(false)}
+                className="rounded-full bg-white/5 p-2 text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
+                aria-label="Close expanded editor"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Toolbar: Find/Replace, Go to Line, Options */}
+            <div className="space-y-3 border-b border-white/10 px-5 py-3 flex-shrink-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex flex-1 gap-2">
+                  <label className="mb-1 block text-[10px] font-medium text-[#8c8f9c]">Find <span className="text-[9px] text-[#5e616e]">(Ctrl+F)</span></label>
+                  <input
+                    type="text"
+                    value={findText}
+                    onChange={(e) => setFindText(e.target.value)}
+                    className="flex-1 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
+                    placeholder="Text to find"
+                  />
+                </div>
+                <div className="flex flex-1 gap-2">
+                  <label className="mb-1 block text-[10px] font-medium text-[#8c8f9c]">Replace <span className="text-[9px] text-[#5e616e]">(Ctrl+H)</span></label>
+                  <input
+                    type="text"
+                    value={replaceText}
+                    onChange={(e) => setReplaceText(e.target.value)}
+                    className="flex-1 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
+                    placeholder="Replacement text"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!findText) return;
+                    const current = settings.SYSTEM_PROMPT ?? "";
+                    setSettings((s) => ({ ...s, SYSTEM_PROMPT: current.split(findText).join(replaceText) }));
+                  }}
+                  disabled={!findText}
+                  className="rounded-lg bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition-all active:scale-95 hover:bg-white/15 disabled:opacity-50"
+                >
+                  Replace All
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => goToMatch(matchIndex - 1)}
+                    disabled={!findText}
+                    className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+                    aria-label="Previous match"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-[10px] text-[#6d7288]">
+                    {findText
+                      ? `match ${findMatches.length ? matchIndex + 1 : 0} of ${findMatches.length}`
+                      : "Enter text to find"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => goToMatch(matchIndex + 1)}
+                    disabled={!findText}
+                    className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+                    aria-label="Next match"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-white/5 border border-white/5">
+                  <label className="text-[10px] text-[#6d7288] mr-1">Go to line <span className="text-[9px]">(Ctrl+G)</span></label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={goToLineValue}
+                    onChange={(e) => setGoToLineValue(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleGoToLine()}
+                    className="w-16 rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 font-mono text-[10px] text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
+                    placeholder="Line"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGoToLine}
+                    className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/15 text-[10px] font-medium text-white transition-colors"
+                  >
+                    Go
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-[#6d7288] border-l border-white/10 pl-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showLineNumbers}
+                      onChange={(e) => setShowLineNumbers(e.target.checked)}
+                      className="rounded border-white/20 text-amber-400 w-3.5 h-3.5"
+                    />
+                    Line numbers
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={wrapLines}
+                      onChange={(e) => setWrapLines(e.target.checked)}
+                      className="rounded border-white/20 text-amber-400 w-3.5 h-3.5"
+                    />
+                    Word wrap
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Editor with line numbers, highlight overlay */}
+            <div className="relative flex-1 overflow-hidden min-h-0">
+              {/* Line numbers gutter */}
+              {showLineNumbers && (
+                <div
+                  ref={lineNumbersRef}
+                  className="absolute left-0 top-0 bottom-0 w-10 bg-[#0a0a0c]/80 border-r border-white/5 flex flex-col overflow-hidden pointer-events-none z-10"
+                >
+                  {generateLineNumbers(settings.SYSTEM_PROMPT ?? "", getActiveLineNumber())}
+                </div>
+              )}
+              <div
+                ref={backdropRef}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-4 font-mono text-sm leading-relaxed text-transparent"
+              >
+                <HighlightedText text={settings.SYSTEM_PROMPT ?? ""} find={findText} activeIndex={matchIndex} />
+              </div>
+              <textarea
+                ref={expandedTextareaRef}
+                value={settings.SYSTEM_PROMPT ?? ""}
+                onChange={(e) => setSettings((s) => ({ ...s, SYSTEM_PROMPT: e.target.value }))}
+                onScroll={syncBackdropScroll}
+                onKeyDown={handleEditorKeyDown}
+                spellCheck={false}
+                className="absolute inset-0 h-full w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent p-4 font-mono text-sm leading-relaxed text-white caret-white outline-none placeholder-[#5e616e] focus:outline-none"
+                style={{ 
+                  paddingLeft: showLineNumbers ? "44px" : "16px",
+                  whiteSpace: wrapLines ? "pre-wrap" : "pre" 
+                }}
+                placeholder="Enter the system prompt…"
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-3 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
+                >
+                  Reset to file default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
+                >
+                  Clear (use bundled file)
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
+                <button
+                  type="button"
+                  onClick={handleSaveGlobalSettings}
+                  className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition-all active:scale-95 hover:bg-white/90"
+                >
+                  Save System Prompt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExpandScreen(false)}
+                  className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white transition-all active:scale-95 hover:bg-white/15"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="sticky top-0 z-50 bg-[#0d0d0d]/95 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -1013,162 +1337,6 @@ export default function AdminPage() {
                   : "Initial prompt is only prepended on chat start (first message)."}
               </p>
             </div>
-
-            {/* Expand Screen dialog — full-screen editing surface with find & replace */}
-            {expandScreen && (
-              <div
-                className="fixed inset-0 z-[60] flex flex-col bg-[#0d0d11] animate-in fade-in duration-200"
-                onClick={() => setExpandScreen(false)}
-              >
-                <div
-                  className="relative flex h-full w-full flex-col"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Header */}
-                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-white">System Prompt — Expanded Editor</p>
-                      <span className={cn(
-                        "rounded-md border px-2 py-0.5 text-[10px] font-semibold",
-                        isUsingFileFallback ? "border-white/10 bg-white/5 text-[#8c8f9c]" : "border-amber-500/20 bg-amber-500/10 text-amber-400"
-                      )}>
-                        {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setExpandScreen(false)}
-                      className="rounded-full bg-white/5 p-2 text-[#8c8f9c] transition-colors hover:bg-white/10 hover:text-white"
-                      aria-label="Close expanded editor"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {/* Find & Replace + Go to line toolbar */}
-                  <div className="space-y-3 border-b border-white/10 px-5 py-3">
-                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-1 block text-[10px] font-medium text-[#8c8f9c]">Find</label>
-                        <input
-                          type="text"
-                          value={findText}
-                          onChange={(e) => setFindText(e.target.value)}
-                          className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
-                          placeholder="Text to find"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-[10px] font-medium text-[#8c8f9c]">Replace with</label>
-                        <input
-                          type="text"
-                          value={replaceText}
-                          onChange={(e) => setReplaceText(e.target.value)}
-                          className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 font-mono text-xs text-white placeholder-[#5e616e] focus:border-white/20 focus:outline-none"
-                          placeholder="Replacement text"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!findText) return;
-                          const current = settings.SYSTEM_PROMPT ?? "";
-                          setSettings((s) => ({ ...s, SYSTEM_PROMPT: current.split(findText).join(replaceText) }));
-                        }}
-                        disabled={!findText}
-                        className="rounded-lg bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition-all active:scale-95 hover:bg-white/15 disabled:opacity-50"
-                      >
-                        Replace All
-                      </button>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => goToMatch(matchIndex - 1)}
-                          disabled={!findText}
-                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
-                          aria-label="Previous match"
-                        >
-                          Previous
-                        </button>
-                        <span className="text-[10px] text-[#6d7288]">
-                          {findText
-                            ? `match ${findMatches.length ? matchIndex + 1 : 0} of ${findMatches.length}`
-                            : "Enter text to find"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => goToMatch(matchIndex + 1)}
-                          disabled={!findText}
-                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
-                          aria-label="Next match"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Editor with highlight overlay */}
-                  <div className="relative flex-1 overflow-hidden">
-                    <div
-                      ref={backdropRef}
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-4 font-mono text-sm leading-relaxed text-transparent"
-                    >
-                      <HighlightedText text={settings.SYSTEM_PROMPT ?? ""} find={findText} activeIndex={matchIndex} />
-                    </div>
-                    <textarea
-                      ref={expandedTextareaRef}
-                      value={settings.SYSTEM_PROMPT ?? ""}
-                      onChange={(e) => setSettings((s) => ({ ...s, SYSTEM_PROMPT: e.target.value }))}
-                      onScroll={syncBackdropScroll}
-                      spellCheck={false}
-                      className="absolute inset-0 h-full w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent p-4 font-mono text-sm leading-relaxed text-white caret-white outline-none placeholder-[#5e616e] focus:outline-none"
-                      placeholder="Enter the system prompt…"
-                    />
-                  </div>
-
-                  {/* Footer */}
-                  <div className="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
-                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
-                      >
-                        Reset to file default
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
-                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
-                      >
-                        Clear (use bundled file)
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
-                      <button
-                        type="button"
-                        onClick={handleSaveGlobalSettings}
-                        className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition-all active:scale-95 hover:bg-white/90"
-                      >
-                        Save System Prompt
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExpandScreen(false)}
-                        className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white transition-all active:scale-95 hover:bg-white/15"
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-4">
