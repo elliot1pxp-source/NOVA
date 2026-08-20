@@ -630,7 +630,7 @@ export default function AdminPage() {
   const handleFallbackApiKeyChange = (value: string) => {
     setSettings((current) => {
       const next = current.useFallbackAsPrimary
-        ? { ...current, FALLBACK_API_KEY: value }
+        ? { ...current, MAIN_BASED_URL_KEY: value }
         : { ...current, FALLBACK_API_KEY: value };
       setCurrentEnvironmentInputs((currentInputs) => ({
         ...currentInputs,
