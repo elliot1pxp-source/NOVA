@@ -178,19 +178,27 @@ export function ChatInput({
           <div className="flex items-center justify-between pt-1.5 sm:pt-2 px-0.5 sm:px-1 gap-1">
             {/* Left Controls: Feature Pills & File Upload */}
             <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-              {/* DeepThink Switcher Pill */}
+              {/* DeepThink Switcher Pill. While the Expert model is selected,
+                  DeepThink is mandatory and the toggle is locked on. */}
               <button
                 type="button"
+                disabled={model === "expert"}
                 onClick={onToggleDeepThink}
+                title={model === "expert" ? "DeepThink is required for Expert mode" : undefined}
                 className={cn(
                   "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
-                  deepThink
-                    ? "bg-white/20 border-white/40 text-white"
-                    : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
+                  model === "expert"
+                    ? "bg-white/20 border-white/40 text-white opacity-90 cursor-not-allowed"
+                    : deepThink
+                      ? "bg-white/20 border-white/40 text-white"
+                      : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
                 )}
               >
                 <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span>DeepThink</span>
+                {model === "expert" && (
+                  <span className="ml-0.5 text-[9px] uppercase tracking-[0.12em] text-white/70">Locked</span>
+                )}
               </button>
 
               {/* Reasoning Level Selector — shown only while DeepThink is ON */}

@@ -309,12 +309,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     attachmentsRef.current = attachments;
   }, [attachments]);
 
-  // Selecting the Expert model auto-enables DeepThink. The effect only fires on
-  // a model change, so the user can still toggle DeepThink back off afterward.
+  // Expert mode requires DeepThink, so the toggle is locked on. The effect
+  // keeps DeepThink in sync with the model: on for "expert", unchanged for
+  // other models. The chat input disables the toggle while Expert is active.
   useEffect(() => {
-    if (model === "expert") {
-      setDeepThink(true);
-    }
+    setDeepThink((current) => (model === "expert" ? true : current));
   }, [model]);
 
   // Object URLs created for locally-picked files (see handleAddFiles) must be
