@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readData, writeData, STORAGE_KEYS } from "@/lib/server-storage";
 import { isAdminAuthorized } from "@/lib/admin-auth";
-import { getEffectiveSystemPrompt, readSystemPromptFile, getEffectiveInitialPrompt, readInitialPromptFile } from "@/lib/system-prompt";
+import { getEffectiveSystemPrompt, getEffectiveInitialPrompt, readInitialPromptFile } from "@/lib/system-prompt";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -132,19 +132,17 @@ export async function GET(req: Request) {
     FALLBACK_BASED_URL: process.env.FALLBACK_BASED_URL ?? "",
   };
 
-  // The prompt that will actually be used at runtime: the configured
-  // SYSTEM_PROMPT if set, otherwise the bundled systemprompt.txt. Surfaced
-  // so the admin editor can prefill and show what is currently active.
+  // The prompt that will actually be used at runtime. The admin-editable
+  // SYSTEM_PROMPT is the sole source of truth (there is no bundled-file
+  // fallback), so this simply surfaces the effective value for prefill.
   const effectiveSystemPrompt = await getEffectiveSystemPrompt();
-  const usingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
-  const fileSystemPrompt = readSystemPromptFile();
 
   // The initial chat prompt that will actually be used at runtime.
   const effectiveInitialPrompt = await getEffectiveInitialPrompt();
   const fileInitialPrompt = readInitialPromptFile();
 
   return NextResponse.json(
-    { settings, env, effectiveSystemPrompt, usingFileFallback, fileSystemPrompt, effectiveInitialPrompt, fileInitialPrompt },
+    { settings, env, effectiveSystemPrompt, usingFileFallback: false, fileSystemPrompt: "", effectiveInitialPrompt, fileInitialPrompt },
     { headers: { "Cache-Control": "no-store, max-age=0" } },
   );
 }

@@ -119,7 +119,6 @@ export default function AdminPage() {
   const [changeReason, setChangeReason] = useState<string>("");
 
   // System prompt editor (live runtime)
-  const [fileSystemPrompt, setFileSystemPrompt] = useState("");
   const [fileInitialPrompt, setFileInitialPrompt] = useState("");
   const [expandScreen, setExpandScreen] = useState(false);
   const [findText, setFindText] = useState("");
@@ -378,6 +377,14 @@ export default function AdminPage() {
       : settings.FALLBACK_BASED_URL || env.FALLBACK_BASED_URL || "",
   });
 
+  // Reset the displayed "Current Environment Values" back to the source of
+  // truth: the live global settings plus the server-supplied env values
+  // (which are read from the environment at request time). Discards any manual
+  // edits the admin made directly in the input fields.
+  const handleResetEnvironmentValues = useCallback(() => {
+    setCurrentEnvironmentInputs(buildCurrentEnvironmentInputs(settings, envValues));
+  }, [settings, envValues]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -423,9 +430,6 @@ export default function AdminPage() {
       }
       if (settingsData.env) {
         setEnvValues(settingsData.env);
-      }
-      if (typeof settingsData.fileSystemPrompt === "string") {
-        setFileSystemPrompt(settingsData.fileSystemPrompt);
       }
       if (typeof settingsData.fileInitialPrompt === "string") {
         setFileInitialPrompt(settingsData.fileInitialPrompt);
@@ -575,7 +579,7 @@ export default function AdminPage() {
     ? settings.MAIN_BASED_URL_KEY ?? ""
     : settings.FALLBACK_API_KEY ?? "";
 
-  const isUsingFileFallback = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
+  const isSystemPromptEmpty = !settings.SYSTEM_PROMPT || settings.SYSTEM_PROMPT.trim().length === 0;
 
   const handleSetCurrentEditTokens = () => {
     if (!editTokens) return;
@@ -971,9 +975,9 @@ export default function AdminPage() {
                 <p className="text-sm font-semibold text-white">System Prompt — Expanded Editor</p>
                 <span className={cn(
                   "rounded-md border px-2 py-0.5 text-[10px] font-semibold",
-                  isUsingFileFallback ? "border-white/10 bg-white/5 text-[#8c8f9c]" : "border-amber-500/20 bg-amber-500/10 text-amber-400"
+                  isSystemPromptEmpty ? "border-white/10 bg-white/5 text-[#8c8f9c]" : "border-amber-500/20 bg-amber-500/10 text-amber-400"
                 )}>
-                  {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
+                  {isSystemPromptEmpty ? "Not set" : "Custom override"}
                 </span>
               </div>
               <button
@@ -1131,17 +1135,10 @@ export default function AdminPage() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
-                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
-                >
-                  Reset to file default
-                </button>
-                <button
-                  type="button"
                   onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
                   className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                 >
-                  Clear (use bundled file)
+                  Clear
                 </button>
               </div>
               <div className="flex items-center gap-3">
@@ -1246,15 +1243,15 @@ export default function AdminPage() {
                 </div>
                 <span className={cn(
                   "px-2 py-0.5 rounded-md text-[10px] font-semibold shrink-0",
-                  isUsingFileFallback ? "bg-white/5 text-[#8c8f9c] border border-white/10" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  isSystemPromptEmpty ? "bg-white/5 text-[#8c8f9c] border border-white/10" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                 )}>
-                  {isUsingFileFallback ? "Using systemprompt.txt" : "Custom override"}
+                  {isSystemPromptEmpty ? "Not set" : "Custom override"}
                 </span>
               </div>
 
               <div>
                 <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">System Prompt</p>
-                <p className="text-[11px] text-[#6d7288]">Live runtime editor — changes apply on the next chat request. Clear the field to fall back to systemprompt.txt. Use Expand Screen for find &amp; replace and line jumps.</p>
+                <p className="text-[11px] text-[#6d7288]">Live runtime editor — changes apply on the next chat request. Use Expand Screen for find &amp; replace and line jumps.</p>
               </div>
 
               <textarea
@@ -1268,17 +1265,10 @@ export default function AdminPage() {
               <div className="flex items-center gap-3 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: fileSystemPrompt }))}
-                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
-                >
-                  Reset to file default
-                </button>
-                <button
-                  type="button"
                   onClick={() => setSettings((s) => ({ ...s, SYSTEM_PROMPT: "" }))}
                   className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white transition-colors"
                 >
-                  Clear (use bundled file)
+                  Clear
                 </button>
                 <span className="ml-auto text-[10px] text-[#6d7288]">{(settings.SYSTEM_PROMPT ?? "").length} chars</span>
               </div>
@@ -1353,6 +1343,14 @@ export default function AdminPage() {
                     <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Current Environment Values</p>
                     <p className="text-[11px] text-[#6d7288]">These values are used by the runtime when paid access is not active.</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleResetEnvironmentValues}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-semibold text-[#c1c5d0] transition-colors hover:bg-white/10"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Reset
+                  </button>
                 </div>
 
                 {/* Toggle row: fallback primary */}
