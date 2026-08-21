@@ -10,11 +10,13 @@ import {
   Globe, 
   FileText, 
   AlertCircle,
-  FolderOpen
+  FolderOpen,
+  ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatFile } from "@/lib/storage";
 import { openPaidTierDialog } from "@/lib/paid-tier";
+import { useIsMobile } from "@/lib/use-is-mobile";
 
 export type PendingAttachment =
   | { id: string; source: "file"; file: File; previewUrl: string }
@@ -33,7 +35,7 @@ const REASONING_LEVEL_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
-  xhigh: "Extra High",
+  xhigh: "Max",
 };
 
 type ChatInputProps = {
@@ -94,6 +96,10 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExistingFilesOpen, setIsExistingFilesOpen] = useState(false);
+  // Collapsible reasoning-effort selector under the toolbar (toggled by the ▽ on the Think control).
+  const [showReasoningSelector, setShowReasoningSelector] = useState(false);
+  // Mobile vs desktop drives the caret shape (▽/△ on mobile, </> on desktop).
+  const isMobile = useIsMobile();
 
   // Auto-resize textarea height
   useEffect(() => {
@@ -171,40 +177,88 @@ export function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={`Message NOVA ${model === "instant" ? "Instant" : model === "coding" ? "Coding" : "Expert"}...`}
             rows={1}
-            className="w-full min-h-[40px] bg-transparent text-white placeholder-[#787a85] text-sm px-2 sm:px-3 py-2 sm:py-2.5 focus:outline-none resize-none max-h-[160px] sm:max-h-[200px] leading-relaxed"
+            className="w-full min-h-[40px] bg-transparent text-white placeholder-[#787a85] text-sm px-2 sm:px-3 py-2 sm:py-2.5 focus:outline-none resize-none max-h-[150px] sm:max-h-[180px] leading-relaxed"
           />
 
-          {/* Input Action Controls Bar */}
-          <div className="flex items-center justify-between pt-1.5 sm:pt-2 px-0.5 sm:px-1 gap-1">
-            {/* Left Controls: Feature Pills & File Upload */}
+          {/* Toolbar row — sits directly under the textarea, no separator line */}
+          <div className="flex items-center justify-between gap-2 pt-1 px-0.5 sm:px-1">
+            {/* Left: feature controls */}
             <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-              {/* DeepThink Switcher Pill. While the Expert model is selected,
-                  DeepThink is mandatory and the toggle is locked on. */}
-              <button
-                type="button"
-                disabled={model === "expert"}
-                onClick={onToggleDeepThink}
-                title={model === "expert" ? "DeepThink is required for Expert mode" : undefined}
+              {/* Think control: body toggles DeepThink, ▽ opens the effort selector.
+                  Required (locked on) while the Expert model is selected. */}
+              <div
                 className={cn(
-                  "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
-                  model === "expert"
-                    ? "bg-white/20 border-white/40 text-white opacity-90 cursor-not-allowed"
-                    : deepThink
-                      ? "bg-white/20 border-white/40 text-white"
-                      : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
+                  "flex items-center rounded-full border transition-all duration-300",
+                  model === "expert" || deepThink
+                    ? "bg-white/20 border-white/40"
+                    : "bg-white/5 border-white/10"
                 )}
               >
-                <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                <span>DeepThink</span>
-                {model === "expert" && (
-                  <span className="ml-0.5 text-[9px] uppercase tracking-[0.12em] text-white/70">Locked</span>
-                )}
-              </button>
+                <button
+                  type="button"
+                  disabled={model === "expert"}
+                  onClick={() => {
+                    onToggleDeepThink();
+                    if (!deepThink) setShowReasoningSelector(true);
+                  }}
+                  title={model === "expert" ? "DeepThink is required for Expert mode" : "Toggle DeepThink"}
+                  className={cn(
+                    "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold select-none transition-colors",
+                    model === "expert"
+                      ? "text-white cursor-not-allowed"
+                      : deepThink
+                        ? "text-white"
+                        : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
+                  )}
+                >
+                  <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <span>Think</span>
+                  {model === "expert" && (
+                    <span className="ml-0.5 text-[9px] uppercase tracking-[0.12em] text-white/70">Required</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReasoningSelector((v) => !v)}
+                  disabled={!deepThink}
+                  aria-label="Toggle reasoning effort selector"
+                  aria-expanded={showReasoningSelector}
+                  className={cn(
+                    "pr-2 sm:pr-2.5 pl-1 rounded-r-full transition-colors",
+                    deepThink
+                      ? "text-white/70 hover:text-white cursor-pointer"
+                      : "text-white/20 cursor-not-allowed"
+                  )}
+                >
+                  <ChevronDown
+                    style={{
+                      // Mobile: ▽ (down) ↔ △ (up). Desktop: < ↔ > (90°/270° rotation).
+                      transform: `rotate(${
+                        isMobile
+                          ? showReasoningSelector ? 180 : 0
+                          : showReasoningSelector ? 270 : 90
+                      }deg)`,
+                    }}
+                    className="w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-300"
+                  />
+                </button>
+              </div>
 
-              {/* Reasoning Level Selector — shown only while DeepThink is ON */}
-              {deepThink && (
+              {/* Desktop: effort selector inline on the same row as the Think control.
+                  Kept mounted (always sm:flex) and animated via opacity/scale/width
+                  so the open/close slides in for BOTH the caret and the Think button.
+                  (Gating with sm:hidden would change display:none→flex and kill the
+                  transition, which is why DeepThink-on was instant before.) */}
+              <div
+                className={cn(
+                  "hidden sm:flex items-center gap-2 overflow-hidden transition-all duration-200",
+                  deepThink && showReasoningSelector
+                    ? "opacity-100 translate-x-0 scale-100"
+                    : "pointer-events-none opacity-0 -translate-x-1 scale-95 w-0"
+                )}
+              >
                 <div
-                  className="flex items-center gap-0.5 sm:gap-1 rounded-full bg-white/5 border border-white/10 p-0.5 animate-in fade-in slide-in-from-left-1 duration-200"
+                  className="flex items-center gap-0.5 rounded-full bg-white/5 border border-white/10 p-0.5"
                   role="group"
                   aria-label="Reasoning level"
                 >
@@ -216,7 +270,6 @@ export function ChatInput({
                         type="button"
                         onClick={() => {
                           if (isRestricted) {
-                            // Not available on the free tier — surface the paid tier dialog.
                             openPaidTierDialog();
                             return;
                           }
@@ -226,7 +279,7 @@ export function ChatInput({
                         aria-disabled={isRestricted}
                         title={isRestricted ? "Requires paid tier — click to unlock" : undefined}
                         className={cn(
-                          "px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold capitalize transition-all duration-200 select-none",
+                          "px-2.5 py-1 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold capitalize transition-all duration-200 select-none",
                           isRestricted
                             ? "text-[#4a4d5a] cursor-not-allowed opacity-50 hover:text-amber-400/70 hover:opacity-80"
                             : reasoningLevel === level
@@ -239,9 +292,9 @@ export function ChatInput({
                     );
                   })}
                 </div>
-              )}
+              </div>
 
-              {/* Web Search Switcher Pill */}
+              {/* Web Search Pill */}
               <button
                 type="button"
                 onClick={webSearchDisabled ? undefined : onToggleWebSearch}
@@ -268,8 +321,9 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-1 sm:p-1.5 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
+                className="p-1.5 sm:p-2 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
                 title="Attach files"
+                aria-label="Attach files"
               >
                 <Paperclip className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
@@ -290,7 +344,7 @@ export function ChatInput({
                   <button
                     type="button"
                     onClick={() => setIsExistingFilesOpen((open) => !open)}
-                    className="p-1 sm:p-1.5 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
+                    className="p-1.5 sm:p-2 rounded-full text-[#8c8f9c] hover:text-white hover:bg-white/10 transition duration-200"
                     title="Reuse existing chat files"
                     aria-label="Reuse existing chat files"
                     aria-expanded={isExistingFilesOpen}
@@ -327,7 +381,7 @@ export function ChatInput({
               )}
             </div>
 
-            {/* Right Controls: Usage monitor + Send Button */}
+            {/* Right: usage monitor + send/stop */}
             <div className="flex items-center gap-2">
               {showFreeTierUsage && freeTierStatus && !isPaidUser && (
                 <span
@@ -345,11 +399,11 @@ export function ChatInput({
                 <button
                   type="button"
                   onClick={onStop}
-                  className="p-1.5 sm:p-2 rounded-full bg-white/15 text-white border border-white/20 hover:bg-white/25 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center cursor-pointer"
+                  className="p-2 sm:p-2.5 rounded-full bg-white/15 text-white border border-white/20 hover:bg-white/25 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center cursor-pointer"
                   aria-label="Stop generating"
                   title="Stop generating"
                 >
-                  <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
+                  <Square className="w-4 h-4 sm:w-[18px] sm:h-[18px] fill-current" />
                 </button>
               ) : (
                 <button
@@ -357,17 +411,61 @@ export function ChatInput({
                   onClick={onSubmit}
                   disabled={!canSubmit}
                   className={cn(
-                    "p-1.5 sm:p-2 rounded-full transition-all duration-300 flex items-center justify-center",
+                    "p-2 sm:p-2.5 rounded-full transition-all duration-300 flex items-center justify-center",
                     canSubmit
-                      ? "bg-white text-black hover:scale-105 active:scale-95 cursor-pointer"
+                      ? "bg-white text-black hover:scale-105 active:scale-95 cursor-pointer shadow-[0_2px_12px_rgba(255,255,255,0.15)]"
                       : "bg-white/10 text-white/30 cursor-not-allowed"
                   )}
+                  aria-label="Send message"
+                  title="Send message"
                 >
-                  <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                  <ArrowUp className="w-4 h-4 sm:w-[18px] sm:h-[18px] stroke-[2.5]" />
                 </button>
               )}
             </div>
           </div>
+
+          {/* Mobile: effort selector as a collapsible row under the toolbar */}
+          {deepThink && showReasoningSelector && (
+            <div className="flex sm:hidden items-center gap-2 pt-2 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
+              <span className="text-[10px] font-medium text-[#8c8f9c] uppercase tracking-[0.12em]">Effort</span>
+              <div
+                className="flex items-center gap-0.5 rounded-full bg-white/5 border border-white/10 p-0.5"
+                role="group"
+                aria-label="Reasoning level"
+              >
+                {REASONING_LEVELS.map((level) => {
+                  const isRestricted = (level === "high" || level === "xhigh") && !isPaidUser;
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => {
+                        if (isRestricted) {
+                          openPaidTierDialog();
+                          return;
+                        }
+                        onReasoningLevelChange(level);
+                      }}
+                      aria-pressed={reasoningLevel === level}
+                      aria-disabled={isRestricted}
+                      title={isRestricted ? "Requires paid tier — click to unlock" : undefined}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full text-[10px] font-semibold capitalize transition-all duration-200 select-none",
+                        isRestricted
+                          ? "text-[#4a4d5a] cursor-not-allowed opacity-50 hover:text-amber-400/70 hover:opacity-80"
+                          : reasoningLevel === level
+                            ? "bg-white/20 text-white"
+                            : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
+                      )}
+                    >
+                      {REASONING_LEVEL_LABELS[level]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
