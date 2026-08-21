@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Shield, Key, Plus, Trash2, Save, Crown, X, RefreshCw, CheckCircle, AlertTriangle, Clock, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PRIMARY_MODELS, FALLBACK_MODELS } from "@/lib/llm-providers";
+import { PRIMARY_MODELS, FALLBACK_MODELS, DEFAULT_THINKING_EFFORT, type ThinkingEffort } from "@/lib/llm-providers";
 import {
   isAdminAuthenticated,
   setAdminAuthenticated,
@@ -85,6 +85,8 @@ type GlobalSettings = {
   INITIAL_CHAT_PROMPT?: string;
   /** When true, apply INITIAL_CHAT_PROMPT to every message. When false, only apply on chat start. */
   applyInitialPromptToEveryMessage?: boolean;
+  /** Per-model default thinking effort when DeepThink is enabled. */
+  thinkEffort?: Record<string, "none" | "minimal" | "low" | "medium" | "high" | "xhigh">;
 };
 
 export default function AdminPage() {
@@ -96,6 +98,13 @@ export default function AdminPage() {
     useFallbackAsPrimary: false,
     PRIMARY_MODELS: PRIMARY_MODELS,
     FALLBACK_MODELS: FALLBACK_MODELS,
+    thinkEffort: {
+      instant: DEFAULT_THINKING_EFFORT.instant,
+      expert: DEFAULT_THINKING_EFFORT.expert,
+      websearch: DEFAULT_THINKING_EFFORT.websearch,
+      fileAnalysis: DEFAULT_THINKING_EFFORT.fileAnalysis,
+      coding: DEFAULT_THINKING_EFFORT.coding,
+    },
   });
   const [envValues, setEnvValues] = useState({
     ADMIN_KEY: "",
@@ -1539,17 +1548,53 @@ export default function AdminPage() {
                     </div>
                   ))}
                 </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Change reason</label>
-                  <input
-                    type="text"
-                    value={changeReason}
-                    onChange={(e) => setChangeReason(e.target.value)}
-                    placeholder="Brief description for history"
-                    className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-white/20 transition-all"
-                  />
-                </div>
               </div>
+            </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-[#7a7e8a]">Thinking Effort (per model)</p>
+                    <p className="text-[11px] text-[#6d7288]">Default reasoning depth when DeepThink is enabled. Admin-controlled runtime defaults.</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {MODEL_KEYS.map((key) => (
+                    <div key={key} className="grid gap-1">
+                      <label className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-[#8c8f9c] min-w-[140px]">{key}</span>
+                        <select
+                          value={settings.thinkEffort?.[key] ?? DEFAULT_THINKING_EFFORT[key]}
+                          onChange={(e) => setSettings((s) => ({
+                            ...s,
+                            thinkEffort: {
+                              ...(s.thinkEffort ?? {}),
+                              [key]: e.target.value as "none" | "minimal" | "low" | "medium" | "high" | "xhigh",
+                            },
+                          }))}
+                          className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-white/20 transition-all cursor-pointer appearance-none"
+                        >
+                          {[
+                            "none", "minimal", "low", "medium", "high", "xhigh"
+                          ].map((val) => (
+                            <option key={val} value={val}>{val.charAt(0).toUpperCase() + val.slice(1)}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-medium text-[#8c8f9c] mb-1">Change reason</label>
+              <input
+                type="text"
+                value={changeReason}
+                onChange={(e) => setChangeReason(e.target.value)}
+                placeholder="Brief description for history"
+                className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-white/20 transition-all"
+              />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[10px] text-[#6d7288]">Saving will update the current active configuration and record the previous state in history.</p>

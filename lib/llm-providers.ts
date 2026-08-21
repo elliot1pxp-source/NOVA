@@ -51,6 +51,25 @@ export const MODELS: Record<string, string> = {
   fileAnalysis: "fileAnalysis",
 };
 
+// Default native thinking effort per logical model. When DeepThink is on,
+// this is the effort the model uses unless the user overrides it per-model in
+// the settings dialog. Values follow the effort tiers the endpoints advertise.
+export type ThinkingEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export const DEFAULT_THINKING_EFFORT: Record<string, ThinkingEffort> = {
+  instant: "low",
+  expert: "high",
+  websearch: "low",
+  fileAnalysis: "low",
+  coding: "medium",
+};
+
+// Models that require an active paid tier to use.
+export const PAID_ONLY_MODELS: ReadonlyArray<string> = ["expert", "coding"];
+
+export function isPaidOnlyModel(model: string): boolean {
+  return PAID_ONLY_MODELS.includes(model);
+}
+
 // Which endpoint the file-analysis sub-calls should try first. Defaults to
 // "primary"; set FILE_ANALYSIS_PROVIDER=fallback in the environment to flip
 // it. The alternating fail-over chain still applies after the first attempt.

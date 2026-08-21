@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { NovaSidebar, Chat, sidebarHistoryOpenPersist } from "@/components/nova-sidebar";
 import { ChatView } from "@/components/chat-view";
+import { PaidTierDialog } from "@/components/paid-tier-dialog";
 import { cn } from "@/lib/utils";
 import {
   loadChats,
@@ -17,7 +18,7 @@ import {
   saveModelSettings,
   reclaimOrphanedBranchSnapshots,
 } from "@/lib/storage";
-import { refreshPaidTierStatus } from "@/lib/paid-tier";
+import { refreshPaidTierStatus, PAID_TIER_DIALOG_EVENT } from "@/lib/paid-tier";
 import { backupNow, clearBackup, flushBackup, restoreFromServer } from "@/lib/history-backup";
 
 type Model = "instant" | "expert" | "coding";
@@ -186,6 +187,16 @@ export default function Home() {
     saveModelSettings(newSettings);
   }, []);
 
+  // Paid tier dialog state
+  const [paidTierOpen, setPaidTierOpen] = useState(false);
+
+  // Listen for paid tier dialog open events from anywhere in the app
+  useEffect(() => {
+    const openDialog = () => setPaidTierOpen(true);
+    window.addEventListener(PAID_TIER_DIALOG_EVENT, openDialog);
+    return () => window.removeEventListener(PAID_TIER_DIALOG_EVENT, openDialog);
+  }, []);
+
   const handleNewChat = useCallback(() => {
     const nextId = generateId();
     pendingChatIdRef.current = nextId;
@@ -282,54 +293,60 @@ export default function Home() {
   }, [chats, activeChatId, pendingChatId]);
 
   return (
-    <div
-      className="app-shell flex h-screen w-full overflow-hidden bg-[#0d0d0d]"
-      onCopy={(event) => {
-        if (!isCopyableTarget(event.target)) event.preventDefault();
-      }}
-      onDragStart={(event) => {
-        if (event.target instanceof Element && event.target.closest("img")) {
-          event.preventDefault();
-        }
-      }}
-      onContextMenu={(event) => {
-        if (event.target instanceof Element && event.target.closest("img")) {
-          event.preventDefault();
-        }
-      }}
-    >
-      <NovaSidebar
-        chats={chats}
-        activeChatId={activeChatId}
-        onNewChat={handleNewChat}
-        onSelectChat={handleSelectChat}
-        onTogglePin={handleTogglePin}
-        onRenameChat={handleRenameChat}
-        onDeleteChat={handleDeleteChat}
-        onDeleteAllChats={handleDeleteAllChats}
-        modelSettings={modelSettings}
-        onUpdateModelSettings={handleUpdateModelSettings}
-        historyOpen={historyOpen}
-        onHistoryOpenChange={setHistoryOpen}
+    <>
+      <div
+        className="app-shell flex h-screen w-full overflow-hidden bg-[#0d0d0d]"
+        onCopy={(event) => {
+          if (!isCopyableTarget(event.target)) event.preventDefault();
+        }}
+        onDragStart={(event) => {
+          if (event.target instanceof Element && event.target.closest("img")) {
+            event.preventDefault();
+          }
+        }}
+        onContextMenu={(event) => {
+          if (event.target instanceof Element && event.target.closest("img")) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <NovaSidebar
+          chats={chats}
+          activeChatId={activeChatId}
+          onNewChat={handleNewChat}
+          onSelectChat={handleSelectChat}
+          onTogglePin={handleTogglePin}
+          onRenameChat={handleRenameChat}
+          onDeleteChat={handleDeleteChat}
+          onDeleteAllChats={handleDeleteAllChats}
+          modelSettings={modelSettings}
+          onUpdateModelSettings={handleUpdateModelSettings}
+          historyOpen={historyOpen}
+          onHistoryOpenChange={setHistoryOpen}
+        />
+        <main className="flex flex-1 overflow-hidden">
+          {mountedChatIds.map((chatId) => (
+            <div
+              key={chatId}
+              className={cn("h-full w-full", chatId === currentChatId ? "" : "hidden")}
+            >
+              <ChatView
+                chatId={chatId}
+                model={model}
+                modelSettings={modelSettings[model]}
+                onModelChange={setModel}
+                isActive={chatId === currentChatId}
+                onFirstMessage={(title) => handleFirstMessage(chatId, title)}
+                sidebarOpen={historyOpen}
+              />
+            </div>
+          ))}
+        </main>
+      </div>
+      <PaidTierDialog
+        isOpen={paidTierOpen}
+        onClose={() => setPaidTierOpen(false)}
       />
-      <main className="flex flex-1 overflow-hidden">
-        {mountedChatIds.map((chatId) => (
-          <div
-            key={chatId}
-            className={cn("h-full w-full", chatId === currentChatId ? "" : "hidden")}
-          >
-            <ChatView
-              chatId={chatId}
-              model={model}
-              modelSettings={modelSettings[model]}
-              onModelChange={setModel}
-              isActive={chatId === currentChatId}
-              onFirstMessage={(title) => handleFirstMessage(chatId, title)}
-              sidebarOpen={historyOpen}
-            />
-          </div>
-        ))}
-      </main>
-    </div>
+    </>
   );
 }

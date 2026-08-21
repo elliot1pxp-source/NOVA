@@ -21,10 +21,15 @@ export type ChatFile = {
 };
 
 // --- MODEL SETTINGS TYPES & DEFAULTS ---
+// Imported lazily to avoid a circular dependency with lib/llm-providers.
+import { DEFAULT_THINKING_EFFORT, type ThinkingEffort } from "@/lib/llm-providers";
+
 export type ModelParams = {
   temperature: number;
   topK: number;
   maxTokens: number;
+  /** Default native thinking effort for this model (used when DeepThink is on). */
+  thinkEffort: ThinkingEffort;
 };
 
 export type ModelSettings = {
@@ -38,16 +43,19 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
     temperature: 0.7,
     topK: 40,
     maxTokens: 32768,
+    thinkEffort: DEFAULT_THINKING_EFFORT.instant,
   },
   expert: {
     temperature: 0.7,
     topK: 40,
     maxTokens: 32768,
+    thinkEffort: DEFAULT_THINKING_EFFORT.expert,
   },
   coding: {
     temperature: 0.7,
     topK: 40,
     maxTokens: 32768,
+    thinkEffort: DEFAULT_THINKING_EFFORT.coding,
   },
 };
 

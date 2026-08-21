@@ -11,6 +11,8 @@ import { ChatMessage, TypingIndicator } from "./chat-message";
 import { MessageNavigator, NavItem } from "@/app/message-navigator";
 import { cn } from "@/lib/utils";
 import { loadMessages, saveMessages, ModelParams, ChatFile, loadChatFiles } from "@/lib/storage";
+import { isPaidOnlyModel } from "@/lib/llm-providers";
+import { openPaidTierDialog } from "@/lib/paid-tier";
 
 import { backupNow, flushBackup, restoreFromServer } from "@/lib/history-backup";
 import { getSupportedAttachmentMimeType, isImageMimeType, normalizeDataUrl, validateFileSize, validateAttachmentBatch, SUPPORTED_ATTACHMENT_DESCRIPTION } from "@/lib/attachments";
@@ -231,9 +233,11 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
   const [activeNavId, setActiveNavId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [deepThink, setDeepThink] = useState(false);
-  const [reasoningLevel, setReasoningLevel] = useState<"low" | "medium" | "high" | "xhigh">("medium");
   const [webSearch, setWebSearch] = useState(false);
   const [requestFeatures, setRequestFeatures] = useState({ deepThink: false, webSearch: false });
+
+  // Per-model default thinking effort (used when DeepThink is on)
+  const thinkEffort = modelSettings?.thinkEffort ?? "low";
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
   const [existingFiles, setExistingFiles] = useState<ChatFile[]>([]);
@@ -372,7 +376,6 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     return {
       model,
       deepThink,
-      reasoningLevel,
       webSearch,
       browserDate,
       browserTime,
@@ -382,7 +385,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
       clientId,
       chatId,
     };
-  }, [model, deepThink, reasoningLevel, webSearch, modelSettings, chatId]);
+  }, [model, deepThink, webSearch, modelSettings, chatId]);
 
   const clientId = getPaidTierClientId();
   // Gate paid-tier detection behind a mount flag: getPaidTierData() and
@@ -1600,21 +1603,36 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
           {/* Dynamic Island Model Switcher */}
           <div className="relative">
             <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1 sm:p-1.5">
-              {MODEL_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => onModelChange(tab.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
-                    model === tab.id
-                      ? "bg-white/15 text-white border border-white/25"
-                      : "text-[#888c99] hover:text-white hover:bg-white/5"
-                  )}
-                >
-                  {tab.icon}
-                  <span>{tab.label}</span>
-                </button>
-              ))}
+              {MODEL_TABS.map((tab) => {
+                const isPaidOnly = isPaidOnlyModel(tab.id);
+                const isActive = model === tab.id;
+                const isLocked = isPaidOnly && !hasPaidAccess;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (isLocked) {
+                        openPaidTierDialog();
+                        return;
+                      }
+                      onModelChange(tab.id);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
+                      isActive
+                        ? "bg-white/15 text-white border border-white/25"
+                        : isLocked
+                          ? "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                          : "text-[#888c99] hover:text-white hover:bg-white/5"
+                    )}
+                    disabled={isLocked}
+                    title={isLocked ? "Requires paid tier" : undefined}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1629,8 +1647,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               model={model}
               deepThink={deepThink}
               onToggleDeepThink={() => setDeepThink((v) => !v)}
-              reasoningLevel={reasoningLevel}
-              onReasoningLevelChange={setReasoningLevel}
+              thinkEffort={thinkEffort}
               webSearch={webSearch}
               onToggleWebSearch={() => setWebSearch((v) => !v)}
               webSearchDisabled={attachments.length > 0}
@@ -1658,21 +1675,36 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
               <div className="fixed top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
                 <div className="relative">
                   <div className="relative flex items-center gap-0.5 sm:gap-1 bg-[#0a0a0c]/95 border border-white/10 rounded-full p-1">
-                    {MODEL_TABS.map((tab) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => onModelChange(tab.id)}
-                        className={cn(
-                          "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
-                          model === tab.id
-                            ? "bg-white/15 text-white border border-white/25"
-                            : "text-[#888c99] hover:text-white hover:bg-white/5"
-                        )}
-                      >
-                        {tab.icon}
-                        <span>{tab.label}</span>
-                      </button>
-                    ))}
+                    {MODEL_TABS.map((tab) => {
+                      const isPaidOnly = isPaidOnlyModel(tab.id);
+                      const isActive = model === tab.id;
+                      const isLocked = isPaidOnly && !hasPaidAccess;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            if (isLocked) {
+                              openPaidTierDialog();
+                              return;
+                            }
+                            onModelChange(tab.id);
+                          }}
+                          className={cn(
+                            "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 select-none",
+                            isActive
+                              ? "bg-white/15 text-white border border-white/25"
+                              : isLocked
+                                ? "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                : "text-[#888c99] hover:text-white hover:bg-white/5"
+                          )}
+                          disabled={isLocked}
+                          title={isLocked ? "Requires paid tier" : undefined}
+                        >
+                          {tab.icon}
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1756,8 +1788,7 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
                 model={model}
                 deepThink={deepThink}
                 onToggleDeepThink={() => setDeepThink((v) => !v)}
-                reasoningLevel={reasoningLevel}
-                onReasoningLevelChange={setReasoningLevel}
+                thinkEffort={thinkEffort}
                 webSearch={webSearch}
                 onToggleWebSearch={() => setWebSearch((v) => !v)}
                 webSearchDisabled={attachments.length > 0}

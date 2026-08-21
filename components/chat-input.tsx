@@ -10,13 +10,11 @@ import {
   Globe, 
   FileText, 
   AlertCircle,
-  FolderOpen,
-  ChevronDown
+  FolderOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatFile } from "@/lib/storage";
 import { openPaidTierDialog } from "@/lib/paid-tier";
-import { useIsMobile } from "@/lib/use-is-mobile";
 
 export type PendingAttachment =
   | { id: string; source: "file"; file: File; previewUrl: string }
@@ -29,14 +27,8 @@ type FreeTierStatus = {
   blockedUntil?: string;
 };
 
-export type ReasoningLevel = "low" | "medium" | "high" | "xhigh";
-const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high", "xhigh"];
-const REASONING_LEVEL_LABELS: Record<ReasoningLevel, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Max",
-};
+// ThinkingEffort type is now sourced from lib/llm-providers
+import { type ThinkingEffort } from "@/lib/llm-providers";
 
 type ChatInputProps = {
   input: string;
@@ -47,9 +39,9 @@ type ChatInputProps = {
   model: "instant" | "expert" | "coding";
   deepThink: boolean;
   onToggleDeepThink: () => void;
-  /** Selected native reasoning strength — only meaningful while DeepThink is on. */
-  reasoningLevel: ReasoningLevel;
-  onReasoningLevelChange: (level: ReasoningLevel) => void;
+  /** Default thinking effort for the active model — only meaningful while DeepThink is on. */
+  thinkEffort: ThinkingEffort;
+  // No onReasoningLevelChange needed — effort is per-model config in settings
   webSearch: boolean;
   onToggleWebSearch: () => void;
   /** Web search is unavailable while files are attached (files + search cannot run together). */
@@ -77,8 +69,7 @@ export function ChatInput({
   model,
   deepThink,
   onToggleDeepThink,
-  reasoningLevel,
-  onReasoningLevelChange,
+  thinkEffort,
   webSearch,
   onToggleWebSearch,
   webSearchDisabled = false,
@@ -96,10 +87,7 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExistingFilesOpen, setIsExistingFilesOpen] = useState(false);
-  // Collapsible reasoning-effort selector under the toolbar (toggled by the ▽ on the Think control).
-  const [showReasoningSelector, setShowReasoningSelector] = useState(false);
-  // Mobile vs desktop drives the caret shape (▽/△ on mobile, </> on desktop).
-  const isMobile = useIsMobile();
+  
 
   // Auto-resize textarea height
   useEffect(() => {
@@ -186,113 +174,26 @@ export function ChatInput({
             <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
               {/* Think control: body toggles DeepThink, ▽ opens the effort selector.
                   Required (locked on) while the Expert model is selected. */}
-              <div
+              <button
+                type="button"
+                disabled={model === "expert"}
+                onClick={onToggleDeepThink}
+                title={model === "expert" ? "DeepThink is required for Expert mode" : "Toggle DeepThink"}
                 className={cn(
-                  "flex items-center rounded-full border transition-all duration-300",
-                  model === "expert" || deepThink
-                    ? "bg-white/20 border-white/40"
-                    : "bg-white/5 border-white/10"
+                  "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300 border select-none",
+                  model === "expert"
+                    ? "bg-white/20 border-white/40 text-white opacity-90 cursor-not-allowed"
+                    : deepThink
+                      ? "bg-white/20 border-white/40 text-white"
+                      : "bg-white/5 border-white/10 text-[#8c8f9c] hover:text-white hover:bg-white/10 hover:border-white/20"
                 )}
               >
-                <button
-                  type="button"
-                  disabled={model === "expert"}
-                  onClick={() => {
-                    onToggleDeepThink();
-                    if (!deepThink) setShowReasoningSelector(true);
-                  }}
-                  title={model === "expert" ? "DeepThink is required for Expert mode" : "Toggle DeepThink"}
-                  className={cn(
-                    "flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold select-none transition-colors",
-                    model === "expert"
-                      ? "text-white cursor-not-allowed"
-                      : deepThink
-                        ? "text-white"
-                        : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
-                  )}
-                >
-                  <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span>Think</span>
-                  {model === "expert" && (
-                    <span className="ml-0.5 text-[9px] uppercase tracking-[0.12em] text-white/70">Required</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowReasoningSelector((v) => !v)}
-                  disabled={!deepThink}
-                  aria-label="Toggle reasoning effort selector"
-                  aria-expanded={showReasoningSelector}
-                  className={cn(
-                    "pr-2 sm:pr-2.5 pl-1 rounded-r-full transition-colors",
-                    deepThink
-                      ? "text-white/70 hover:text-white cursor-pointer"
-                      : "text-white/20 cursor-not-allowed"
-                  )}
-                >
-                  <ChevronDown
-                    style={{
-                      // Mobile: ▽ (down) ↔ △ (up). Desktop: < ↔ > (90°/270° rotation).
-                      transform: `rotate(${
-                        isMobile
-                          ? showReasoningSelector ? 180 : 0
-                          : showReasoningSelector ? 270 : 90
-                      }deg)`,
-                    }}
-                    className="w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-300"
-                  />
-                </button>
-              </div>
-
-              {/* Desktop: effort selector inline on the same row as the Think control.
-                  Kept mounted (always sm:flex) and animated via opacity/scale/width
-                  so the open/close slides in for BOTH the caret and the Think button.
-                  (Gating with sm:hidden would change display:none→flex and kill the
-                  transition, which is why DeepThink-on was instant before.) */}
-              <div
-                className={cn(
-                  "hidden sm:flex items-center gap-2 overflow-hidden transition-all duration-200",
-                  deepThink && showReasoningSelector
-                    ? "opacity-100 translate-x-0 scale-100"
-                    : "pointer-events-none opacity-0 -translate-x-1 scale-95 w-0"
+                <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                <span>Think</span>
+                {model === "expert" && (
+                  <span className="ml-0.5 text-[9px] uppercase tracking-[0.12em] text-white/70">Required</span>
                 )}
-              >
-                <div
-                  className="flex items-center gap-0.5 rounded-full bg-white/5 border border-white/10 p-0.5"
-                  role="group"
-                  aria-label="Reasoning level"
-                >
-                  {REASONING_LEVELS.map((level) => {
-                    const isRestricted = (level === "high" || level === "xhigh") && !isPaidUser;
-                    return (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() => {
-                          if (isRestricted) {
-                            openPaidTierDialog();
-                            return;
-                          }
-                          onReasoningLevelChange(level);
-                        }}
-                        aria-pressed={reasoningLevel === level}
-                        aria-disabled={isRestricted}
-                        title={isRestricted ? "Requires paid tier — click to unlock" : undefined}
-                        className={cn(
-                          "px-2.5 py-1 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold capitalize transition-all duration-200 select-none",
-                          isRestricted
-                            ? "text-[#4a4d5a] cursor-not-allowed opacity-50 hover:text-amber-400/70 hover:opacity-80"
-                            : reasoningLevel === level
-                              ? "bg-white/20 text-white"
-                              : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
-                        )}
-                      >
-                        {REASONING_LEVEL_LABELS[level]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              </button>
 
               {/* Web Search Pill */}
               <button
@@ -425,47 +326,7 @@ export function ChatInput({
             </div>
           </div>
 
-          {/* Mobile: effort selector as a collapsible row under the toolbar */}
-          {deepThink && showReasoningSelector && (
-            <div className="flex sm:hidden items-center gap-2 pt-2 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
-              <span className="text-[10px] font-medium text-[#8c8f9c] uppercase tracking-[0.12em]">Effort</span>
-              <div
-                className="flex items-center gap-0.5 rounded-full bg-white/5 border border-white/10 p-0.5"
-                role="group"
-                aria-label="Reasoning level"
-              >
-                {REASONING_LEVELS.map((level) => {
-                  const isRestricted = (level === "high" || level === "xhigh") && !isPaidUser;
-                  return (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => {
-                        if (isRestricted) {
-                          openPaidTierDialog();
-                          return;
-                        }
-                        onReasoningLevelChange(level);
-                      }}
-                      aria-pressed={reasoningLevel === level}
-                      aria-disabled={isRestricted}
-                      title={isRestricted ? "Requires paid tier — click to unlock" : undefined}
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-[10px] font-semibold capitalize transition-all duration-200 select-none",
-                        isRestricted
-                          ? "text-[#4a4d5a] cursor-not-allowed opacity-50 hover:text-amber-400/70 hover:opacity-80"
-                          : reasoningLevel === level
-                            ? "bg-white/20 text-white"
-                            : "text-[#8c8f9c] hover:text-white hover:bg-white/10"
-                      )}
-                    >
-                      {REASONING_LEVEL_LABELS[level]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* No per-message effort selector — uses per-model default from settings */}
         </div>
       </div>
 

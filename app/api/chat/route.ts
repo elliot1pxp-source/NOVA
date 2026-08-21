@@ -37,11 +37,6 @@ export const maxDuration = 300;
 // server hangs.
 const SUBCALL_MAX_RETRIES = 3;
 const APPLY_INITIAL_PROMPT_TO_EVERY_MESSAGE = true;
-// User-selectable native reasoning levels for DeepThink. The endpoints
-// advertise effort tiers up to "xhigh"; the UI offers low/medium/high/xhigh.
-const REASONING_LEVELS = ["low", "medium", "high", "xhigh"] as const;
-type ReasoningLevel = (typeof REASONING_LEVELS)[number];
-const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 // The models on these endpoints reason BY DEFAULT even when no reasoning
 // parameter is sent, so "none" must be sent explicitly to disable it. Used
 // for web-search query generation, file analysis, and chat when Deep Think
@@ -136,7 +131,7 @@ export async function POST(req: Request) {
       messages,
       model: modelKey = "instant",
       deepThink = false,
-      reasoningLevel,
+      thinkEffort,
       webSearch = false,
       modelSettings,
       paidTierCode,
@@ -149,12 +144,13 @@ export async function POST(req: Request) {
       messages: UIMessage[];
       model?: string;
       deepThink?: boolean;
-      reasoningLevel?: string;
+      thinkEffort?: string;
       webSearch?: boolean;
       modelSettings?: {
         temperature?: number;
         topK?: number;
         maxTokens?: number;
+        thinkEffort?: string;
       };
       paidTierCode?: string;
       paidTierClientId?: string | null;
@@ -180,14 +176,38 @@ export async function POST(req: Request) {
     // and picks a level. Deep Think off = explicit "none" (these endpoints
     // think by default otherwise). Deep Think on = the validated level.
     // High and xhigh are restricted to paid users only.
-    const isRestrictedLevel = (reasoningLevel === "high" || reasoningLevel === "xhigh");
-    const resolvedReasoning: ReasoningLevel | typeof NO_REASONING = deepThink
-      ? (REASONING_LEVELS as readonly string[]).includes(reasoningLevel ?? "")
-        ? (isRestrictedLevel && !hasPaidAccess
-            ? DEFAULT_REASONING_LEVEL
-            : (reasoningLevel as ReasoningLevel))
-        : DEFAULT_REASONING_LEVEL
-      : NO_REASONING;
+    const modelId = MODELS[modelKey] ?? MODELS.instant;
+    // The browser supplies its local date and time, avoiding a server-timezone mismatch.
+    const browserDateIsValid =
+      typeof browserDate === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(browserDate);
+    const browserTimeIsValid =
+      typeof browserTime === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(browserTime);
+    const browserDateTimeContext = browserDateIsValid
+      ? browserTimeIsValid
+        ? `Current date and time: ${browserDate} ${browserTime}`
+        : `Current date: ${browserDate}`
+      : "";
+    const baseSystemPrompt = [browserDateTimeContext, await getEffectiveSystemPrompt()]
+      .filter(Boolean)
+      .join("\n\n");
+
+    // Resolve reasoning effort: if DeepThink is on, use the model's configured
+    // thinkEffort (from settings); otherwise "none". High/xhigh are gated to paid users.
+    const effortMap: Record<string, "none" | "minimal" | "low" | "medium" | "high" | "xhigh"> = {
+      none: "none",
+      minimal: "minimal",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+    };
+    const rawEffort = deepThink
+      ? (modelSettings?.thinkEffort ?? effortMap.low)
+      : "none";
+    const isRestrictedEffort = (rawEffort === "high" || rawEffort === "xhigh");
+    const resolvedReasoning = deepThink
+      ? (isRestrictedEffort && !hasPaidAccess ? "medium" : rawEffort)
+      : "none";
     console.info(`[chat] reasoning: ${resolvedReasoning}`);
 
     if (!hasPaidAccess) {
@@ -215,21 +235,6 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-
-    const modelId = MODELS[modelKey] ?? MODELS.instant;
-    // The browser supplies its local date and time, avoiding a server-timezone mismatch.
-    const browserDateIsValid =
-      typeof browserDate === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(browserDate);
-    const browserTimeIsValid =
-      typeof browserTime === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(browserTime);
-    const browserDateTimeContext = browserDateIsValid
-      ? browserTimeIsValid
-        ? `Current date and time: ${browserDate} ${browserTime}`
-        : `Current date: ${browserDate}`
-      : "";
-    const baseSystemPrompt = [browserDateTimeContext, await getEffectiveSystemPrompt()]
-      .filter(Boolean)
-      .join("\n\n");
 
     // Determine which API keys to use:
     // 1. Global settings (admin-controlled) are the runtime baseline for
@@ -697,6 +702,8 @@ export async function POST(req: Request) {
               : await convertToModelMessages([]);
           }
 
+          const reasoningValue = resolvedReasoning as "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
           stream = streamTextWithFallback(responseClients, {
             modelId,
             system: finalSystemPrompt,
@@ -704,7 +711,7 @@ export async function POST(req: Request) {
             modelSettings,
             // "none" when Deep Think is off (these endpoints think by default
             // otherwise), or the user-selected low/medium/high level.
-            reasoning: resolvedReasoning,
+            reasoning: reasoningValue,
             // Native tool calling: the model can invoke webSearch and gets the
             // results fed back to answer. stopWhen lets the SDK loop run the
             // tool result through before producing the final answer.

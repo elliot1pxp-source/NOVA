@@ -27,6 +27,8 @@ export type GlobalSettings = {
   INITIAL_CHAT_PROMPT?: string;
   /** When true, apply INITIAL_CHAT_PROMPT to every message. When false, only apply on chat start. */
   applyInitialPromptToEveryMessage?: boolean;
+  /** Per-model default thinking effort when DeepThink is enabled. */
+  thinkEffort?: Record<string, "none" | "minimal" | "low" | "medium" | "high" | "xhigh">;
 };
 
 export type GlobalSettingsHistoryEntry = {
@@ -53,6 +55,13 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   SYSTEM_PROMPT: "",
   INITIAL_CHAT_PROMPT: "",
   applyInitialPromptToEveryMessage: true,
+  thinkEffort: {
+    instant: "low",
+    expert: "high",
+    websearch: "low",
+    fileAnalysis: "low",
+    coding: "medium",
+  },
 };
 
 async function readSettings(): Promise<GlobalSettings> {
