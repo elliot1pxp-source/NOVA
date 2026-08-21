@@ -19,8 +19,14 @@ const DEFAULT_FETCH_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const MAX_RESULTS = 11;
+const MAX_RESULTS = 4;
 const MAX_PAGE_TEXT_LENGTH = 100_000;
+// Hard cap on the per-result page text we return to the model. Web-search
+// results are injected as a tool result; free-tier models (e.g. nemotron-3)
+// have very small context windows and return an EMPTY completion when the
+// prompt is oversized. Capping content keeps the tool result within budget
+// so the model actually answers instead of yielding "no text token".
+const MAX_RESULT_CONTENT_LENGTH = 4_000;
 
 // --- HTML stripping (unchanged) ---
 function stripHtml(input: string): string {
@@ -210,12 +216,14 @@ function decodeHtml(value: string): string {
 }
 
 // --- Replace search function ---
+// DuckDuckGo is the primary (zero-cost, no API key) search source; Serper is
+// kept as a fallback for when DDG is rate-limited or returns nothing.
 export async function searchDuckDuckGo(query: string, serperApiKey?: string): Promise<SearchResult[]> {
-  const serperResults = await searchSerper(query, serperApiKey);
-  if (serperResults.length > 0) {
-    return serperResults;
+  const ddgResults = await searchDuckDuckGoHtml(query);
+  if (ddgResults.length > 0) {
+    return ddgResults;
   }
-  return searchDuckDuckGoHtml(query);
+  return searchSerper(query, serperApiKey);
 }
 
 /**
@@ -225,6 +233,13 @@ export async function searchDuckDuckGo(query: string, serperApiKey?: string): Pr
 export async function searchWithPageContent(query: string, serperApiKey?: string): Promise<SearchResult[]> {
   const apiKey = serperApiKey || process.env.SERPER_API_KEY;
   const results = await searchDuckDuckGo(query, serperApiKey);
+
+  const capContent = (r: SearchResult): SearchResult => ({
+    ...r,
+    content: r.content && r.content.length > MAX_RESULT_CONTENT_LENGTH
+      ? r.content.slice(0, MAX_RESULT_CONTENT_LENGTH)
+      : r.content,
+  });
 
   if (apiKey && results.some(r => r.url)) {
     // Use Serper Scrape for top 3 results with URLs
@@ -237,11 +252,11 @@ export async function searchWithPageContent(query: string, serperApiKey?: string
       )
     );
     return [
-      ...withSerperScraped.slice(0, 3),
+      ...withSerperScraped.slice(0, 3).map(capContent),
       ...remaining.map((result, index) => ({
         ...result,
         content: remainingWithContent[index] ?? result.content,
-      })),
+      })).map(capContent),
     ];
   }
 
@@ -252,7 +267,7 @@ export async function searchWithPageContent(query: string, serperApiKey?: string
     )
   );
 
-  return results.map((result, index) => ({ ...result, content: content[index] }));
+  return results.map((result, index) => ({ ...result, content: content[index] })).map(capContent);
 }
 
 export async function GET(req: Request) {

@@ -26,17 +26,17 @@ import { createOpenAI } from "@ai-sdk/openai";
 export const PRIMARY_MODELS: Record<string, string> = {
   instant: "nvidia/nemotron-3-super-120b-a12b:free",
   expert: "nvidia/nemotron-3-ultra-550b-a55b:free",
-  websearch: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  websearch: "nvidia/nemotron-3-super-120b-a12b:free",
   fileAnalysis: "nvidia/nemotron-3.5-lightning:free",
-  coding: "tencent/hy3:free",
+  coding: "tencent/hy3:free"
 };
 
 export const FALLBACK_MODELS: Record<string, string> = {
-  instant: "deepseek-v4-flash-free",
-  expert: "big-pickle",
-  websearch: "deepseek-v4-flash-free",
-  fileAnalysis: "nemotron-3-ultra-free",
-  coding: "deepseek-v4-flash-free",
+  instant: "nvidia/nemotron-3-super-120b-a12b:free",
+  expert: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  websearch: "nvidia/nemotron-3-super-120b-a12b:free",
+  fileAnalysis: "nvidia/nemotron-3.5-lightning:free",
+  coding: "tencent/hy3:free"
 };
 
 // Model role keys used by call sites. The fallback functions resolve each key
@@ -580,7 +580,7 @@ export function streamTextWithFallback(
             maxRetries,
             abortSignal,
             onChunk: onTextDelta
-              ? async ({ chunk }) => {
+              ? async ({ chunk }: { chunk: TextStreamPart<ToolSet> }) => {
                   if (chunk.type === "text-delta") {
                     chunk.text = onTextDelta(chunk.text);
                   }

@@ -514,19 +514,30 @@ export async function POST(req: Request) {
         // back as a tool result. Progress is streamed through data-search
         // parts (kept for the typing-indicator logic), while the tool's own
         // part (tool-webSearch) drives the visible "searching" UI.
+        // Per-turn memory that stops the model looping on web search: it
+        // remembers every query it has already run and refuses to re-run an
+        // identical one, returning the cached results instead. A hard cap on
+        // the total number of searches per turn prevents runaway re-searching.
+        const webSearchMemory: { queries: string[]; cache: Map<string, any[]>; count: number } = {
+          queries: [],
+          cache: new Map(),
+          count: 0,
+        };
+        const MAX_WEB_SEARCHES_PER_TURN = 4;
+
         const webSearchTool =
           webSearch && !hasFiles
             ? {
                 webSearch: tool({
                   description:
-                    `${baseSystemPrompt} Search the live web for up-to-date, factual, or outside-knowledge information (current events, prices, stats, recent facts). Call this tool before answering whenever the user asks for information that may have changed or is not in your training data. Provide a concise, specific keyword query.`,
+                    `${baseSystemPrompt} Search the live web for up-to-date, factual, or outside-knowledge information (current events, prices, stats, recent facts). Call this tool before answering whenever the user asks for information that may have changed or is not in your training data. Provide a concise, specific keyword query. Only search ONCE per distinct topic — do not repeat a search you have already performed this turn.`,
                   inputSchema: jsonSchema<{ query: string }>({
                     type: "object",
                     properties: {
                       query: {
                         type: "string",
                         description:
-                          "The web search query. 5–10 keywords, not a full sentence.",
+                          "The web search query. 5–10 keywords, not a full sentence. Must be a NEW topic you have not already searched this turn.",
                       },
                     },
                     required: ["query"],
@@ -534,6 +545,44 @@ export async function POST(req: Request) {
                   }),
                   execute: async (input: { query: string }) => {
                     const query = input.query;
+                    const normalized = query?.trim().toLowerCase() ?? "";
+
+                    // Loop guard: identical or already-searched query → return
+                    // the cached results and tell the model it already searched.
+                    if (
+                      normalized &&
+                      (webSearchMemory.queries.includes(normalized) ||
+                        webSearchMemory.cache.has(normalized))
+                    ) {
+                      writer.write({
+                        type: "data-search",
+                        id: "search",
+                        data: {
+                          status: "done",
+                          query,
+                          results: webSearchMemory.cache.get(normalized) ?? [],
+                          cached: true,
+                        },
+                      });
+                      return {
+                        results: webSearchMemory.cache.get(normalized) ?? [],
+                        note: "This query was already searched earlier in this conversation turn. Use the results already provided and do not search again.",
+                      };
+                    }
+
+                    // Hard cap to break any remaining loop.
+                    if (webSearchMemory.count >= MAX_WEB_SEARCHES_PER_TURN) {
+                      writer.write({
+                        type: "data-search",
+                        id: "search",
+                        data: { status: "done", query, results: [], capped: true },
+                      });
+                      return {
+                        results: [],
+                        note: `Search limit of ${MAX_WEB_SEARCHES_PER_TURN} reached for this turn. Answer using the results already gathered.`,
+                      };
+                    }
+
                     writer.write({
                       type: "data-search",
                       id: "search",
@@ -543,6 +592,9 @@ export async function POST(req: Request) {
                       const results = query
                         ? await searchWithPageContent(query, serperApiKey)
                         : [];
+                      webSearchMemory.queries.push(normalized);
+                      webSearchMemory.cache.set(normalized, results);
+                      webSearchMemory.count += 1;
                       writer.write({
                         type: "data-search",
                         id: "search",

@@ -1143,14 +1143,27 @@ function ChatMessageInner({
         {!isUser && scanParts.length > 0 && (
           <FileScanBlock parts={scanParts} isStreaming={Boolean(isStreaming)} />
         )}
-        {!isUser &&
-          (toolParts.length > 0
-            ? toolParts.map((p, i) => (
-                <ToolSearchBlock key={`tool-${i}`} part={p as any} />
-              ))
-            : searchParts.map((p, i) => (
-                <SearchBlock key={`s-${i}`} data={(p as any).data} />
-              )))}
+        {!isUser && (
+          <div className="flex flex-col gap-2.5 sm:gap-3">
+            {toolParts.length > 0
+              ? toolParts
+                  // Render each web-search tool call as its own block, but skip
+                  // calls that are neither actively searching nor produced any
+                  // results — those are the empty "no context" duplicates.
+                  .filter(
+                    (p: any) =>
+                      p?.state === "input-streaming" ||
+                      p?.state === "input-available" ||
+                      (Array.isArray(p?.output?.results) && p.output.results.length > 0)
+                  )
+                  .map((p: any, i: number) => (
+                    <ToolSearchBlock key={`tool-${i}`} part={p as any} />
+                  ))
+              : searchParts.map((p, i) => (
+                  <SearchBlock key={`s-${i}`} data={(p as any).data} />
+                ))}
+          </div>
+        )}
         {!isUser && thoughtParts.map((p, i) => (
           <ThoughtBlock key={`t-${i}`} data={(p as any).data} />
         ))}
