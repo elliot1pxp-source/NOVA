@@ -607,18 +607,16 @@ export function streamTextWithFallback(
           }
 
           // The attempt ended but produced no text token at all (an empty
-          // completion). Treat it as a failed attempt and retry on the other
-          // endpoint (or the same one when there is no fallback) until we
-          // actually receive some text — otherwise the client's typing
-          // indicator just vanishes leaving a blank reply.
+          // completion). On free-tier models this is usually a transient empty
+          // generation, so re-hit the SAME endpoint rather than burning the
+          // fallback — a second try on the same provider typically succeeds.
+          // (Genuine errors below still alternate primary<->fallback.)
           if (!receivedText) {
             if (onAttemptError) onAttemptError(new Error("empty response (no text token)"), attempt);
             if (attempt < attempts - 1) {
               if (onProviderSwitch) {
-                const nextAttempt = attempt + 1;
-                const nextProvider =
-                  clients.hasFallback && nextAttempt % 2 === fallbackParity ? "fallback" : "primary";
-                onProviderSwitch(nextProvider, attempt);
+                // Stay on the current provider: empty completions are transient.
+                onProviderSwitch(useFallback ? "fallback" : "primary", attempt);
               }
               attempt++;
               continue;
