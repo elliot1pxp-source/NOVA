@@ -288,7 +288,6 @@ export function MermaidDiagram({ code }: Props) {
               primaryColor: "#1a1a1e",
               primaryTextColor: "#e8e8e8",
               primaryBorderColor: "#4a6cf7",
-              lineColor: "#8c8f9c",
               secondaryColor: "#141418",
               tertiaryColor: "#111115",
               fontFamily: "Inter, sans-serif",

@@ -309,6 +309,14 @@ export function ChatView({ chatId, model, modelSettings, onModelChange, onFirstM
     attachmentsRef.current = attachments;
   }, [attachments]);
 
+  // Selecting the Expert model auto-enables DeepThink. The effect only fires on
+  // a model change, so the user can still toggle DeepThink back off afterward.
+  useEffect(() => {
+    if (model === "expert") {
+      setDeepThink(true);
+    }
+  }, [model]);
+
   // Object URLs created for locally-picked files (see handleAddFiles) must be
   // revoked or they leak memory for the lifetime of the tab. Attachments are
   // revoked individually on removal/submit; this is the safety net for
