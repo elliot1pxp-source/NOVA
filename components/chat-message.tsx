@@ -61,6 +61,51 @@ function messageText(message: UIMessage) {
     .join("");
 }
 
+/**
+ * Throttles a fast-changing value (e.g. a streaming message that updates every
+ * ~30ms) so the expensive render that depends on it only runs at most once per
+ * `intervalMs`. Without this, a large streaming reply with many code blocks
+ * re-renders its entire markdown tree on every chunk, and the resulting render
+ * storm trips React's "Maximum update depth exceeded" guard (#185) mid-
+ * generation. When `active` is false the value is passed through verbatim so
+ * non-streaming renders (edit/copy/regenerate) always see the exact latest.
+ */
+function useThrottledValue<T>(value: T, active: boolean, intervalMs = 200): T {
+  const [displayed, setDisplayed] = useState<T>(value);
+  const latestRef = useRef(value);
+  const lastEmitRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  latestRef.current = value;
+
+  useEffect(() => {
+    if (!active) {
+      setDisplayed(value);
+      return;
+    }
+
+    const now = Date.now();
+    const elapsed = now - lastEmitRef.current;
+
+    if (elapsed >= intervalMs) {
+      lastEmitRef.current = now;
+      setDisplayed(value);
+    } else {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        lastEmitRef.current = Date.now();
+        setDisplayed(latestRef.current);
+      }, intervalMs - elapsed);
+    }
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [value, active, intervalMs]);
+
+  return displayed;
+}
+
 const SCROLL_BOTTOM_THRESHOLD = 24;
 
 // Streaming state flows through context (instead of being baked into the
@@ -472,13 +517,14 @@ const MarkdownSegment = memo(function MarkdownSegment({
   );
 });
 
-function StreamingMarkdown({
-  text,
-  isStreaming,
-}: {
-  text: string;
-  isStreaming: boolean;
-}) {
+const StreamingMarkdown = memo(
+  function StreamingMarkdown({
+    text,
+    isStreaming,
+  }: {
+    text: string;
+    isStreaming: boolean;
+  }) {
   // Fully derived from props (no state, no effects — nothing to sync after
   // paint, so streaming can't double-render or fall behind).
   const { segments, tail, tailIsPlainText } = useMemo(() => {
@@ -536,7 +582,14 @@ function StreamingMarkdown({
       </div>
     </StreamingContext.Provider>
   );
-}
+},
+// Compare by value, not reference: the parent passes linkifyCitations(part.text)
+// which returns a fresh string each render even when the content is identical.
+// A reference comparator would defeat the throttling of the streaming message
+// and re-parse markdown on every chunk, recreating the #185 render storm.
+(prev: { text: string; isStreaming: boolean }, next: { text: string; isStreaming: boolean }) =>
+  prev.text === next.text && prev.isStreaming === next.isStreaming
+);
 
 // StreamingTail animates only the last N new characters as they arrive.
 // Renders the settled prefix as plain text for performance.
@@ -1007,11 +1060,18 @@ function ChatMessageInner({
     }
   }, [message, isEditing]);
 
-  const fileParts = message.parts.filter((p) => p.type === "file");
-  const scanParts = message.parts.filter((p) => p.type === "data-file");
-  const thoughtParts = message.parts.filter((p) => p.type === "data-thought").slice(-1);
-  const searchParts = message.parts.filter((p) => p.type === "data-search").slice(-1);
-  const toolParts = message.parts.filter(isWebSearchToolPart);
+  // Throttle the rendered message while streaming so a large reply (many code
+  // blocks) does not re-render its whole markdown tree on every ~30ms chunk.
+  // This is the main guard against React #185 mid-generation. When streaming
+  // stops, `renderedMessage` snaps to the exact `message` so edits/copies see
+  // the final content.
+  const renderedMessage = useThrottledValue(message, Boolean(isStreaming), 200);
+
+  const fileParts = renderedMessage.parts.filter((p) => p.type === "file");
+  const scanParts = renderedMessage.parts.filter((p) => p.type === "data-file");
+  const thoughtParts = renderedMessage.parts.filter((p) => p.type === "data-thought").slice(-1);
+  const searchParts = renderedMessage.parts.filter((p) => p.type === "data-search").slice(-1);
+  const toolParts = renderedMessage.parts.filter(isWebSearchToolPart);
 
   // Which "search" representation is live for this message — the native
   // tool part when webSearch ran as a tool call, otherwise the legacy
@@ -1137,7 +1197,7 @@ function ChatMessageInner({
                 : "w-full text-[#ddd] prose prose-invert prose-xs sm:prose-sm max-w-none overflow-visible"
             )}
           >
-            {message.parts.map((part, index) => {
+            {renderedMessage.parts.map((part, index) => {
               if (part.type === "text") {
                 if (isUser) {
                   return (

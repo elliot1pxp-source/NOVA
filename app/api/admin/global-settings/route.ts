@@ -129,6 +129,7 @@ export async function GET(req: Request) {
     FALLBACK_API_KEY: process.env.FALLBACK_API_KEY ?? "",
     SERPER_API_KEY: process.env.SERPER_API_KEY ?? "",
     MAIN_BASED_URL: process.env.MAIN_BASED_URL ?? process.env.BASE_URL ?? process.env.BLOCKRUN_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "",
+    FALLBACK_BASED_URL: process.env.FALLBACK_BASED_URL ?? "",
   };
 
   // The prompt that will actually be used at runtime: the configured
